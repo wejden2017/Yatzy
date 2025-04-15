@@ -1,46 +1,26 @@
-# Copier tous les .jar générés par Maven dans build/java/
-find cats-java/modules -name "*.jar" -exec cp {} build/java/ \;
-
-# Puis tar comme avant :
-tar -cvf dist/cats-unix.tar -C build/unix .
-
-
-- echo "Copie des JAR compilés dans cats-java vers cats-unix/java"
-- mkdir -p cats-unix/java
-- find cats-java/modules -type f -name "*.jar" -exec cp {} cats-unix/java/ \;
-
-
-
-build_unix_job:
+archive_job:
+  stage: archive
   script:
-    - echo "==== DEBUT DU JOB build_unix ===="
-    - mkdir -p build/java/lib \
-              build/cbl \
-              build/ctl \
-              build/dat \
-              build/exe \
-              build/gnt \
-              build/interests/com \
-              build/interests/gnt \
-              build/java \
-              build/sh \
-              build/xsd
+    - apt-get update && apt-get install -y tar
+    - echo "📦 Création de l'archive finale cats_${ARTIFACT_VERSION}.tar"
+    
+    # Création du dossier dist s’il n’existe pas
+    - mkdir -p dist
 
-    - echo "📦 Copier les .jar compilés par Maven dans build/java/"
-    - find cats-java/modules -type f -name "*.jar" -exec cp {} build/java/ \;
+    # Log de contrôle
+    - echo "📂 Contenu du dossier build/${ARTIFACT_VERSION} :"
+    - ls -al build/${ARTIFACT_VERSION} || echo "❌ build/${ARTIFACT_VERSION} introuvable"
 
-    # Ensuite copier les autres fichiers nécessaires
-    - cp -r cats-unix/cbl/* build/cbl/ || echo "⚠️  Pas de fichiers cbl"
-    - cp -r cats-unix/sh/* build/sh/ || echo "⚠️  Pas de fichiers sh"
-    - cp -r cats-unix/xsd/* build/xsd/ || echo "⚠️  Pas de fichiers xsd"
-    - cp -r cats-unix/java/lib/* build/java/lib/ || echo "⚠️  Pas de fichiers lib"
+    # Suppression ancienne archive si elle existe
+    - rm -f dist/cats_${ARTIFACT_VERSION}.tar
 
-    - echo "🎁 Création de l’archive TAR cats-unix.tar"
-    - mkdir -p dist/cats-unix
-    - tar -cvf dist/cats-unix.tar -C build .
+    # Création de l’archive
+    - tar -cvf dist/cats_${ARTIFACT_VERSION}.tar -C build/${ARTIFACT_VERSION} .
+
+  dependencies:
+    - package_job
 
   artifacts:
     paths:
-      - dist/cats-unix.tar
-    expire_in: 1 day
-
+      - dist/cats-${ARTIFACT_VERSION}.tar
+    expire_in: 1 week
