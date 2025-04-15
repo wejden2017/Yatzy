@@ -1,26 +1,26 @@
-archive_job:
-  stage: archive
+Option 1 — Nouveau job dédié (build_script_job)
+yaml
+Copier
+Modifier
+build_script_job:
+  stage: build_backend
   script:
-    - apt-get update && apt-get install -y tar
-    - echo "📦 Création de l'archive finale cats_${ARTIFACT_VERSION}.tar"
-    
-    # Création du dossier dist s’il n’existe pas
-    - mkdir -p dist
-
-    # Log de contrôle
-    - echo "📂 Contenu du dossier build/${ARTIFACT_VERSION} :"
-    - ls -al build/${ARTIFACT_VERSION} || echo "❌ build/${ARTIFACT_VERSION} introuvable"
-
-    # Suppression ancienne archive si elle existe
-    - rm -f dist/cats_${ARTIFACT_VERSION}.tar
-
-    # Création de l’archive
-    - tar -cvf dist/cats_${ARTIFACT_VERSION}.tar -C build/${ARTIFACT_VERSION} .
-
-  dependencies:
-    - package_job
-
+    - echo "==== Copie des scripts SQL de cats-script ===="
+    - mkdir -p dist/cats-script/rollback
+    - cp cats-script/*.sql dist/cats-script/
+    - cp cats-script/rollback/*.sql dist/cats-script/rollback/
+    - tar -cvf dist/cats-script.tar -C dist cats-script
   artifacts:
     paths:
-      - dist/cats-${ARTIFACT_VERSION}.tar
-    expire_in: 1 week
+      - dist/cats-script.tar
+    expire_in: 1 day
+Puis dans ton package_job :
+
+yaml
+Copier
+Modifier
+package_job:
+  dependencies:
+    - build_unix_job
+    - build_plsql_job
+    - build_script_job   # ← Ajout ici
