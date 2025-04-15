@@ -1,13 +1,2 @@
-tag_version_job:
-  stage: publish
-  script:
-    - echo "Création du tag Git cats_${ARTIFACT_VERSION}"
-    - git config user.name "GitLab CI"
-    - git config user.email "ci@gitlab.com"
-    - git tag -a cats_${ARTIFACT_VERSION} -m "Release cats ${ARTIFACT_VERSION}"
-    - git push origin cats_${ARTIFACT_VERSION}
-  rules:
-    - if: '$CI_COMMIT_BRANCH == "main"'
-      when: manual
-  allow_failure: false
-  needs: [publish_job]
+    - sed -i "s/version: '.*'/version: '${ARTIFACT_VERSION}'/" src/environments/environment.ts
+    - sed -i "s/version: '.*'/version: '${ARTIFACT_VERSION}'/" src/environments/environment.prod.ts
