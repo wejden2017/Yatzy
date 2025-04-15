@@ -1,27 +1,5 @@
-package_job:
-  stage: package
-  dependencies:
-    - build_unix_job
-    - build_plsql_job
-  script:
-    - echo "📦 Packaging artifacts (ignoring version/hash in filenames)"
-    - mkdir -p build/${ARTIFACT_VERSION}
+# Copier tous les .jar générés par Maven dans build/java/
+find cats-java/modules -name "*.jar" -exec cp {} build/java/ \;
 
-    # Copier le premier .war trouvé dans cats-web
-    - cp $(find cats-web/target -type f -name "*.war" | head -n 1) build/${ARTIFACT_VERSION}/cats-web.war || echo "⚠️ cats-web.war introuvable"
-
-    # Copier le premier .war trouvé dans catsbackend
-    - cp $(find catsbackend/target -type f -name "*.war" | head -n 1) build/${ARTIFACT_VERSION}/cats-backend.war || echo "⚠️ cats-backend.war introuvable"
-
-    # Copier les .tar
-    - cp dist/cats-unix.tar build/${ARTIFACT_VERSION}/ || echo "⚠️ cats-unix.tar introuvable"
-    - cp dist/cats-plsql.tar build/${ARTIFACT_VERSION}/ || echo "⚠️ cats-plsql.tar introuvable"
-    - cp dist/cats-script.tar build/${ARTIFACT_VERSION}/ || echo "⚠️ cats-script.tar introuvable"
-
-    # Copier les scripts d’installation
-    - cp install_dba_scripts.ksh rollback_dba_scripts.ksh build/${ARTIFACT_VERSION}/ || echo "⚠️ Fichier install/rollback introuvable"
-
-  artifacts:
-    paths:
-      - build/${ARTIFACT_VERSION}
-    expire_in: 1 day
+# Puis tar comme avant :
+tar -cvf dist/cats-unix.tar -C build/unix .
