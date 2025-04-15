@@ -1,2 +1,2 @@
-    - sed -i "s/version: '.*'/version: '${ARTIFACT_VERSION}'/" src/environments/environment.ts
-    - sed -i "s/version: '.*'/version: '${ARTIFACT_VERSION}'/" src/environments/environment.prod.ts
+- sed -i "s/version: '.*'/version: '${ARTIFACT_VERSION}'/" src/environments/environment.ts
+- sed -i "s/version: '.*'/version: '${ARTIFACT_VERSION}'/" src/environments/environment.prod.ts
