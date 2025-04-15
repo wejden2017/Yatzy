@@ -1,3 +1,49 @@
-- "sed -i \"s/version: '.*'/version: '$$ARTIFACT_VERSION'/\" src/environments/environment.ts"
-- "sed -i \"s/version: '.*'/version: '$$ARTIFACT_VERSION'/\" src/environments/environment.prod.ts"
+build_unix_job:
+  stage: build_unix
+  script:
+    - apt-get update && apt-get install -y dos2unix
+    - echo "===== DEBUT DU JOB build_unix ====="
 
+    # Création des dossiers
+    - mkdir -p build/java/lib
+    - mkdir -p build/cbl build/ctl build/dat build/exe build/gnt
+    - mkdir -p build/interests/com build/interests/gnt
+    - mkdir -p build/java
+    - mkdir -p build/sh build/xsd
+
+    # Copie des fichiers .java et .class spécifiques à conserver
+    - cp cats-java/modules/**/src/main/java/**/*AlimRetourASI.java build/java/ || echo "Pas de AlimRetourASI.java"
+    - cp cats-java/modules/**/target/classes/**/*AlimRetourASI.class build/java/ || echo "Pas de AlimRetourASI.class"
+    - cp cats-java/modules/**/src/main/java/**/*ChargerCodesBIC.java build/java/ || echo "Pas de ChargerCodesBIC.java"
+    - cp cats-java/modules/**/target/classes/**/*ChargerCodesBIC.class build/java/ || echo "Pas de ChargerCodesBIC.class"
+    - cp cats-java/modules/**/src/main/java/**/*ChargerParticipant.java build/java/ || echo "Pas de ChargerParticipant.java"
+    - cp cats-java/modules/**/target/classes/**/*ChargerParticipant.class build/java/ || echo "Pas de ChargerParticipant.class"
+    - cp cats-java/modules/**/src/main/java/**/*GenerateUUID.java build/java/ || echo "Pas de GenerateUUID.java"
+    - cp cats-java/modules/**/target/classes/**/*GenerateUUID.class build/java/ || echo "Pas de GenerateUUID.class"
+
+    # Copier uniquement les shaded jars, sans numéro de version
+    - echo "Copie des shaded jars sans version"
+    - |
+      for jar in cats-java/modules/*/target/*${ARTIFACT_VERSION}*-shaded.jar; do
+        base=$(basename "$jar")
+        clean_name=$(echo "$base" | sed -E "s/-${ARTIFACT_VERSION}-shaded//")
+        cp "$jar" "build/java/${clean_name}"
+      done
+
+    # Copie des libs dans build/java/lib (si nécessaire)
+    - cp -r cats-unix/java/lib/* build/java/lib/ || echo "Pas de fichiers lib"
+
+    # Autres répertoires
+    - cp -r cats-unix/cbl/* build/cbl/ || echo "Pas de fichiers cbl"
+    - cp -r cats-unix/sh/* build/sh/ || echo "Pas de fichiers sh"
+    - cp -r cats-unix/xsd/* build/xsd/ || echo "Pas de fichiers xsd"
+
+    # Création de l’archive TAR
+    - echo "==== Création de l’archive TAR cats-unix.tar ===="
+    - mkdir -p dist/cats-unix
+    - tar -cvf dist/cats-unix.tar -C build .
+
+  artifacts:
+    paths:
+      - dist/cats-unix.tar
+    expire_in: 1 day
