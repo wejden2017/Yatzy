@@ -1,95 +1,17 @@
-✅ 1. package_job — Assemble tous les artefacts dans build/${ARTIFACT_VERSION}
-yaml
-Copier
-Modifier
-package_job:
-  stage: package
-  script:
-    - echo "Listing cats-java modules target directories"
-    - find cats-java/modules -type d -name target || echo "No target directories found"
-    - echo "Listing cats-unix Java source files"
-    - find cats-unix/java -type f -name "*.java" || echo "No Java files found"
-    - echo "Packaging artifacts for version ${ARTIFACT_VERSION}"
+script:
+  - echo "Packaging artifacts for version $ARTIFACT_VERSION"
+  - mkdir -p dist/cats-unix/java/lib dist/cats-web/dist dist/catsbackend/dist build/$ARTIFACT_VERSION
 
-    - mkdir -p dist/cats-unix/java/lib dist/cats-web/dist dist/catsbackend/dist build/${ARTIFACT_VERSION}
+  # === DEBUG : Affichage des fichiers générés ===
+  - echo "🔍 Liste des fichiers JAR générés :"
+  - find cats-java/modules -type f -name "*.jar" -exec ls -lh {} \;
+  - echo "🔍 Liste des fichiers WAR générés :"
+  - find catsbackend -type f -name "*.war" -exec ls -lh {} \;
+  - echo "🔍 Liste des JAR dans cats-unix/java :"
+  - ls -lh cats-unix/java/ || echo "dossier introuvable"
+  - echo "🔍 Contenu de dist/"
+  - find dist/ -type f
+  - echo "🔍 Fin de l’affichage des fichiers générés"
+  # ==============================================
 
-    - cp catsbackend/target/cats-backend-${ARTIFACT_VERSION}.war dist/catsbackend/dist/cats-backend.war || echo "WAR not found"
-
-    # JARs renommés sans version
-    - cp cats-java/modules/cats-swift/swift-manager/target/swift-manager-${ARTIFACT_VERSION}-shaded.jar dist/cats-unix/java/swiftManager.jar
-    - cp cats-java/modules/cats-cms_cms/target/common-cms-${ARTIFACT_VERSION}.jar dist/cats-unix/java/common-cms.jar
-    - cp cats-java/modules/cats-cms_JMS/receiver-cms/target/receiver-cms-${ARTIFACT_VERSION}-shaded.jar dist/cats-unix/java/receiver-cms.jar
-    - cp cats-java/modules/cats-cms_JMS/sender-cms/target/sender-cms-${ARTIFACT_VERSION}-shaded.jar dist/cats-unix/java/sender-cms.jar
-    - cp cats-java/modules/contingency-module/target/contingency-module-${ARTIFACT_VERSION}.jar dist/cats-unix/java/contingency-module.jar
-    - cp cats-java/modules/cats-cars2/target/cars2-${ARTIFACT_VERSION}.jar dist/cats-unix/java/cars2.jar
-    - cp cats-java/modules/cats-acu/target/cats-acu-${ARTIFACT_VERSION}.jar dist/cats-unix/java/cats-acu.jar
-    - cp cats-java/modules/cats-swift/swift-dispatcher/target/swift-dispatcher-${ARTIFACT_VERSION}.jar dist/cats-unix/java/swift-dispatcher.jar
-    - cp cats-java/modules/cover-distrib/target/MagmaCoverDistrib-${ARTIFACT_VERSION}.jar dist/cats-unix/java/MagmaCoverDistrib.jar
-    - cp cats-java/modules/InterestManager/target/InterestManager-${ARTIFACT_VERSION}.jar dist/cats-unix/java/InterestManager.jar
-    - cp cats-web/target/cats-web-${ARTIFACT_VERSION}.war dist/cats-web/cats-web.war
-    - cp cats-java/modules/cats-batch/target/cats-batch-${ARTIFACT_VERSION}.jar dist/cats-unix/java/cats-batch.jar
-    - cp cats-java/modules/cats-swift/microservice/target/cats-swift-${ARTIFACT_VERSION}.jar dist/cats-unix/java/cats-swift.jar
-    - cp cats-java/modules/concorde/target/concorde-${ARTIFACT_VERSION}.jar dist/cats-unix/java/concorde.jar
-    - cp cats-java/modules/natop-manager/target/natop-manager-${ARTIFACT_VERSION}.jar dist/cats-unix/java/natop-manager.jar
-    - cp cats-java/modules/natop-receiver/target/natop-receiver-${ARTIFACT_VERSION}.jar dist/cats-unix/java/natop-receiver.jar
-    - cp cats-java/modules/ApfManager/target/apfManager-${ARTIFACT_VERSION}-shaded.jar dist/cats-unix/java/apfManager.jar
-
-    # Réorganisation des livrables
-    - cp -r cats-plsql/dist/* build/${ARTIFACT_VERSION}/
-    - cp -r cats-unix/dist/* build/${ARTIFACT_VERSION}/
-    - cp -r cats-script/dist/* build/${ARTIFACT_VERSION}/
-    - cp -r dist/cats-web/* build/${ARTIFACT_VERSION}/
-    - cp install_dba_scripts.ksh rollback_dba_scripts.ksh build/${ARTIFACT_VERSION}/
-
-  dependencies:
-    - build_plsql_job
-  artifacts:
-    paths:
-      - dist/
-      - build/
-    expire_in: 1 day
-✅ 2. archive_job — Crée l’archive finale .tar
-yaml
-Copier
-Modifier
-archive_job:
-  stage: archive
-  script:
-    - apt-get update && apt-get install -y tar
-    - echo "Creating final tar archive cats_${ARTIFACT_VERSION}.tar"
-    - tar -cvf dist/cats_${ARTIFACT_VERSION}.tar -C build ${ARTIFACT_VERSION}
-  dependencies:
-    - package_job
-  artifacts:
-    paths:
-      - dist/cats-${ARTIFACT_VERSION}.tar
-    expire_in: 1 week
-✅ 3. publish_job — Publie dans GitLab Package Registry
-yaml
-Copier
-Modifier
-publish_job:
-  stage: archive
-  script:
-    - echo "Publishing cats_${ARTIFACT_VERSION}.tar to GitLab Package Registry"
-    - curl --header "JOB-TOKEN: $CI_JOB_TOKEN" \
-           --upload-file dist/cats_${ARTIFACT_VERSION}.tar \
-           "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/cats/${ARTIFACT_VERSION}/cats_${ARTIFACT_VERSION}.tar"
-  dependencies:
-    - archive_job
-Tu es maintenant prêt pour une livraison professionnelle :
-
-archive bien nommée et propre à l’intérieur ✅
-
-zéro version dans les fichiers internes ✅
-
-publication automatique vers GitLab Registry ✅
-
-Souhaites-tu aussi un script pour vérifier le contenu de cats_6.02.02_002.tar dans la pipeline ?
-
-
-
-
-
-
-
+  # Ensuite tes commandes cp habituelles...
