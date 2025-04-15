@@ -8,3 +8,39 @@ tar -cvf dist/cats-unix.tar -C build/unix .
 - echo "Copie des JAR compilés dans cats-java vers cats-unix/java"
 - mkdir -p cats-unix/java
 - find cats-java/modules -type f -name "*.jar" -exec cp {} cats-unix/java/ \;
+
+
+
+build_unix_job:
+  script:
+    - echo "==== DEBUT DU JOB build_unix ===="
+    - mkdir -p build/java/lib \
+              build/cbl \
+              build/ctl \
+              build/dat \
+              build/exe \
+              build/gnt \
+              build/interests/com \
+              build/interests/gnt \
+              build/java \
+              build/sh \
+              build/xsd
+
+    - echo "📦 Copier les .jar compilés par Maven dans build/java/"
+    - find cats-java/modules -type f -name "*.jar" -exec cp {} build/java/ \;
+
+    # Ensuite copier les autres fichiers nécessaires
+    - cp -r cats-unix/cbl/* build/cbl/ || echo "⚠️  Pas de fichiers cbl"
+    - cp -r cats-unix/sh/* build/sh/ || echo "⚠️  Pas de fichiers sh"
+    - cp -r cats-unix/xsd/* build/xsd/ || echo "⚠️  Pas de fichiers xsd"
+    - cp -r cats-unix/java/lib/* build/java/lib/ || echo "⚠️  Pas de fichiers lib"
+
+    - echo "🎁 Création de l’archive TAR cats-unix.tar"
+    - mkdir -p dist/cats-unix
+    - tar -cvf dist/cats-unix.tar -C build .
+
+  artifacts:
+    paths:
+      - dist/cats-unix.tar
+    expire_in: 1 day
+
