@@ -1,17 +1,68 @@
-script:
-  - echo "Packaging artifacts for version $ARTIFACT_VERSION"
-  - mkdir -p dist/cats-unix/java/lib dist/cats-web/dist dist/catsbackend/dist build/$ARTIFACT_VERSION
-
-  # === DEBUG : Affichage des fichiers générés ===
-  - echo "🔍 Liste des fichiers JAR générés :"
-  - find cats-java/modules -type f -name "*.jar" -exec ls -lh {} \;
-  - echo "🔍 Liste des fichiers WAR générés :"
-  - find catsbackend -type f -name "*.war" -exec ls -lh {} \;
-  - echo "🔍 Liste des JAR dans cats-unix/java :"
-  - ls -lh cats-unix/java/ || echo "dossier introuvable"
-  - echo "🔍 Contenu de dist/"
-  - find dist/ -type f
-  - echo "🔍 Fin de l’affichage des fichiers générés"
-  # ==============================================
-
-  # Ensuite tes commandes cp habituelles...
+build_unix_job:
+  stage: build_unix
+  script:
+    - apt-get update && apt-get install -y dos2unix
+    - echo "==== DEBUT DU JOB build_unix ===="
+    - mkdir -p build/java/lib
+    - cp -r cats-unix/cbl/* build/cbl/
+    - cp -r cats-unix/java/* build/java/
+    - cp -r cats-unix/java/lib/* build/java/lib/
+    - cp -r cats-unix/sh/* build/sh/
+    - cp -r cats-unix/xsd/* build/xsd/
+    - echo "==== Création du TAR cats-unix.tar ===="
+    - mkdir -p dist/cats-unix
+    - tar -cvf dist/cats-unix.tar -C build .
+  artifacts:
+    paths:
+      - dist/cats-unix.tar
+    expire_in: 1 day
+build_plsql_job:
+  stage: build_plsql
+  script:
+    - echo "==== Création du TAR cats-plsql.tar ===="
+    - mkdir -p dist/cats-plsql
+    - cp -r cats-plsql/sql/* dist/cats-plsql/
+    - tar -cvf dist/cats-plsql.tar -C dist/cats-plsql .
+  artifacts:
+    paths:
+      - dist/cats-plsql.tar
+    expire_in: 1 day
+package_job:
+  stage: package
+  dependencies:
+    - build_unix_job
+    - build_plsql_job
+  script:
+    - echo "Packaging artifacts for version $ARTIFACT_VERSION"
+    - mkdir -p build/${ARTIFACT_VERSION}
+    - cp dist/cats-unix.tar build/${ARTIFACT_VERSION}/
+    - cp dist/cats-plsql.tar build/${ARTIFACT_VERSION}/
+    - cp dist/cats-web.war build/${ARTIFACT_VERSION}/
+    - cp dist/cats-backend.war build/${ARTIFACT_VERSION}/
+    - cp dist/cats-script.tar build/${ARTIFACT_VERSION}/
+    - cp install_dba_scripts.ksh rollback_dba_scripts.ksh build/${ARTIFACT_VERSION}/
+  artifacts:
+    paths:
+      - build/${ARTIFACT_VERSION}
+    expire_in: 1 day
+archive_job:
+  stage: archive
+  script:
+    - apt-get update && apt-get install -y tar
+    - echo "Creating final tar archive cats_${ARTIFACT_VERSION}.tar"
+    - tar -cvf dist/cats_${ARTIFACT_VERSION}.tar -C build/${ARTIFACT_VERSION} .
+  dependencies:
+    - package_job
+  artifacts:
+    paths:
+      - dist/cats_${ARTIFACT_VERSION}.tar
+    expire_in: 1 week
+publish_job:
+  stage: publish
+  script:
+    - echo "Uploading the artifact to GitLab Registry"
+    - curl --header "JOB-TOKEN: $CI_JOB_TOKEN" \
+      --upload-file dist/cats_${ARTIFACT_VERSION}.tar \
+      "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/cats/${ARTIFACT_VERSION}/cats_${ARTIFACT_VERSION}.tar"
+  dependencies:
+    - archive_job
