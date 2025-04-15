@@ -1,26 +1,13 @@
-Option 1 — Nouveau job dédié (build_script_job)
-yaml
-Copier
-Modifier
-build_script_job:
-  stage: build_backend
+tag_version_job:
+  stage: publish
   script:
-    - echo "==== Copie des scripts SQL de cats-script ===="
-    - mkdir -p dist/cats-script/rollback
-    - cp cats-script/*.sql dist/cats-script/
-    - cp cats-script/rollback/*.sql dist/cats-script/rollback/
-    - tar -cvf dist/cats-script.tar -C dist cats-script
-  artifacts:
-    paths:
-      - dist/cats-script.tar
-    expire_in: 1 day
-Puis dans ton package_job :
-
-yaml
-Copier
-Modifier
-package_job:
-  dependencies:
-    - build_unix_job
-    - build_plsql_job
-    - build_script_job   # ← Ajout ici
+    - echo "Création du tag Git cats_${ARTIFACT_VERSION}"
+    - git config user.name "GitLab CI"
+    - git config user.email "ci@gitlab.com"
+    - git tag -a cats_${ARTIFACT_VERSION} -m "Release cats ${ARTIFACT_VERSION}"
+    - git push origin cats_${ARTIFACT_VERSION}
+  rules:
+    - if: '$CI_COMMIT_BRANCH == "main"'
+      when: manual
+  allow_failure: false
+  needs: [publish_job]
