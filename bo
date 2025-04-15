@@ -3,3 +3,8 @@ find cats-java/modules -name "*.jar" -exec cp {} build/java/ \;
 
 # Puis tar comme avant :
 tar -cvf dist/cats-unix.tar -C build/unix .
+
+
+- echo "Copie des JAR compilés dans cats-java vers cats-unix/java"
+- mkdir -p cats-unix/java
+- find cats-java/modules -type f -name "*.jar" -exec cp {} cats-unix/java/ \;
