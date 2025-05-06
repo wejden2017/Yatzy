@@ -1,1 +1,33 @@
+locals {
+  account_id         = data.aws_caller_identity.this.account_id
+  vpc_id             = data.aws_vpc.cats_vpc.id
+  internal_subnet_ids = data.aws_subnets.internal.ids
+  environment        = lower(var.environment)
 
+  # AMI names
+  amazon_linux_2     = "amazon_linux_cis_2.x__163__1738069251"
+  redhat_linux_8     = "redhat_linux_cis_8.x__227__1738198866"
+  windows_server_2019 = "ami-0e9b0893dc3f4dfe3"
+
+  # Tags standard
+  standard_tags = {
+    Environment     = var.environment
+    ApplicationID   = "APP-00452"
+    ApplicationName = "CATS"
+    BusinessEntity  = "LCH"
+    BusinessUnit    = "LCH"
+    CostCentre      = "CC56204"
+    Owner           = "SA.Shared.Apps.IT.Support@lseg.com"
+    ProjectCode     = "80301-200"
+    Region          = var.aws_region
+  }
+
+  # mnd-* tags générés automatiquement
+  mnd_tags = {
+    for k, v in local.standard_tags : 
+    "mnd-${lower(replace(k, "_", "-"))}" => v
+  }
+
+  # Tous les tags fusionnés
+  all_tags = merge(local.standard_tags, local.mnd_tags)
+}
