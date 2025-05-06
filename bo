@@ -1,33 +1,39 @@
-locals {
-  account_id         = data.aws_caller_identity.this.account_id
-  vpc_id             = data.aws_vpc.cats_vpc.id
-  internal_subnet_ids = data.aws_subnets.internal.ids
-  environment        = lower(var.environment)
+variables:
+  # Environnement à déployer : "poc" ou "dev"
+  TF_ENVIRONMENT: "poc"  # Valeur par défaut
 
-  # AMI names
-  amazon_linux_2     = "amazon_linux_cis_2.x__163__1738069251"
-  redhat_linux_8     = "redhat_linux_cis_8.x__227__1738198866"
-  windows_server_2019 = "ami-0e9b0893dc3f4dfe3"
+  # Fichier .tfvars basé sur l'environnement
+  TERRAFORM_VAR_FILE: environments/${TF_ENVIRONMENT}/${TF_ENVIRONMENT}.tfvars
 
-  # Tags standard
-  standard_tags = {
-    Environment     = var.environment
-    ApplicationID   = "APP-00452"
-    ApplicationName = "CATS"
-    BusinessEntity  = "LCH"
-    BusinessUnit    = "LCH"
-    CostCentre      = "CC56204"
-    Owner           = "SA.Shared.Apps.IT.Support@lseg.com"
-    ProjectCode     = "80301-200"
-    Region          = var.aws_region
-  }
+  # AWS / Projet
+  APP_ID: "APP-00451"
+  LSEG_VAULT_NAMESPACE: "aws"
+  PROJECT_ID: "cats-app-infrastructure"
+  PROJECT_NAME: "app-00451.cats-app-infrastructure"
+  AWS_DEFAULT_REGION: "eu-west-2"
+  AWS_REGION: ${AWS_DEFAULT_REGION}
 
-  # mnd-* tags générés automatiquement
-  mnd_tags = {
-    for k, v in local.standard_tags : 
-    "mnd-${lower(replace(k, "_", "-"))}" => v
-  }
+  # Comptes AWS
+  AWS_ACCOUNT_POC: "106653624073"
+  AWS_ACCOUNT_DEV: "097680592951"
+  AWS_ACCOUNT: ${AWS_ACCOUNT_${TF_ENVIRONMENT | upcase}}  # auto-sélection selon TF_ENVIRONMENT
 
-  # Tous les tags fusionnés
-  all_tags = merge(local.standard_tags, local.mnd_tags)
-}
+  # Terraform
+  LSEG_TERRAFORM_VERSION: "1.2.9-0b5a5dd5"
+  TERRAFORM_VERSION: "1.7.5"
+  TERRAFORM_PATH: "terraform"
+  TERRAFORM_PLAN_NAME: "cats_cPlan"
+
+  # Déploiement
+  PROJECT_VERSION: "latest"
+  REPOSITORY_NAME: "${PROJECT_ID}"
+  REMOTE_USER: "ec2-user"
+  LSEG_PPE_VALUE: "true"
+  LSEG_PROD_VALUE: "false"
+  CI_DEBUG_TRACE: "false"
+
+  # State S3
+  TF_VAR_TF_STATE_BUCKET: "cats-terraform/${TF_ENVIRONMENT}"
+  TF_VAR_TF_STATE_FILE_KEY: "Lchcats/aws/terraform.tfstate"
+  TF_VAR_AWS_REGION: ${AWS_DEFAULT_REGION}
+  TF_VAR_KMS_KEY: "alias/lch-cats-terraform"
