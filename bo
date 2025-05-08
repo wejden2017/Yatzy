@@ -1,1 +1,60 @@
-s
+6-join-ad:
+  stage: join
+  script:
+    # Installe les dépendances nécessaires
+    - yum install -y expect jq openssh-clients awscli bind-utils
+
+    # 🔐 1. Choix du compte AWS selon l'environnement
+    - echo "🔐 Environnement demandé : $DEPLOY_ENVIRONMENT"
+    - |
+      if [[ "$DEPLOY_ENVIRONMENT" == "dev" ]]; then
+        export TARGET_ACCOUNT_ID=907680592951
+      elif [[ "$DEPLOY_ENVIRONMENT" == "poc" ]]; then
+        export TARGET_ACCOUNT_ID=106653624073
+      elif [[ "$DEPLOY_ENVIRONMENT" == "uat" ]]; then
+        export TARGET_ACCOUNT_ID=025092612531
+      else
+        echo "❌ DEPLOY_ENVIRONMENT inconnu: $DEPLOY_ENVIRONMENT"
+        exit 1
+      fi
+
+    # 🔐 2. Assume role dans le bon compte
+    - export AWS_ROLE_ARN="arn:aws:iam::${TARGET_ACCOUNT_ID}:role/mon-role-gitlab"
+    - export AWS_REGION=eu-west-2
+    - echo "Assuming role: $AWS_ROLE_ARN"
+    - |
+      CREDS=$(aws sts assume-role \
+        --role-arn "$AWS_ROLE_ARN" \
+        --role-session-name gitlab-ci-session \
+        --region $AWS_REGION)
+
+      export AWS_ACCESS_KEY_ID=$(echo "$CREDS" | jq -r '.Credentials.AccessKeyId')
+      export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | jq -r '.Credentials.SecretAccessKey')
+      export AWS_SESSION_TOKEN=$(echo "$CREDS" | jq -r '.Credentials.SessionToken')
+
+    # 🕵️ 3. Debug identité AWS active
+    - aws sts get-caller-identity --region $AWS_REGION
+
+    # 📦 4. Lecture des outputs Terraform
+    - cat terraform_outputs.json
+    - export FSX_MANAGEMENT_IP=$(jq -r '.fsx_management_ip.value' terraform_outputs.json)
+    - export AD_IP=$(jq -r '.ec2_win_ad_instance_ip.value' terraform_outputs.json)
+    - export INSTANCE_ID=$(jq -r '.ec2_win_ad_instance_id.value' terraform_outputs.json)
+    - echo "Using INSTANCE_ID: $INSTANCE_ID"
+
+    # 🕒 5. Attente que l’EC2 soit ‘running’
+    - echo ">> Waiting for EC2 Active Directory to be 'running'..."
+    - |
+      while true; do
+        STATE=$(aws ec2 describe-instances \
+          --region $AWS_REGION \
+          --instance-ids "$INSTANCE_ID" \
+          --query "Reservations[0].Instances[0].State.Name" \
+          --output text)
+        echo "  -> State: $STATE"
+        [[ "$STATE" == "running" ]] && break
+        sleep 5
+      done
+
+    # ✅ EC2 prêt, maintenant on continue avec la suite (SSM, join AD...)
+    # (mets ton code ici)
