@@ -1,48 +1,37 @@
-1-aws-inject:
-  stage: auth
-  image: vault:1.13.3
-  needs: [1-vault-aws-auth]
-  dependencies: [1-vault-aws-auth]
+7-create-fsx-share:
+  stage: Create SMB Share
+  image: amazonlinux:2
+  tags: [app-00451-dev-ec2-gitlab-runner]
+  extends: [.vault-artifact-decrypter]
+  dependencies:
+    - 1-vault-kv-retriever
+    - 1-vault-aws-auth
+    - 4-terraform-apply
+    - 6-join-ad
   script:
-    # Fix Vault DNS error
-    - export VAULT_ADDR="https://vaultent.ppe.lseg.com"
+    - yum install -y jq awscli
 
-    # Résolution dynamique du compte AWS selon l'environnement
+    # Récupération IP FSx + Instance ID
+    - export FSX_MANAGEMENT_IP=$(jq -r '.fsx_management_ip.value' terraform_outputs.json)
+    - export INSTANCE_ID=$(jq -r '.fsx_instance_id.value' terraform_outputs.json)
+    - echo "📡 FSx IP: $FSX_MANAGEMENT_IP"
+    - echo "🔧 FSx Instance ID: $INSTANCE_ID"
+
+    # Génère le script localement
     - |
-      if [ "$DEPLOY_ENVIRONMENT" = "dev" ]; then
-        export AWS_ACCOUNT_ID=907680592951
-      elif [ "$DEPLOY_ENVIRONMENT" = "poc" ]; then
-        export AWS_ACCOUNT_ID=106653624073
-      elif [ "$DEPLOY_ENVIRONMENT" = "uat" ]; then
-        export AWS_ACCOUNT_ID=025092612531
+      cat << 'EOF' > create_share.sh
+      #!/bin/bash
+      set -e
+
+      vserver="cats-vsm"
+      sharename="FSHQ"
+      sharename_path="/FSHQ"
+      group="Domain Users"
+
+      echo "🔍 Checking if share $sharename exists..."
+      if ! vserver cifs share show -vserver $vserver -share-name $sharename | grep $sharename; then
+        echo "📁 Creating share $sharename..."
+        vserver cifs share create -vserver $vserver -share-name $sharename -path $sharename_path
       else
-        echo "[ERROR] Unknown DEPLOY_ENVIRONMENT: $DEPLOY_ENVIRONMENT"
-        exit 1
+        echo "✅ Share $sharename already exists."
       fi
-
-    # Chemin Vault basé sur le compte
-    - export VAULT_ROLE_PATH="gitlab/app-00451/aws/Credentials/${AWS_ACCOUNT_ID}-app-00451-developer"
-
-    - echo "[INFO] Lecture des credentials Vault depuis : $VAULT_ROLE_PATH"
-    - CREDS=$(vault read -format=json "$VAULT_ROLE_PATH")
-
-    # Extraction des credentials
-    - export AWS_ACCESS_KEY_ID=$(echo "$CREDS" | jq -r '.data.access_key')
-    - export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | jq -r '.data.secret_key')
-    - export AWS_SESSION_TOKEN=$(echo "$CREDS" | jq -r '.data.security_token')
-    - export AWS_REGION="eu-west-2"
-
-    # Debug STS
-    - echo "[DEBUG] Résultat AWS STS :"
-    - aws sts get-caller-identity --region "$AWS_REGION"
-
-    # Création fichier dotenv pour les jobs suivants
-    - echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" > aws.env
-    - echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> aws.env
-    - echo "AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN" >> aws.env
-    - echo "AWS_REGION=$AWS_REGION" >> aws.env
-
-  artifacts:
-    reports:
-      dotenv: aws.env
-    expire_in: 1 hour
