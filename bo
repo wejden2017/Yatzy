@@ -35,3 +35,22 @@
       else
         echo "✅ Share $sharename already exists."
       fi
+
+      echo "🔍 Checking access control for $group..."
+      if ! vserver cifs share access-control show -vserver $vserver -share $sharename | grep "$group"; then
+        echo "🔐 Setting access control for $group..."
+        vserver cifs share access-control create -vserver $vserver -share $sharename -user-or-group "$group" -permission full_control
+      else
+        echo "✅ Access control for $group already exists."
+      fi
+      EOF
+
+    # Envoie et exécute via SSM
+    - |
+      aws ssm send-command \
+        --document-name "AWS-RunShellScript" \
+        --region eu-west-3 \
+        --instance-ids "$INSTANCE_ID" \
+        --comment "Create FSx SMB Share" \
+        --parameters 'commands=["bash -c '\''cat > /tmp/create_share.sh <<EOF\n'"$(cat create_share.sh | sed 's/"/\\"/g')"'\nEOF\nbash /tmp/create_share.sh'\''"]' \
+        --output text
