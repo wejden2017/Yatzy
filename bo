@@ -4,20 +4,39 @@
   needs: [1-vault-aws-auth]
   dependencies: [1-vault-aws-auth]
   script:
-    - echo "[INFO] Lecture manuelle des credentials Vault dynamiques..."
-    - export VAULT_ROLE_PATH="gitlab/app-00451/aws/creds/aws-cats-${DEPLOY_ENVIRONMENT}-developer"
+    # Fix Vault DNS error
+    - export VAULT_ADDR="https://vaultent.ppe.lseg.com"
 
-    # Appel Vault pour lire les credentials AWS du bon compte
+    # Résolution dynamique du compte AWS selon l'environnement
+    - |
+      if [ "$DEPLOY_ENVIRONMENT" = "dev" ]; then
+        export AWS_ACCOUNT_ID=907680592951
+      elif [ "$DEPLOY_ENVIRONMENT" = "poc" ]; then
+        export AWS_ACCOUNT_ID=106653624073
+      elif [ "$DEPLOY_ENVIRONMENT" = "uat" ]; then
+        export AWS_ACCOUNT_ID=025092612531
+      else
+        echo "[ERROR] Unknown DEPLOY_ENVIRONMENT: $DEPLOY_ENVIRONMENT"
+        exit 1
+      fi
+
+    # Chemin Vault basé sur le compte
+    - export VAULT_ROLE_PATH="gitlab/app-00451/aws/Credentials/${AWS_ACCOUNT_ID}-app-00451-developer"
+
+    - echo "[INFO] Lecture des credentials Vault depuis : $VAULT_ROLE_PATH"
     - CREDS=$(vault read -format=json "$VAULT_ROLE_PATH")
+
+    # Extraction des credentials
     - export AWS_ACCESS_KEY_ID=$(echo "$CREDS" | jq -r '.data.access_key')
     - export AWS_SECRET_ACCESS_KEY=$(echo "$CREDS" | jq -r '.data.secret_key')
     - export AWS_SESSION_TOKEN=$(echo "$CREDS" | jq -r '.data.security_token')
     - export AWS_REGION="eu-west-2"
 
-    # Vérification debug
-    - echo "[DEBUG] AWS_ACCOUNT_ID via Vault = $(aws sts get-caller-identity --region $AWS_REGION | jq -r '.Account')"
+    # Debug STS
+    - echo "[DEBUG] Résultat AWS STS :"
+    - aws sts get-caller-identity --region "$AWS_REGION"
 
-    # Création du fichier dotenv
+    # Création fichier dotenv pour les jobs suivants
     - echo "AWS_ACCESS_KEY_ID=$AWS_ACCESS_KEY_ID" > aws.env
     - echo "AWS_SECRET_ACCESS_KEY=$AWS_SECRET_ACCESS_KEY" >> aws.env
     - echo "AWS_SESSION_TOKEN=$AWS_SESSION_TOKEN" >> aws.env
