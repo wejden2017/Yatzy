@@ -1,56 +1,223 @@
-7-create-fsx-share:
-  stage: Create SMB Share
-  image: amazonlinux:2
-  tags: [app-00451-dev-ec2-gitlab-runner]
-  extends: [.vault-artifact-decrypter]
-  dependencies:
-    - 1-vault-kv-retriever
-    - 1-vault-aws-auth
-    - 4-terraform-apply
-    - 6-join-ad
+variables:
+  DEPLOY_ENVIRONMENT:
+    value: "dev"
+    options:
+      - "poc"
+      - "dev"
+      - "uat"
+    description: "Choose deployment environment. Set to 'dev' by default."
+  
+  APP_ID: "APP-00451"
+  LSEG_VAULT_NAMESPACE: "aws"
+  PROJECT_ID: "cats-app-infrastructure"
+  PROJECT_NAME: "app-00451_cats-app-infrastructure"
+  AWS_DEFAULT_REGION: "eu-west-2"
+  AWS_REGION: ${AWS_DEFAULT_REGION}
+  AWS_ACCOUNT_POC: "10665362407X"
+  AWS_ACCOUNT_DEV: "0976808925X1"
+  AWS_ACCOUNT_UAT: "02589261253X"
+  AWS_ACCOUNT: ${AWS_ACCOUNT_DEV}
+  LSEG_TERRAFORM_VERSION: "1.2.9-0b5a5dd5"
+  TERRAFORM_VERSION: "1.7.5"
+  TERRAFORM_PATH: "terraform"
+  TERRAFORM_PLAN_NAME: "cats_plan"
+  PROJECT_VERSION: "latest"
+  REPOSITORY_NAME: "${PROJECT_ID}"
+  REMOTE_USER: "ec2-user"
+  LSEG_PPE_VAULT: "true"
+  LSEG_PROD_VAULT: "false"
+  CI_DEBUG_TRACE: false
+  TF_VAR_TF_STATE_BUCKET: cats-terraform-${DEPLOY_ENVIRONMENT}
+  TF_VAR_TF_STATE_FILE_KEY: "lchcats/aws/terraform.tfstate"
+  TF_VAR_TF_AWS_REGION: ${AWS_DEFAULT_REGION}
+  TF_VAR_TF_KMS_KEY: alias/lch-cats-terraform-${DEPLOY_ENVIRONMENT}
+  TF_VAR_TF_VAR_FILE_POC: "environments/poc/poc.tfvars"
+  TF_VAR_TF_VAR_FILE_DEV: "environments/dev/dev.tfvars"
+  TF_VAR_TF_VAR_FILE_UAT: "environments/uat/uat.tfvars"
+  TERRAFORM_VAR_FILE: environments/${DEPLOY_ENVIRONMENT}/${DEPLOY_ENVIRONMENT}.tfvars
+
+# Définir les configurations de runner pour chaque environnement
+.poc-runner:
+  tags: 
+    - app-00451-poc-ec2-gitlab-runner
+
+.dev-runner:
+  tags: 
+    - app-00451-dev-cicd-gitlab-runner
+
+.uat-runner:
+  tags: 
+    - app-00451-uat-ec2-gitlab-runner
+
+# Template de base pour tous les jobs
+.default-runner:
+  before_script:
+    - echo "Exécution sur le runner pour environment -> $DEPLOY_ENVIRONMENT"
+
+# Appliquer le bon runner en fonction de l'environnement
+.set-runner:
+  rules:
+    - if: '$DEPLOY_ENVIRONMENT == "poc"'
+      extends: .poc-runner
+    - if: '$DEPLOY_ENVIRONMENT == "dev"'
+      extends: .dev-runner
+    - if: '$DEPLOY_ENVIRONMENT == "uat"'
+      extends: .uat-runner
+
+include:
+  - local: 'templates/terraform.yml'
+  - project: 'ci/stable/security/vault-service'
+    ref: '3.1.3'
+    file:
+      - 'templates/vault-service-artifacts.yml'
+
+# Pipeline Rules
+######################
+.only-feature:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'web'
+      when: always
+    - if: $CI_PIPELINE_SOURCE == 'push' && $CI_COMMIT_REF_NAME =~ /feature/
+      when: always
+    - if: $CI_PIPELINE_SOURCE == 'parent_pipeline' && $CI_COMMIT_REF_NAME =~ /feature/
+      when: always
+    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
+      when: always
+    - when: never
+
+.only-master:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'web' && $CI_BUILD_REF_NAME == 'master'
+      when: always
+
+.only-develop:
+  rules:
+    - if: $CI_PIPELINE_SOURCE == 'web' && $CI_BUILD_REF_NAME == 'develop'
+      when: manual
+
+.only-manual:
+  rules:
+    - when: manual
+
+# Jobs
+######################
+
+############################################
+#### Vault retriever ####
+############################################
+1-vault-kv-retriever:
+  stage: Vault retrieve
+  extends:
+    - .default-runner
+    - .set-runner
+    - .vault-secret-retriever
+  variables:
+    VS_SECRET_LIST: |
+      SSH_PRIVATE_KEY@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@EC2-KEY-PAIR
+      AD_DOMAIN_NAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-domain-name
+      AD_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-password
+      AD_USERNAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-username
+      FSX_ADMIN_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@fsx-admin-password
+
+2-debug-kv:
+  stage: Vault retrieve
+  extends:
+    - .default-runner
+    - .set-runner
+    - .vault-artifact-decrypter
+  needs:
+    - job: 1-vault-kv-retriever
+      artifacts: true
   script:
-    - yum install -y jq awscli
+    - echo $FSX_ADMIN_PASSWORD
+    - echo "FSX Admin Password Length ${FSX_ADMIN_PASSWORD}"
 
-    # Récupération IP FSx + Instance ID
-    - export FSX_MANAGEMENT_IP=$(jq -r '.fsx_management_ip.value' terraform_outputs.json)
-    - export INSTANCE_ID=$(jq -r '.fsx_instance_id.value' terraform_outputs.json)
-    - echo "📡 FSx IP: $FSX_MANAGEMENT_IP"
-    - echo "🔧 FSx Instance ID: $INSTANCE_ID"
+############################################
+#### Vault AWS Auth ####
+############################################
+1-vault-aws-auth:
+  stage: AWS auth
+  extends:
+    - .default-runner
+    - .set-runner
+    - .vault-aws-auth
+  before_script:
+    - !reference [.pre-env-selection, script]
 
-    # Génère le script localement
-    - |
-      cat << 'EOF' > create_share.sh
-      #!/bin/bash
-      set -e
+############################################
+#### Terraform Init ####
+############################################
+1-terraform-init:
+  stage: Terraform init
+  extends:
+    - .default-runner
+    - .set-runner
+    - .terraform-init
+  needs:
+    - job: 1-vault-aws-auth
+      artifacts: true
+  before_script:
+    - !reference [.pre-env-selection, script]
+    - export AWS_ACCESS_KEY_ID=$VAULT_AWS_ACCESS_KEY_ID
+    - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
+    - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
 
-      vserver="cats-vsm"
-      sharename="FSHQ"
-      sharename_path="/FSHQ"
-      group="Domain Users"
+############################################
+#### Terraform Plan ####
+############################################
+1-terraform-plan:
+  stage: Terraform plan
+  extends:
+    - .default-runner
+    - .set-runner
+    - .terraform-plan
+  needs:
+    - job: 1-terraform-init
+      artifacts: true
+  before_script:
+    - !reference [.pre-env-selection, script]
+    - export AWS_ACCESS_KEY_ID=$VAULT_AWS_ACCESS_KEY_ID
+    - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
+    - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
+  variables:
+    VAR_FILE: environments/${DEPLOY_ENVIRONMENT}/${DEPLOY_ENVIRONMENT}.tfvars
 
-      echo "🔍 Checking if share $sharename exists..."
-      if ! vserver cifs share show -vserver $vserver -share-name $sharename | grep $sharename; then
-        echo "📁 Creating share $sharename..."
-        vserver cifs share create -vserver $vserver -share-name $sharename -path $sharename_path
-      else
-        echo "✅ Share $sharename already exists."
-      fi
+############################################
+#### Terraform Apply ####
+############################################
+1-terraform-apply:
+  stage: Terraform apply
+  extends:
+    - .default-runner
+    - .set-runner
+    - .terraform-apply
+  needs:
+    - job: 1-terraform-plan
+      artifacts: true
+  before_script:
+    - !reference [.pre-env-selection, script]
+    - export AWS_ACCESS_KEY_ID=$VAULT_AWS_ACCESS_KEY_ID
+    - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
+    - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
 
-      echo "🔍 Checking access control for $group..."
-      if ! vserver cifs share access-control show -vserver $vserver -share $sharename | grep "$group"; then
-        echo "🔐 Setting access control for $group..."
-        vserver cifs share access-control create -vserver $vserver -share $sharename -user-or-group "$group" -permission full_control
-      else
-        echo "✅ Access control for $group already exists."
-      fi
-      EOF
-
-    # Envoie et exécute via SSM
-    - |
-      aws ssm send-command \
-        --document-name "AWS-RunShellScript" \
-        --region eu-west-3 \
-        --instance-ids "$INSTANCE_ID" \
-        --comment "Create FSx SMB Share" \
-        --parameters 'commands=["bash -c '\''cat > /tmp/create_share.sh <<EOF\n'"$(cat create_share.sh | sed 's/"/\\"/g')"'\nEOF\nbash /tmp/create_share.sh'\''"]' \
-        --output text
+############################################
+#### Connect to EC2 ####
+############################################
+1-connect-to-ec2:
+  stage: Connect to EC2
+  extends:
+    - .default-runner
+    - .set-runner
+  needs:
+    - job: 1-vault-kv-retriever
+      artifacts: true
+    - job: 1-terraform-apply
+      artifacts: true
+  script:
+    - mkdir -p ~/.ssh
+    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
+    - chmod 600 ~/.ssh/id_rsa
+    - ssh-keyscan -t rsa $(terraform output -raw ec2_instance_public_dns) >> ~/.ssh/known_hosts
+    - ssh ${REMOTE_USER}@$(terraform output -raw ec2_instance_public_dns) "echo 'Connection successful!' && uname -a"
+  after_script:
+    - rm -f ~/.ssh/id_rsa
