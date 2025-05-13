@@ -1,3 +1,4 @@
+# Partie 1: Définition des variables globales
 variables:
   DEPLOY_ENVIRONMENT:
     value: "dev"
@@ -6,137 +7,38 @@ variables:
       - "dev"
       - "uat"
     description: "Choose deployment environment. Set to 'dev' by default."
-  
-  # Autres variables globales
-  APP_ID: "APP-00451"
-  LSEG_VAULT_NAMESPACE: "aws"
-  PROJECT_ID: "cats-app-infrastructure"
-  PROJECT_NAME: "app-00451_cats-app-infrastructure"
-  AWS_DEFAULT_REGION: "eu-west-2"
-  AWS_REGION: ${AWS_DEFAULT_REGION}
-  AWS_ACCOUNT_POC: "10665362407X"
-  AWS_ACCOUNT_DEV: "0976808925X1"
-  AWS_ACCOUNT_UAT: "02589261253X"
-  AWS_ACCOUNT: ${AWS_ACCOUNT_DEV}
-  LSEG_TERRAFORM_VERSION: "1.2.9-0b5a5dd5"
-  TERRAFORM_VERSION: "1.7.5"
-  TERRAFORM_PATH: "terraform"
-  TERRAFORM_PLAN_NAME: "cats_plan"
-  PROJECT_VERSION: "latest"
-  REPOSITORY_NAME: "${PROJECT_ID}"
-  REMOTE_USER: "ec2-user"
-  LSEG_PPE_VAULT: "true"
-  LSEG_PROD_VAULT: "false"
-  CI_DEBUG_TRACE: false
-  TF_VAR_TF_STATE_BUCKET: cats-terraform-${DEPLOY_ENVIRONMENT}
-  TF_VAR_TF_STATE_FILE_KEY: "lchcats/aws/terraform.tfstate"
-  TF_VAR_TF_AWS_REGION: ${AWS_DEFAULT_REGION}
-  TF_VAR_TF_KMS_KEY: alias/lch-cats-terraform-${DEPLOY_ENVIRONMENT}
-  TF_VAR_TF_VAR_FILE_POC: "environments/poc/poc.tfvars"
-  TF_VAR_TF_VAR_FILE_DEV: "environments/dev/dev.tfvars"
-  TF_VAR_TF_VAR_FILE_UAT: "environments/uat/uat.tfvars"
-  TERRAFORM_VAR_FILE: environments/${DEPLOY_ENVIRONMENT}/${DEPLOY_ENVIRONMENT}.tfvars
+  RUNNER_TAG: "app-00451-dev-cicd-gitlab-runner"  # Valeur par défaut
 
-# Scripts d'initialisation
-.init-environment:
-  before_script:
-    - |
-      # Définition dynamique du tag runner en fonction de l'environnement
-      if [ "$DEPLOY_ENVIRONMENT" == "poc" ]; then
-        # Définir le tag pour POC
-        echo "RUNNER_TAG=app-00451-poc-ec2-gitlab-runner" >> variables.env
-      elif [ "$DEPLOY_ENVIRONMENT" == "dev" ]; then
-        # Définir le tag pour DEV
-        echo "RUNNER_TAG=app-00451-dev-cicd-gitlab-runner" >> variables.env
-      elif [ "$DEPLOY_ENVIRONMENT" == "uat" ]; then
-        # Définir le tag pour UAT
-        echo "RUNNER_TAG=app-00451-uat-ec2-gitlab-runner" >> variables.env
-      else
-        echo "Environnement non reconnu: $DEPLOY_ENVIRONMENT"
-        exit 1
-      fi
-    - echo "Environnement sélectionné: $DEPLOY_ENVIRONMENT, Runner tag: $(cat variables.env | grep RUNNER_TAG | cut -d= -f2)"
-
+# Partie 2: Configuration du workflow pour définir dynamiquement RUNNER_TAG
 workflow:
   rules:
     - if: '$DEPLOY_ENVIRONMENT == "poc"'
+      variables:
+        RUNNER_TAG: "app-00451-poc-ec2-gitlab-runner"
     - if: '$DEPLOY_ENVIRONMENT == "dev"'
+      variables:
+        RUNNER_TAG: "app-00451-dev-cicd-gitlab-runner"
     - if: '$DEPLOY_ENVIRONMENT == "uat"'
+      variables:
+        RUNNER_TAG: "app-00451-uat-ec2-gitlab-runner"
+    - when: always
 
-include:
-  - local: 'templates/terraform.yml'
-  - project: 'ci/stable/security/vault-service'
-    ref: '3.1.3'
-    file:
-      - 'templates/vault-service-artifacts.yml'
-
-# Pipeline Rules
-######################
-.only-feature:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == 'web'
-      when: always
-    - if: $CI_PIPELINE_SOURCE == 'push' && $CI_COMMIT_REF_NAME =~ /feature/
-      when: always
-    - if: $CI_PIPELINE_SOURCE == 'parent_pipeline' && $CI_COMMIT_REF_NAME =~ /feature/
-      when: always
-    - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
-      when: always
-    - when: never
-
-.only-master:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == 'web' && $CI_BUILD_REF_NAME == 'master'
-      when: always
-
-.only-develop:
-  rules:
-    - if: $CI_PIPELINE_SOURCE == 'web' && $CI_BUILD_REF_NAME == 'develop'
-      when: manual
-
-.only-manual:
-  rules:
-    - when: manual
-
-# Pas d'étape spéciale de configuration, on crée un job dédié
-setup-environment:
-  stage: .pre
-  script:
-    - |
-      # Définition dynamique du tag runner en fonction de l'environnement
-      if [ "$DEPLOY_ENVIRONMENT" == "poc" ]; then
-        # Définir le tag pour POC
-        echo "RUNNER_TAG=app-00451-poc-ec2-gitlab-runner" >> build.env
-      elif [ "$DEPLOY_ENVIRONMENT" == "dev" ]; then
-        # Définir le tag pour DEV
-        echo "RUNNER_TAG=app-00451-dev-cicd-gitlab-runner" >> build.env
-      elif [ "$DEPLOY_ENVIRONMENT" == "uat" ]; then
-        # Définir le tag pour UAT
-        echo "RUNNER_TAG=app-00451-uat-ec2-gitlab-runner" >> build.env
-      else
-        echo "Environnement non reconnu: $DEPLOY_ENVIRONMENT"
-        exit 1
-      fi
-    - echo "Environnement sélectionné: $DEPLOY_ENVIRONMENT, Runner tag: $(cat build.env | grep RUNNER_TAG | cut -d= -f2)"
-  artifacts:
-    reports:
-      dotenv: build.env
-
-# Jobs
-######################
-
-############################################
-#### Vault retriever ####
-############################################
-1-vault-kv-retriever:
-  stage: Vault retrieve
+# Partie 3: Définition du template de base pour tous les jobs
+.default-runner:
   tags:
     - $RUNNER_TAG
+  before_script:
+    - echo "Exécution sur le runner avec tag -> $RUNNER_TAG pour environment -> $DEPLOY_ENVIRONMENT"
+
+
+
+
+# Exemple pour un job
+1-vault-kv-retriever:
+  stage: Vault retrieve
   extends:
+    - .default-runner
     - .vault-secret-retriever
-  needs:
-    - job: setup-environment
-      artifacts: true
   variables:
     VS_SECRET_LIST: |
       SSH_PRIVATE_KEY@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@EC2-KEY-PAIR
@@ -144,112 +46,3 @@ setup-environment:
       AD_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-password
       AD_USERNAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-username
       FSX_ADMIN_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@fsx-admin-password
-
-2-debug-kv:
-  stage: Vault retrieve
-  tags:
-    - $RUNNER_TAG
-  extends:
-    - .vault-artifact-decrypter
-  needs:
-    - job: setup-environment
-      artifacts: true
-    - job: 1-vault-kv-retriever
-      artifacts: true
-  script:
-    - echo $FSX_ADMIN_PASSWORD
-    - echo "FSX Admin Password Length ${FSX_ADMIN_PASSWORD}"
-
-############################################
-#### Vault AWS Auth ####
-############################################
-1-vault-aws-auth:
-  stage: AWS auth
-  tags:
-    - $RUNNER_TAG
-  extends:
-    - .vault-aws-auth
-  needs:
-    - job: setup-environment
-      artifacts: true
-  before_script:
-    - !reference [.pre-env-selection, script]
-
-############################################
-#### Terraform Init ####
-############################################
-1-terraform-init:
-  stage: Terraform init
-  tags:
-    - $RUNNER_TAG
-  extends:
-    - .terraform-init
-  needs:
-    - job: setup-environment
-      artifacts: true
-    - job: 1-vault-aws-auth
-      artifacts: true
-  before_script:
-    - !reference [.pre-env-selection, script]
-    - export AWS_ACCESS_KEY_ID=$VAULT_AWS_ACCESS_KEY_ID
-    - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
-    - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
-
-############################################
-#### Terraform Plan ####
-############################################
-1-terraform-plan:
-  stage: Terraform plan
-  tags:
-    - $RUNNER_TAG
-  extends:
-    - .terraform-plan
-  needs:
-    - job: setup-environment
-      artifacts: true
-    - job: 1-terraform-init
-      artifacts: true
-  before_script:
-    - !reference [.pre-env-selection, script]
-    - export AWS_ACCESS_KEY_ID=$VAULT_AWS_ACCESS_KEY_ID
-    - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
-    - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
-  variables:
-    VAR_FILE: environments/${DEPLOY_ENVIRONMENT}/${DEPLOY_ENVIRONMENT}.tfvars
-
-############################################
-#### Terraform Apply ####
-############################################
-1-terraform-apply:
-  stage: Terraform apply
-  tags:
-    - $RUNNER_TAG
-  extends:
-    - .terraform-apply
-  needs:
-    - job: setup-environment
-      artifacts: true
-    - job: 1-terraform-plan
-      artifacts: true
-  before_script:
-    - !reference [.pre-env-selection, script]
-    - export AWS_ACCESS_KEY_ID=$VAULT_AWS_ACCESS_KEY_ID
-    - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
-    - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
-
-############################################
-#### Connect to EC2 ####
-############################################
-1-connect-to-ec2:
-  stage: Connect to EC2
-  tags:
-    - $RUNNER_TAG
-  needs:
-    - job: setup-environment
-      artifacts: true
-    - job: 1-vault-kv-retriever
-      artifacts: true
-    - job: 1-terraform-apply
-      artifacts: true
-  script:
-    -
