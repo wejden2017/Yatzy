@@ -1,48 +1,57 @@
-# Partie 1: Définition des variables globales
-variables:
-  DEPLOY_ENVIRONMENT:
-    value: "dev"
-    options:
-      - "poc"
-      - "dev"
-      - "uat"
-    description: "Choose deployment environment. Set to 'dev' by default."
-  RUNNER_TAG: "app-00451-dev-cicd-gitlab-runner"  # Valeur par défaut
+resource "aws_instance" "this" {
+  ami                    = data.aws_ami.filtered.id
+  instance_type          = var.instance_type
+  vpc_security_group_ids = var.vpc_security_group_ids
+  subnet_id              = var.subnet_id
+  key_name               = var.key_name
+  iam_instance_profile   = var.iam_instance_profile
+  user_data              = var.user_data
 
-# Partie 2: Configuration du workflow pour définir dynamiquement RUNNER_TAG
-workflow:
-  rules:
-    - if: '$DEPLOY_ENVIRONMENT == "poc"'
-      variables:
-        RUNNER_TAG: "app-00451-poc-ec2-gitlab-runner"
-    - if: '$DEPLOY_ENVIRONMENT == "dev"'
-      variables:
-        RUNNER_TAG: "app-00451-dev-cicd-gitlab-runner"
-    - if: '$DEPLOY_ENVIRONMENT == "uat"'
-      variables:
-        RUNNER_TAG: "app-00451-uat-ec2-gitlab-runner"
-    - when: always
+  root_block_device {
+    encrypted   = true
+    volume_size = var.root_volume_size
+    volume_type = var.root_volume_type
+    
+    tags = merge(
+      var.standard_tags,
+      {
+        "Name" = var.root_volume_name
+      }
+    )
+  }
 
-# Partie 3: Définition du template de base pour tous les jobs
-.default-runner:
-  tags:
-    - $RUNNER_TAG
-  before_script:
-    - echo "Exécution sur le runner avec tag -> $RUNNER_TAG pour environment -> $DEPLOY_ENVIRONMENT"
+  # Pour les volumes supplémentaires
+  dynamic "ebs_block_device" {
+    for_each = var.ebs_volumes
+    content {
+      device_name = ebs_block_device.value.device_name
+      volume_size = ebs_block_device.value.volume_size
+      volume_type = ebs_block_device.value.volume_type
+      encrypted   = true
+      
+      tags = merge(
+        var.standard_tags,
+        {
+          "Name" = ebs_block_device.value.name
+          "md-dataclassification" = "restricted"
+        }
+      )
+    }
+  }
 
-
-
-
-# Exemple pour un job
-1-vault-kv-retriever:
-  stage: Vault retrieve
-  extends:
-    - .default-runner
-    - .vault-secret-retriever
-  variables:
-    VS_SECRET_LIST: |
-      SSH_PRIVATE_KEY@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@EC2-KEY-PAIR
-      AD_DOMAIN_NAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-domain-name
-      AD_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-password
-      AD_USERNAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-username
-      FSX_ADMIN_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@fsx-admin-password
+  # Reste de la configuration...
+  tags = merge(
+    var.standard_tags,
+    var.common_tags,
+    var.tags,
+    tomap({
+      "Name"          = var.instance_name,
+      "InstanceType"  = var.instance_type,
+      "Subnet"        = var.subnet_id,
+      "IAM"           = var.iam_instance_profile,
+      "AMI"           = data.aws_ami.filtered.name,
+      "StartInstance" = var.enable_schedule ? local.start_instance : "",
+      "StopInstance"  = var.enable_schedule ? local.stop_instance : ""
+    })
+  )
+}
