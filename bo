@@ -1,57 +1,28 @@
-resource "aws_instance" "this" {
-  ami                    = data.aws_ami.filtered.id
-  instance_type          = var.instance_type
-  vpc_security_group_ids = var.vpc_security_group_ids
-  subnet_id              = var.subnet_id
-  key_name               = var.key_name
-  iam_instance_profile   = var.iam_instance_profile
-  user_data              = var.user_data
+variable "root_volume_size" {
+  description = "Size of the root EBS volume in gigabytes"
+  type        = number
+  default     = 20
+}
 
-  root_block_device {
-    encrypted   = true
-    volume_size = var.root_volume_size
-    volume_type = var.root_volume_type
-    
-    tags = merge(
-      var.standard_tags,
-      {
-        "Name" = var.root_volume_name
-      }
-    )
-  }
+variable "root_volume_type" {
+  description = "Type of the root EBS volume"
+  type        = string
+  default     = "gp2"
+}
 
-  # Pour les volumes supplémentaires
-  dynamic "ebs_block_device" {
-    for_each = var.ebs_volumes
-    content {
-      device_name = ebs_block_device.value.device_name
-      volume_size = ebs_block_device.value.volume_size
-      volume_type = ebs_block_device.value.volume_type
-      encrypted   = true
-      
-      tags = merge(
-        var.standard_tags,
-        {
-          "Name" = ebs_block_device.value.name
-          "md-dataclassification" = "restricted"
-        }
-      )
-    }
-  }
+variable "root_volume_name" {
+  description = "Name tag for the root volume"
+  type        = string
+  default     = null
+}
 
-  # Reste de la configuration...
-  tags = merge(
-    var.standard_tags,
-    var.common_tags,
-    var.tags,
-    tomap({
-      "Name"          = var.instance_name,
-      "InstanceType"  = var.instance_type,
-      "Subnet"        = var.subnet_id,
-      "IAM"           = var.iam_instance_profile,
-      "AMI"           = data.aws_ami.filtered.name,
-      "StartInstance" = var.enable_schedule ? local.start_instance : "",
-      "StopInstance"  = var.enable_schedule ? local.stop_instance : ""
-    })
-  )
+variable "ebs_volumes" {
+  description = "List of EBS volumes to attach to the instance"
+  type = list(object({
+    device_name = string
+    volume_size = number
+    volume_type = string
+    name        = string
+  }))
+  default = []
 }
