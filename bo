@@ -40,19 +40,38 @@ variables:
 .default-runner:
   before_script:
     - echo "Exécution sur le runner pour environment -> $DEPLOY_ENVIRONMENT"
+    - |
+      if [ "$DEPLOY_ENVIRONMENT" == "poc" ]; then
+        echo "Using runner for POC environment"
+      elif [ "$DEPLOY_ENVIRONMENT" == "dev" ]; then
+        echo "Using runner for DEV environment"
+      elif [ "$DEPLOY_ENVIRONMENT" == "uat" ]; then
+        echo "Using runner for UAT environment"
+      else
+        echo "Environnement non reconnu: $DEPLOY_ENVIRONMENT"
+      fi
 
-# Définition des tags par environnement
-.env-runner-tags:
+# Définition des jobs pour chaque environnement
+.poc-job:
+  extends: .default-runner
+  tags:
+    - app-00451-poc-ec2-gitlab-runner
   rules:
     - if: '$DEPLOY_ENVIRONMENT == "poc"'
-      tags:
-        - app-00451-poc-ec2-gitlab-runner
+
+.dev-job:
+  extends: .default-runner
+  tags:
+    - app-00451-dev-cicd-gitlab-runner
+  rules:
     - if: '$DEPLOY_ENVIRONMENT == "dev"'
-      tags:
-        - app-00451-dev-cicd-gitlab-runner
+
+.uat-job:
+  extends: .default-runner
+  tags:
+    - app-00451-uat-ec2-gitlab-runner
+  rules:
     - if: '$DEPLOY_ENVIRONMENT == "uat"'
-      tags:
-        - app-00451-uat-ec2-gitlab-runner
 
 include:
   - local: 'templates/terraform.yml'
@@ -95,11 +114,11 @@ include:
 ############################################
 #### Vault retriever ####
 ############################################
-1-vault-kv-retriever:
+# Version POC
+1-vault-kv-retriever-poc:
   stage: Vault retrieve
   extends:
-    - .default-runner
-    - .env-runner-tags
+    - .poc-job
     - .vault-secret-retriever
   variables:
     VS_SECRET_LIST: |
@@ -109,14 +128,71 @@ include:
       AD_USERNAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-username
       FSX_ADMIN_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@fsx-admin-password
 
-2-debug-kv:
+# Version DEV
+1-vault-kv-retriever-dev:
   stage: Vault retrieve
   extends:
-    - .default-runner
-    - .env-runner-tags
+    - .dev-job
+    - .vault-secret-retriever
+  variables:
+    VS_SECRET_LIST: |
+      SSH_PRIVATE_KEY@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@EC2-KEY-PAIR
+      AD_DOMAIN_NAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-domain-name
+      AD_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-password
+      AD_USERNAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-username
+      FSX_ADMIN_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@fsx-admin-password
+
+# Version UAT
+1-vault-kv-retriever-uat:
+  stage: Vault retrieve
+  extends:
+    - .uat-job
+    - .vault-secret-retriever
+  variables:
+    VS_SECRET_LIST: |
+      SSH_PRIVATE_KEY@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@EC2-KEY-PAIR
+      AD_DOMAIN_NAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-domain-name
+      AD_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-password
+      AD_USERNAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-username
+      FSX_ADMIN_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@fsx-admin-password
+
+############################################
+#### Debug KV ####
+############################################
+# Version POC
+2-debug-kv-poc:
+  stage: Vault retrieve
+  extends:
+    - .poc-job
     - .vault-artifact-decrypter
   needs:
-    - job: 1-vault-kv-retriever
+    - job: 1-vault-kv-retriever-poc
+      artifacts: true
+  script:
+    - echo $FSX_ADMIN_PASSWORD
+    - echo "FSX Admin Password Length ${FSX_ADMIN_PASSWORD}"
+
+# Version DEV
+2-debug-kv-dev:
+  stage: Vault retrieve
+  extends:
+    - .dev-job
+    - .vault-artifact-decrypter
+  needs:
+    - job: 1-vault-kv-retriever-dev
+      artifacts: true
+  script:
+    - echo $FSX_ADMIN_PASSWORD
+    - echo "FSX Admin Password Length ${FSX_ADMIN_PASSWORD}"
+
+# Version UAT
+2-debug-kv-uat:
+  stage: Vault retrieve
+  extends:
+    - .uat-job
+    - .vault-artifact-decrypter
+  needs:
+    - job: 1-vault-kv-retriever-uat
       artifacts: true
   script:
     - echo $FSX_ADMIN_PASSWORD
@@ -125,11 +201,29 @@ include:
 ############################################
 #### Vault AWS Auth ####
 ############################################
-1-vault-aws-auth:
+# Version POC
+1-vault-aws-auth-poc:
   stage: AWS auth
   extends:
-    - .default-runner
-    - .env-runner-tags
+    - .poc-job
+    - .vault-aws-auth
+  before_script:
+    - !reference [.pre-env-selection, script]
+
+# Version DEV
+1-vault-aws-auth-dev:
+  stage: AWS auth
+  extends:
+    - .dev-job
+    - .vault-aws-auth
+  before_script:
+    - !reference [.pre-env-selection, script]
+
+# Version UAT
+1-vault-aws-auth-uat:
+  stage: AWS auth
+  extends:
+    - .uat-job
     - .vault-aws-auth
   before_script:
     - !reference [.pre-env-selection, script]
@@ -137,14 +231,14 @@ include:
 ############################################
 #### Terraform Init ####
 ############################################
-1-terraform-init:
+# Version POC
+1-terraform-init-poc:
   stage: Terraform init
   extends:
-    - .default-runner
-    - .env-runner-tags
+    - .poc-job
     - .terraform-init
   needs:
-    - job: 1-vault-aws-auth
+    - job: 1-vault-aws-auth-poc
       artifacts: true
   before_script:
     - !reference [.pre-env-selection, script]
@@ -152,37 +246,14 @@ include:
     - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
     - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
 
-############################################
-#### Terraform Plan ####
-############################################
-1-terraform-plan:
-  stage: Terraform plan
+# Version DEV
+1-terraform-init-dev:
+  stage: Terraform init
   extends:
-    - .default-runner
-    - .env-runner-tags
-    - .terraform-plan
+    - .dev-job
+    - .terraform-init
   needs:
-    - job: 1-terraform-init
-      artifacts: true
-  before_script:
-    - !reference [.pre-env-selection, script]
-    - export AWS_ACCESS_KEY_ID=$VAULT_AWS_ACCESS_KEY_ID
-    - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
-    - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
-  variables:
-    VAR_FILE: environments/${DEPLOY_ENVIRONMENT}/${DEPLOY_ENVIRONMENT}.tfvars
-
-############################################
-#### Terraform Apply ####
-############################################
-1-terraform-apply:
-  stage: Terraform apply
-  extends:
-    - .default-runner
-    - .env-runner-tags
-    - .terraform-apply
-  needs:
-    - job: 1-terraform-plan
+    - job: 1-vault-aws-auth-dev
       artifacts: true
   before_script:
     - !reference [.pre-env-selection, script]
@@ -190,24 +261,16 @@ include:
     - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
     - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
 
-############################################
-#### Connect to EC2 ####
-############################################
-1-connect-to-ec2:
-  stage: Connect to EC2
+# Version UAT
+1-terraform-init-uat:
+  stage: Terraform init
   extends:
-    - .default-runner
-    - .env-runner-tags
+    - .uat-job
+    - .terraform-init
   needs:
-    - job: 1-vault-kv-retriever
+    - job: 1-vault-aws-auth-uat
       artifacts: true
-    - job: 1-terraform-apply
-      artifacts: true
-  script:
-    - mkdir -p ~/.ssh
-    - echo "$SSH_PRIVATE_KEY" > ~/.ssh/id_rsa
-    - chmod 600 ~/.ssh/id_rsa
-    - ssh-keyscan -t rsa $(terraform output -raw ec2_instance_public_dns) >> ~/.ssh/known_hosts
-    - ssh ${REMOTE_USER}@$(terraform output -raw ec2_instance_public_dns) "echo 'Connection successful!' && uname -a"
-  after_script:
-    - rm -f ~/.ssh/id_rsa
+  before_script:
+    - !reference [.pre-env-selection, script]
+    - export AWS_ACCESS_KEY_ID=$VAULT_AWS_ACCESS_KEY_ID
+    - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACC
