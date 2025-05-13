@@ -7,6 +7,7 @@ variables:
       - "uat"
     description: "Choose deployment environment. Set to 'dev' by default."
   
+  # Autres variables globales
   APP_ID: "APP-00451"
   LSEG_VAULT_NAMESPACE: "aws"
   PROJECT_ID: "cats-app-infrastructure"
@@ -36,41 +37,30 @@ variables:
   TF_VAR_TF_VAR_FILE_UAT: "environments/uat/uat.tfvars"
   TERRAFORM_VAR_FILE: environments/${DEPLOY_ENVIRONMENT}/${DEPLOY_ENVIRONMENT}.tfvars
 
-# Template de base pour tous les jobs
-.default-runner:
+# Scripts d'initialisation
+.init-environment:
   before_script:
-    - echo "Exécution sur le runner pour environment -> $DEPLOY_ENVIRONMENT"
     - |
+      # Définition dynamique du tag runner en fonction de l'environnement
       if [ "$DEPLOY_ENVIRONMENT" == "poc" ]; then
-        echo "Using runner for POC environment"
+        # Définir le tag pour POC
+        echo "RUNNER_TAG=app-00451-poc-ec2-gitlab-runner" >> variables.env
       elif [ "$DEPLOY_ENVIRONMENT" == "dev" ]; then
-        echo "Using runner for DEV environment"
+        # Définir le tag pour DEV
+        echo "RUNNER_TAG=app-00451-dev-cicd-gitlab-runner" >> variables.env
       elif [ "$DEPLOY_ENVIRONMENT" == "uat" ]; then
-        echo "Using runner for UAT environment"
+        # Définir le tag pour UAT
+        echo "RUNNER_TAG=app-00451-uat-ec2-gitlab-runner" >> variables.env
       else
         echo "Environnement non reconnu: $DEPLOY_ENVIRONMENT"
+        exit 1
       fi
+    - echo "Environnement sélectionné: $DEPLOY_ENVIRONMENT, Runner tag: $(cat variables.env | grep RUNNER_TAG | cut -d= -f2)"
 
-# Définition des jobs pour chaque environnement
-.poc-job:
-  extends: .default-runner
-  tags:
-    - app-00451-poc-ec2-gitlab-runner
+workflow:
   rules:
     - if: '$DEPLOY_ENVIRONMENT == "poc"'
-
-.dev-job:
-  extends: .default-runner
-  tags:
-    - app-00451-dev-cicd-gitlab-runner
-  rules:
     - if: '$DEPLOY_ENVIRONMENT == "dev"'
-
-.uat-job:
-  extends: .default-runner
-  tags:
-    - app-00451-uat-ec2-gitlab-runner
-  rules:
     - if: '$DEPLOY_ENVIRONMENT == "uat"'
 
 include:
@@ -108,91 +98,63 @@ include:
   rules:
     - when: manual
 
+# Pas d'étape spéciale de configuration, on crée un job dédié
+setup-environment:
+  stage: .pre
+  script:
+    - |
+      # Définition dynamique du tag runner en fonction de l'environnement
+      if [ "$DEPLOY_ENVIRONMENT" == "poc" ]; then
+        # Définir le tag pour POC
+        echo "RUNNER_TAG=app-00451-poc-ec2-gitlab-runner" >> build.env
+      elif [ "$DEPLOY_ENVIRONMENT" == "dev" ]; then
+        # Définir le tag pour DEV
+        echo "RUNNER_TAG=app-00451-dev-cicd-gitlab-runner" >> build.env
+      elif [ "$DEPLOY_ENVIRONMENT" == "uat" ]; then
+        # Définir le tag pour UAT
+        echo "RUNNER_TAG=app-00451-uat-ec2-gitlab-runner" >> build.env
+      else
+        echo "Environnement non reconnu: $DEPLOY_ENVIRONMENT"
+        exit 1
+      fi
+    - echo "Environnement sélectionné: $DEPLOY_ENVIRONMENT, Runner tag: $(cat build.env | grep RUNNER_TAG | cut -d= -f2)"
+  artifacts:
+    reports:
+      dotenv: build.env
+
 # Jobs
 ######################
 
 ############################################
 #### Vault retriever ####
 ############################################
-# Version POC
-1-vault-kv-retriever-poc:
+1-vault-kv-retriever:
   stage: Vault retrieve
+  tags:
+    - $RUNNER_TAG
   extends:
-    - .poc-job
     - .vault-secret-retriever
-  variables:
-    VS_SECRET_LIST: |
-      SSH_PRIVATE_KEY@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@EC2-KEY-PAIR
-      AD_DOMAIN_NAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-domain-name
-      AD_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-password
-      AD_USERNAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-username
-      FSX_ADMIN_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@fsx-admin-password
-
-# Version DEV
-1-vault-kv-retriever-dev:
-  stage: Vault retrieve
-  extends:
-    - .dev-job
-    - .vault-secret-retriever
-  variables:
-    VS_SECRET_LIST: |
-      SSH_PRIVATE_KEY@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@EC2-KEY-PAIR
-      AD_DOMAIN_NAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-domain-name
-      AD_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-password
-      AD_USERNAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-username
-      FSX_ADMIN_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@fsx-admin-password
-
-# Version UAT
-1-vault-kv-retriever-uat:
-  stage: Vault retrieve
-  extends:
-    - .uat-job
-    - .vault-secret-retriever
-  variables:
-    VS_SECRET_LIST: |
-      SSH_PRIVATE_KEY@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@EC2-KEY-PAIR
-      AD_DOMAIN_NAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-domain-name
-      AD_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-password
-      AD_USERNAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-username
-      FSX_ADMIN_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@fsx-admin-password
-
-############################################
-#### Debug KV ####
-############################################
-# Version POC
-2-debug-kv-poc:
-  stage: Vault retrieve
-  extends:
-    - .poc-job
-    - .vault-artifact-decrypter
   needs:
-    - job: 1-vault-kv-retriever-poc
+    - job: setup-environment
       artifacts: true
-  script:
-    - echo $FSX_ADMIN_PASSWORD
-    - echo "FSX Admin Password Length ${FSX_ADMIN_PASSWORD}"
+  variables:
+    VS_SECRET_LIST: |
+      SSH_PRIVATE_KEY@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@EC2-KEY-PAIR
+      AD_DOMAIN_NAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-domain-name
+      AD_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-password
+      AD_USERNAME@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@ad-username
+      FSX_ADMIN_PASSWORD@gitlab/app-00451/kv/aws-cats-${DEPLOY_ENVIRONMENT}@fsx-admin-password
 
-# Version DEV
-2-debug-kv-dev:
+2-debug-kv:
   stage: Vault retrieve
+  tags:
+    - $RUNNER_TAG
   extends:
-    - .dev-job
     - .vault-artifact-decrypter
   needs:
-    - job: 1-vault-kv-retriever-dev
+    - job: setup-environment
       artifacts: true
-  script:
-    - echo $FSX_ADMIN_PASSWORD
-    - echo "FSX Admin Password Length ${FSX_ADMIN_PASSWORD}"
-
-# Version UAT
-2-debug-kv-uat:
-  stage: Vault retrieve
-  extends:
-    - .uat-job
-    - .vault-artifact-decrypter
-  needs:
-    - job: 1-vault-kv-retriever-uat
+    - job: 1-vault-kv-retriever
       artifacts: true
   script:
     - echo $FSX_ADMIN_PASSWORD
@@ -201,44 +163,31 @@ include:
 ############################################
 #### Vault AWS Auth ####
 ############################################
-# Version POC
-1-vault-aws-auth-poc:
+1-vault-aws-auth:
   stage: AWS auth
+  tags:
+    - $RUNNER_TAG
   extends:
-    - .poc-job
     - .vault-aws-auth
-  before_script:
-    - !reference [.pre-env-selection, script]
-
-# Version DEV
-1-vault-aws-auth-dev:
-  stage: AWS auth
-  extends:
-    - .dev-job
-    - .vault-aws-auth
-  before_script:
-    - !reference [.pre-env-selection, script]
-
-# Version UAT
-1-vault-aws-auth-uat:
-  stage: AWS auth
-  extends:
-    - .uat-job
-    - .vault-aws-auth
+  needs:
+    - job: setup-environment
+      artifacts: true
   before_script:
     - !reference [.pre-env-selection, script]
 
 ############################################
 #### Terraform Init ####
 ############################################
-# Version POC
-1-terraform-init-poc:
+1-terraform-init:
   stage: Terraform init
+  tags:
+    - $RUNNER_TAG
   extends:
-    - .poc-job
     - .terraform-init
   needs:
-    - job: 1-vault-aws-auth-poc
+    - job: setup-environment
+      artifacts: true
+    - job: 1-vault-aws-auth
       artifacts: true
   before_script:
     - !reference [.pre-env-selection, script]
@@ -246,14 +195,41 @@ include:
     - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
     - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
 
-# Version DEV
-1-terraform-init-dev:
-  stage: Terraform init
+############################################
+#### Terraform Plan ####
+############################################
+1-terraform-plan:
+  stage: Terraform plan
+  tags:
+    - $RUNNER_TAG
   extends:
-    - .dev-job
-    - .terraform-init
+    - .terraform-plan
   needs:
-    - job: 1-vault-aws-auth-dev
+    - job: setup-environment
+      artifacts: true
+    - job: 1-terraform-init
+      artifacts: true
+  before_script:
+    - !reference [.pre-env-selection, script]
+    - export AWS_ACCESS_KEY_ID=$VAULT_AWS_ACCESS_KEY_ID
+    - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
+    - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
+  variables:
+    VAR_FILE: environments/${DEPLOY_ENVIRONMENT}/${DEPLOY_ENVIRONMENT}.tfvars
+
+############################################
+#### Terraform Apply ####
+############################################
+1-terraform-apply:
+  stage: Terraform apply
+  tags:
+    - $RUNNER_TAG
+  extends:
+    - .terraform-apply
+  needs:
+    - job: setup-environment
+      artifacts: true
+    - job: 1-terraform-plan
       artifacts: true
   before_script:
     - !reference [.pre-env-selection, script]
@@ -261,16 +237,19 @@ include:
     - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACCESS_KEY
     - export AWS_SESSION_TOKEN=$VAULT_AWS_SESSION_TOKEN
 
-# Version UAT
-1-terraform-init-uat:
-  stage: Terraform init
-  extends:
-    - .uat-job
-    - .terraform-init
+############################################
+#### Connect to EC2 ####
+############################################
+1-connect-to-ec2:
+  stage: Connect to EC2
+  tags:
+    - $RUNNER_TAG
   needs:
-    - job: 1-vault-aws-auth-uat
+    - job: setup-environment
       artifacts: true
-  before_script:
-    - !reference [.pre-env-selection, script]
-    - export AWS_ACCESS_KEY_ID=$VAULT_AWS_ACCESS_KEY_ID
-    - export AWS_SECRET_ACCESS_KEY=$VAULT_AWS_SECRET_ACC
+    - job: 1-vault-kv-retriever
+      artifacts: true
+    - job: 1-terraform-apply
+      artifacts: true
+  script:
+    -
