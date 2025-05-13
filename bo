@@ -36,33 +36,23 @@ variables:
   TF_VAR_TF_VAR_FILE_UAT: "environments/uat/uat.tfvars"
   TERRAFORM_VAR_FILE: environments/${DEPLOY_ENVIRONMENT}/${DEPLOY_ENVIRONMENT}.tfvars
 
-# Définir les configurations de runner pour chaque environnement
-.poc-runner:
-  tags: 
-    - app-00451-poc-ec2-gitlab-runner
-
-.dev-runner:
-  tags: 
-    - app-00451-dev-cicd-gitlab-runner
-
-.uat-runner:
-  tags: 
-    - app-00451-uat-ec2-gitlab-runner
-
 # Template de base pour tous les jobs
 .default-runner:
   before_script:
     - echo "Exécution sur le runner pour environment -> $DEPLOY_ENVIRONMENT"
 
-# Appliquer le bon runner en fonction de l'environnement
-.set-runner:
+# Définition des tags par environnement
+.env-runner-tags:
   rules:
     - if: '$DEPLOY_ENVIRONMENT == "poc"'
-      extends: .poc-runner
+      tags:
+        - app-00451-poc-ec2-gitlab-runner
     - if: '$DEPLOY_ENVIRONMENT == "dev"'
-      extends: .dev-runner
+      tags:
+        - app-00451-dev-cicd-gitlab-runner
     - if: '$DEPLOY_ENVIRONMENT == "uat"'
-      extends: .uat-runner
+      tags:
+        - app-00451-uat-ec2-gitlab-runner
 
 include:
   - local: 'templates/terraform.yml'
@@ -109,7 +99,7 @@ include:
   stage: Vault retrieve
   extends:
     - .default-runner
-    - .set-runner
+    - .env-runner-tags
     - .vault-secret-retriever
   variables:
     VS_SECRET_LIST: |
@@ -123,7 +113,7 @@ include:
   stage: Vault retrieve
   extends:
     - .default-runner
-    - .set-runner
+    - .env-runner-tags
     - .vault-artifact-decrypter
   needs:
     - job: 1-vault-kv-retriever
@@ -139,7 +129,7 @@ include:
   stage: AWS auth
   extends:
     - .default-runner
-    - .set-runner
+    - .env-runner-tags
     - .vault-aws-auth
   before_script:
     - !reference [.pre-env-selection, script]
@@ -151,7 +141,7 @@ include:
   stage: Terraform init
   extends:
     - .default-runner
-    - .set-runner
+    - .env-runner-tags
     - .terraform-init
   needs:
     - job: 1-vault-aws-auth
@@ -169,7 +159,7 @@ include:
   stage: Terraform plan
   extends:
     - .default-runner
-    - .set-runner
+    - .env-runner-tags
     - .terraform-plan
   needs:
     - job: 1-terraform-init
@@ -189,7 +179,7 @@ include:
   stage: Terraform apply
   extends:
     - .default-runner
-    - .set-runner
+    - .env-runner-tags
     - .terraform-apply
   needs:
     - job: 1-terraform-plan
@@ -207,7 +197,7 @@ include:
   stage: Connect to EC2
   extends:
     - .default-runner
-    - .set-runner
+    - .env-runner-tags
   needs:
     - job: 1-vault-kv-retriever
       artifacts: true
