@@ -1,10 +1,57 @@
-module "nlb_cats_front" {
-  source       = "../modules/nlb"
+modules/vpc_link/main.tf:
+
+resource "aws_api_gateway_vpc_link" "cats_vpc_link" {
+  name        = "${var.entity}-${var.application}-${var.environment}-cats-vpc-link"
+  target_arn  = var.nlb_arn
+  description = "VPC Link to access internal NLB for ${var.application}"
+
+  tags = var.tags
+}
+
+modules/vpc_link/variables.tf :
+variable "entity" {
+  type        = string
+  description = "Entity name (e.g. aws, corp)"
+}
+
+variable "application" {
+  type        = string
+  description = "Application name (e.g. cats)"
+}
+
+variable "environment" {
+  type        = string
+  description = "Environment name (e.g. dev, poc, uat)"
+}
+
+variable "nlb_arn" {
+  type        = string
+  description = "ARN of the Network Load Balancer to connect via VPC Link"
+}
+
+variable "tags" {
+  type        = map(string)
+  description = "Map of common tags"
+}
+
+modules/vpc_link/outputs.tf :
+
+output "vpc_link_id" {
+  description = "ID of the created API Gateway VPC Link"
+  value       = aws_api_gateway_vpc_link.cats_vpc_link.id
+}
+
+output "vpc_link_name" {
+  description = "Name of the VPC Link resource"
+  value       = aws_api_gateway_vpc_link.cats_vpc_link.name
+}
+Appel dans ton terraform/main.tf :
+
+module "vpc_link_cats" {
+  source       = "../modules/vpc_link"
   entity       = var.entity
   application  = var.application
   environment  = var.environment
-  vpc_id       = var.vpc_id
-  subnet_ids   = var.private_subnet_ids
-  instance_id  = module.ec2_cats_front.instance_id
+  nlb_arn      = module.nlb_cats_front.nlb_arn
   tags         = local.standard_tags
 }
