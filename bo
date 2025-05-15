@@ -1,57 +1,33 @@
-modules/vpc_link/main.tf:
+Installe Apache :
+bash
+Copier
+Modifier
+sudo yum install -y httpd
+Pour /cats-web (port 8080) :
+bash
+Copier
+Modifier
+sudo cp -r /var/www/html /var/www/html-web
+echo "<h1>CATS-WEB</h1>" | sudo tee /var/www/html-web/index.html
+sudo sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
+sudo sed -i 's|DocumentRoot \"/var/www/html\"|DocumentRoot \"/var/www/html-web\"|' /etc/httpd/conf/httpd.conf
+Lance Apache (port 8080) :
+bash
+Copier
+Modifier
+sudo systemctl start httpd
+Pour /cats (port 8081) → clone et configure 2e instance Apache :
+bash
+Copier
+Modifier
+sudo cp -r /var/www/html /var/www/html-cats
+echo "<h1>CATS-BACKEND</h1>" | sudo tee /var/www/html-cats/index.html
 
-resource "aws_api_gateway_vpc_link" "cats_vpc_link" {
-  name        = "${var.entity}-${var.application}-${var.environment}-cats-vpc-link"
-  target_arn  = var.nlb_arn
-  description = "VPC Link to access internal NLB for ${var.application}"
-
-  tags = var.tags
-}
-
-modules/vpc_link/variables.tf :
-variable "entity" {
-  type        = string
-  description = "Entity name (e.g. aws, corp)"
-}
-
-variable "application" {
-  type        = string
-  description = "Application name (e.g. cats)"
-}
-
-variable "environment" {
-  type        = string
-  description = "Environment name (e.g. dev, poc, uat)"
-}
-
-variable "nlb_arn" {
-  type        = string
-  description = "ARN of the Network Load Balancer to connect via VPC Link"
-}
-
-variable "tags" {
-  type        = map(string)
-  description = "Map of common tags"
-}
-
-modules/vpc_link/outputs.tf :
-
-output "vpc_link_id" {
-  description = "ID of the created API Gateway VPC Link"
-  value       = aws_api_gateway_vpc_link.cats_vpc_link.id
-}
-
-output "vpc_link_name" {
-  description = "Name of the VPC Link resource"
-  value       = aws_api_gateway_vpc_link.cats_vpc_link.name
-}
-Appel dans ton terraform/main.tf :
-
-module "vpc_link_cats" {
-  source       = "../modules/vpc_link"
-  entity       = var.entity
-  application  = var.application
-  environment  = var.environment
-  nlb_arn      = module.nlb_cats_front.nlb_arn
-  tags         = local.standard_tags
-}
+sudo cp /etc/httpd/conf/httpd.conf /etc/httpd/conf/httpd-8081.conf
+sudo sed -i 's/Listen 8080/Listen 8081/' /etc/httpd/conf/httpd-8081.conf
+sudo sed -i 's|DocumentRoot \"/var/www/html-web\"|DocumentRoot \"/var/www/html-cats\"|' /etc/httpd/conf/httpd-8081.conf
+Démarre avec httpd sur un autre port :
+bash
+Copier
+Modifier
+sudo httpd -f /etc/httpd/conf/httpd-8081.conf
