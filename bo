@@ -1,125 +1,110 @@
-# Instance 1: Frontend
-module "ec2_frontend" {
-  source = "./modules/ec2/instances"
-  
-  instance_name   = "${var.entity}-${var.application}-${var.environment}-frontend"
-  instance_type   = "t3.large"
-  # Autres paramètres...
-  
-  # Volume racine
-  root_volume_size = 30
-  root_volume_type = "gp2"
-  root_volume_name = "${var.entity}-${var.application}-${var.environment}-frontend-root"
-  
-  # Volumes EBS supplémentaires
-  ebs_volumes = [
-    {
-      device_name = "/dev/sdf"
-      volume_size = 50
-      volume_type = "gp2"
-      name        = "${var.entity}-${var.application}-${var.environment}-frontend-data"
-    }
-  ]
+resource "aws_lb" "nlb_cats" {
+  name               = "${var.entity}-${var.application}-${var.environment}-cats-nlb"
+  internal           = true
+  load_balancer_type = "network"
+  subnets            = var.subnet_ids
+  tags               = var.tags
 }
 
-# Instance 2: Backend
-module "ec2_backend" {
-  source = "./modules/ec2/instances"
-  
-  instance_name   = "${var.entity}-${var.application}-${var.environment}-backend"
-  instance_type   = "t3.xlarge"
-  # Autres paramètres...
-  
-  # Volume racine
-  root_volume_size = 40
-  root_volume_type = "gp2"
-  root_volume_name = "${var.entity}-${var.application}-${var.environment}-backend-root"
-  
-  # Volumes EBS supplémentaires
-  ebs_volumes = [
-    {
-      device_name = "/dev/sdf"
-      volume_size = 100
-      volume_type = "gp2"
-      name        = "${var.entity}-${var.application}-${var.environment}-backend-data"
-    },
-    {
-      device_name = "/dev/sdg"
-      volume_size = 200
-      volume_type = "gp2"
-      name        = "${var.entity}-${var.application}-${var.environment}-backend-logs"
-    }
-  ]
+resource "aws_lb_target_group" "tg_cats_web" {
+  name        = "${var.entity}-${var.application}-${var.environment}-cats-web-tg"
+  port        = 8080
+  protocol    = "TCP"
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+  tags        = var.tags
 }
 
-# Instance 3: Database
-module "ec2_database" {
-  source = "./modules/ec2/instances"
-  
-  instance_name   = "${var.entity}-${var.application}-${var.environment}-db"
-  instance_type   = "r5.large"
-  # Autres paramètres...
-  
-  # Volume racine
-  root_volume_size = 30
-  root_volume_type = "gp2"
-  root_volume_name = "${var.entity}-${var.application}-${var.environment}-db-root"
-  
-  # Volumes EBS supplémentaires
-  ebs_volumes = [
-    {
-      device_name = "/dev/sdf"
-      volume_size = 500
-      volume_type = "io1"
-      name        = "${var.entity}-${var.application}-${var.environment}-db-data"
-    }
-  ]
+resource "aws_lb_target_group" "tg_cats_backend" {
+  name        = "${var.entity}-${var.application}-${var.environment}-cats-backend-tg"
+  port        = 8081
+  protocol    = "TCP"
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+  tags        = var.tags
 }
 
-# Instance 4: Monitoring
-module "ec2_monitoring" {
-  source = "./modules/ec2/instances"
-  
-  instance_name   = "${var.entity}-${var.application}-${var.environment}-monitoring"
-  instance_type   = "t3.medium"
-  # Autres paramètres...
-  
-  # Volume racine
-  root_volume_size = 30
-  root_volume_type = "gp2"
-  root_volume_name = "${var.entity}-${var.application}-${var.environment}-monitoring-root"
-  
-  # Volumes EBS supplémentaires
-  ebs_volumes = [
-    {
-      device_name = "/dev/sdf"
-      volume_size = 200
-      volume_type = "gp2"
-      name        = "${var.entity}-${var.application}-${var.environment}-monitoring-metrics"
-    }
-  ]
+resource "aws_lb_target_group_attachment" "tg_attach_web" {
+  target_group_arn = aws_lb_target_group.tg_cats_web.arn
+  target_id        = var.instance_id
+  port             = 8080
 }
 
-# Instance 5: Services
-module "ec2_services" {
-  source = "./modules/ec2/instances"
-  
-  instance_name   = "${var.entity}-${var.application}-${var.environment}-services"
-  instance_type   = "t3.large"
-  # Autres paramètres...
-  
-  # Volume racine
-  root_volume_size = 30
-  root_volume_type = "gp2"
-  root_volume_name = "${var.entity}-${var.application}-${var.environment}-services-root"
-  
-  # Volumes EBS supplémentaires
-  ebs_volumes = [
-    {
-      device_name = "/dev/sdf"
-      volume_size = 50
-      volume_type = "gp2"
-      name        = "${var.entity}-${var.application}-${var.environment}-services-data"
-    }
-  ]
+resource "aws_lb_target_group_attachment" "tg_attach_backend" {
+  target_group_arn = aws_lb_target_group.tg_cats_backend.arn
+  target_id        = var.instance_id
+  port             = 8081
+}
+
+
+
+variable "entity" {
+  type        = string
+  description = "Entity name (e.g. 'aws', 'corp')"
+}
+
+variable "application" {
+  type        = string
+  description = "Application name (e.g. 'cats')"
+}
+
+variable "environment" {
+  type        = string
+  description = "Environment name (e.g. 'dev', 'poc', 'uat')"
+}
+
+variable "vpc_id" {
+  type        = string
+  description = "VPC ID where the NLB and TGs will be created"
+}
+
+variable "subnet_ids" {
+  type        = list(string)
+  description = "List of private subnet IDs for the NLB"
+}
+
+variable "instance_id" {
+  type        = string
+  description = "ID of the EC2 instance that runs app1 and app2"
+}
+
+variable "tags" {
+  type        = map(string)
+  description = "Map of tags to apply to resources"
+}
+
+
+
+output "nlb_arn" {
+  description = "ARN of the created Network Load Balancer"
+  value       = aws_lb.nlb_cats.arn
+}
+
+output "nlb_dns_name" {
+  description = "DNS name of the NLB (used by API Gateway VPC Link)"
+  value       = aws_lb.nlb_cats.dns_name
+}
+
+output "tg_web_arn" {
+  description = "ARN of the Target Group for app1 (port 8080)"
+  value       = aws_lb_target_group.tg_cats_web.arn
+}
+
+output "tg_backend_arn" {
+  description = "ARN of the Target Group for app2 (port 8081)"
+  value       = aws_lb_target_group.tg_cats_backend.arn
+}
+
+
+main global ::
+
+module "nlb_cats_front" {
+  source       = "../modules/nlb"
+  entity       = var.entity
+  application  = var.application
+  environment  = var.environment
+  vpc_id       = var.vpc_id
+  subnet_ids   = [aws_subnet.app2endpoint_tier.id] # à adapter à ton infra
+  instance_id  = module.ec2_cats_front.instance_id
+  tags         = local.standard_tags
 }
