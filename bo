@@ -1,9 +1,10 @@
 resource "aws_lb" "nlb_cats" {
-  name               = "${var.entity}-${var.application}-${var.environment}-cats-nlb"
-  internal           = true
-  load_balancer_type = "network"
-  subnets            = var.subnet_ids
-  tags               = var.tags
+  name                             = "${var.entity}-${var.application}-${var.environment}-cats-nlb"
+  internal                         = true
+  load_balancer_type               = "network"
+  subnets                          = var.subnet_ids
+  enable_cross_zone_load_balancing = true
+  tags                             = var.tags
 }
 
 resource "aws_lb_target_group" "tg_cats_web" {
@@ -36,75 +37,24 @@ resource "aws_lb_target_group_attachment" "tg_attach_backend" {
   port             = 8081
 }
 
+resource "aws_lb_listener" "listener_web" {
+  load_balancer_arn = aws_lb.nlb_cats.arn
+  port              = 8080
+  protocol          = "TCP"
 
-
-variable "entity" {
-  type        = string
-  description = "Entity name (e.g. 'aws', 'corp')"
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.tg_cats_web.arn
+  }
 }
 
-variable "application" {
-  type        = string
-  description = "Application name (e.g. 'cats')"
-}
+resource "aws_lb_listener" "listener_backend" {
+  load_balancer_arn = aws_lb.nlb_cats.arn
+  port              = 8081
+  protocol          = "TCP"
 
-variable "environment" {
-  type        = string
-  description = "Environment name (e.g. 'dev', 'poc', 'uat')"
-}
-
-variable "vpc_id" {
-  type        = string
-  description = "VPC ID where the NLB and TGs will be created"
-}
-
-variable "subnet_ids" {
-  type        = list(string)
-  description = "List of private subnet IDs for the NLB"
-}
-
-variable "instance_id" {
-  type        = string
-  description = "ID of the EC2 instance that runs app1 and app2"
-}
-
-variable "tags" {
-  type        = map(string)
-  description = "Map of tags to apply to resources"
-}
-
-
-
-output "nlb_arn" {
-  description = "ARN of the created Network Load Balancer"
-  value       = aws_lb.nlb_cats.arn
-}
-
-output "nlb_dns_name" {
-  description = "DNS name of the NLB (used by API Gateway VPC Link)"
-  value       = aws_lb.nlb_cats.dns_name
-}
-
-output "tg_web_arn" {
-  description = "ARN of the Target Group for app1 (port 8080)"
-  value       = aws_lb_target_group.tg_cats_web.arn
-}
-
-output "tg_backend_arn" {
-  description = "ARN of the Target Group for app2 (port 8081)"
-  value       = aws_lb_target_group.tg_cats_backend.arn
-}
-
-
-main global ::
-
-module "nlb_cats_front" {
-  source       = "../modules/nlb"
-  entity       = var.entity
-  application  = var.application
-  environment  = var.environment
-  vpc_id       = var.vpc_id
-  subnet_ids   = [aws_subnet.app2endpoint_tier.id] # à adapter à ton infra
-  instance_id  = module.ec2_cats_front.instance_id
-  tags         = local.standard_tags
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.tg_cats_backend.arn
+  }
 }
