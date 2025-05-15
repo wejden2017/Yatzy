@@ -1,33 +1,7 @@
-Installe Apache :
-bash
-Copier
-Modifier
-sudo yum install -y httpd
-Pour /cats-web (port 8080) :
-bash
-Copier
-Modifier
-sudo cp -r /var/www/html /var/www/html-web
-echo "<h1>CATS-WEB</h1>" | sudo tee /var/www/html-web/index.html
-sudo sed -i 's/Listen 80/Listen 8080/' /etc/httpd/conf/httpd.conf
-sudo sed -i 's|DocumentRoot \"/var/www/html\"|DocumentRoot \"/var/www/html-web\"|' /etc/httpd/conf/httpd.conf
-Lance Apache (port 8080) :
-bash
-Copier
-Modifier
-sudo systemctl start httpd
-Pour /cats (port 8081) → clone et configure 2e instance Apache :
-bash
-Copier
-Modifier
-sudo cp -r /var/www/html /var/www/html-cats
-echo "<h1>CATS-BACKEND</h1>" | sudo tee /var/www/html-cats/index.html
-
 sudo cp /etc/httpd/conf/httpd.conf /etc/httpd/conf/httpd-8081.conf
-sudo sed -i 's/Listen 8080/Listen 8081/' /etc/httpd/conf/httpd-8081.conf
-sudo sed -i 's|DocumentRoot \"/var/www/html-web\"|DocumentRoot \"/var/www/html-cats\"|' /etc/httpd/conf/httpd-8081.conf
-Démarre avec httpd sur un autre port :
-bash
-Copier
-Modifier
-sudo httpd -f /etc/httpd/conf/httpd-8081.conf
+sudo sed -i 's/^Listen .*/Listen 8081/' /etc/httpd/conf/httpd-8081.conf
+sudo sed -i 's|DocumentRoot \"/var/www/html\"|DocumentRoot \"/var/www/html-cats\"|' /etc/httpd/conf/httpd-8081.conf
+
+echo "PidFile /var/run/httpd-8081.pid" | sudo tee -a /etc/httpd/conf/httpd-8081.conf
+
+sudo httpd -f /etc/httpd/conf/httpd-8081.conf -k start
