@@ -21,6 +21,7 @@ EOF'
 
 # Create Apache config for port 8080
 sudo bash -c 'cat <<EOF > /etc/httpd/conf/httpd-8080.conf
+PidFile /var/run/httpd/httpd-8080.pid
 Listen 0.0.0.0:8080
 <VirtualHost *:8080>
     DocumentRoot "/var/www/html-cats-web"
@@ -31,6 +32,7 @@ EOF'
 
 # Create Apache config for port 8081
 sudo bash -c 'cat <<EOF > /etc/httpd/conf/httpd-8081.conf
+PidFile /var/run/httpd/httpd-8081.pid
 Listen 0.0.0.0:8081
 <VirtualHost *:8081>
     DocumentRoot "/var/www/html-cats-backend"
@@ -39,7 +41,6 @@ Listen 0.0.0.0:8081
 </VirtualHost>
 EOF'
 
-# Start both Apache instances
+# Start both Apache instances with separate configs
 sudo httpd -f /etc/httpd/conf/httpd-8080.conf
 sudo httpd -f /etc/httpd/conf/httpd-8081.conf
-
