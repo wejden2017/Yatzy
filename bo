@@ -1,7 +1,45 @@
-sudo cp /etc/httpd/conf/httpd.conf /etc/httpd/conf/httpd-8081.conf
-sudo sed -i 's/^Listen .*/Listen 8081/' /etc/httpd/conf/httpd-8081.conf
-sudo sed -i 's|DocumentRoot \"/var/www/html\"|DocumentRoot \"/var/www/html-cats\"|' /etc/httpd/conf/httpd-8081.conf
+#!/bin/bash
+# Update system and install Apache
+sudo yum update -y
+sudo yum install -y httpd
 
-echo "PidFile /var/run/httpd-8081.pid" | sudo tee -a /etc/httpd/conf/httpd-8081.conf
+# Create content directories
+sudo mkdir -p /var/www/html-cats-web
+sudo mkdir -p /var/www/html-cats-backend
 
-sudo httpd -f /etc/httpd/conf/httpd-8081.conf -k start
+# Create HTML file for cats-web (port 8080)
+sudo bash -c 'cat <<EOF > /var/www/html-cats-web/index.html
+<h1>CATS-WEB</h1>
+<h1>8080</h1>
+EOF'
+
+# Create HTML file for cats-backend (port 8081)
+sudo bash -c 'cat <<EOF > /var/www/html-cats-backend/index.html
+<h1>CATS-BACKEND</h1>
+<h1>8081</h1>
+EOF'
+
+# Create Apache config for port 8080
+sudo bash -c 'cat <<EOF > /etc/httpd/conf/httpd-8080.conf
+Listen 0.0.0.0:8080
+<VirtualHost *:8080>
+    DocumentRoot "/var/www/html-cats-web"
+    ErrorLog logs/error_log_8080
+    CustomLog logs/access_log_8080 common
+</VirtualHost>
+EOF'
+
+# Create Apache config for port 8081
+sudo bash -c 'cat <<EOF > /etc/httpd/conf/httpd-8081.conf
+Listen 0.0.0.0:8081
+<VirtualHost *:8081>
+    DocumentRoot "/var/www/html-cats-backend"
+    ErrorLog logs/error_log_8081
+    CustomLog logs/access_log_8081 common
+</VirtualHost>
+EOF'
+
+# Start both Apache instances
+sudo httpd -f /etc/httpd/conf/httpd-8080.conf
+sudo httpd -f /etc/httpd/conf/httpd-8081.conf
+
