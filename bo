@@ -18,7 +18,7 @@ sudo mkdir -p /var/log/httpd-8081
 # Créer un fichier de configuration minimal pour le port 8080
 cat << 'EOF' | sudo tee /etc/httpd-8080/conf/httpd.conf
 ServerRoot "/etc/httpd"
-Listen 8080
+Listen 0.0.0.0:8080
 ServerName localhost:8080
 
 LoadModule mpm_prefork_module modules/mod_mpm_prefork.so
@@ -44,7 +44,7 @@ EOF
 # Créer un fichier de configuration minimal pour le port 8081
 cat << 'EOF' | sudo tee /etc/httpd-8081/conf/httpd.conf
 ServerRoot "/etc/httpd"
-Listen 8081
+Listen 0.0.0.0:8081
 ServerName localhost:8081
 
 LoadModule mpm_prefork_module modules/mod_mpm_prefork.so
@@ -76,6 +76,10 @@ sudo chmod -R 755 /var/www/html-8080
 sudo chmod -R 755 /var/www/html-8081
 sudo chmod -R 755 /var/log/httpd-8080
 sudo chmod -R 755 /var/log/httpd-8081
+sudo chmod -R 755 /etc/httpd-8080
+sudo chmod -R 755 /etc/httpd-8081
+sudo chown -R root:root /etc/httpd-8080
+sudo chown -R root:root /etc/httpd-8081
 sudo chown -R apache:apache /var/www/html-8080
 sudo chown -R apache:apache /var/www/html-8081
 sudo chown -R apache:apache /var/log/httpd-8080
@@ -89,8 +93,6 @@ After=network.target
 
 [Service]
 Type=simple
-User=apache
-Group=apache
 ExecStart=/usr/sbin/httpd -f /etc/httpd-8080/conf/httpd.conf -DFOREGROUND
 Restart=on-failure
 
@@ -105,8 +107,6 @@ After=network.target
 
 [Service]
 Type=simple
-User=apache
-Group=apache
 ExecStart=/usr/sbin/httpd -f /etc/httpd-8081/conf/httpd.conf -DFOREGROUND
 Restart=on-failure
 
@@ -126,3 +126,10 @@ echo "Statut du service httpd-8080:"
 sudo systemctl status httpd-8080.service
 echo "Statut du service httpd-8081:"
 sudo systemctl status httpd-8081.service
+
+# Tester l'accès aux services
+echo "Test des services avec curl :"
+echo "Test du port 8080 :"
+curl -v http://localhost:8080
+echo "Test du port 8081 :"
+curl -v http://localhost:8081
