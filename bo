@@ -1,79 +1,98 @@
 #!/bin/bash
 
-# Mise à jour du système
+# Mise à jour du système et installation des packages nécessaires
 sudo yum update -y
-
-# Installation d'Apache
 sudo yum install httpd -y
 
 # Arrêter le service Apache par défaut s'il est en cours d'exécution
 sudo systemctl stop httpd
 
-# Création du premier service Apache (port 8080)
+# Créer les répertoires pour les deux instances
 sudo mkdir -p /etc/httpd-8080/conf
-sudo cp /etc/httpd/conf/httpd.conf /etc/httpd-8080/conf/
-sudo cp -r /etc/httpd/conf.d /etc/httpd-8080/
-sudo cp -r /etc/httpd/conf.modules.d /etc/httpd-8080/
-
-# Configuration du premier service Apache
-sudo sed -i 's/Listen 80/Listen 8080/' /etc/httpd-8080/conf/httpd.conf
-sudo sed -i 's/#ServerName www.example.com:80/ServerName localhost:8080/' /etc/httpd-8080/conf/httpd.conf
-
-# Création des répertoires PID et logs pour le premier service
-sudo mkdir -p /var/run/httpd-8080
-sudo mkdir -p /var/log/httpd-8080
-sudo chmod 755 /var/run/httpd-8080
-sudo chmod 755 /var/log/httpd-8080
-
-# Modifier les chemins des PID et des logs dans le fichier de configuration
-sudo sed -i 's|PidFile "/var/run/httpd/httpd.pid"|PidFile "/var/run/httpd-8080/httpd.pid"|' /etc/httpd-8080/conf/httpd.conf
-sudo sed -i 's|ErrorLog "logs/error_log"|ErrorLog "/var/log/httpd-8080/error_log"|' /etc/httpd-8080/conf/httpd.conf
-sudo sed -i 's|CustomLog "logs/access_log"|CustomLog "/var/log/httpd-8080/access_log"|' /etc/httpd-8080/conf/httpd.conf
-
-# Création du contenu pour le premier service
-sudo mkdir -p /var/www/html-8080
-echo "<html><body><h1>Service 1 - Port 8080</h1></body></html>" | sudo tee /var/www/html-8080/index.html
-sudo sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html-8080"|' /etc/httpd-8080/conf/httpd.conf
-
-# Création du deuxième service Apache (port 8081)
 sudo mkdir -p /etc/httpd-8081/conf
-sudo cp /etc/httpd/conf/httpd.conf /etc/httpd-8081/conf/
-sudo cp -r /etc/httpd/conf.d /etc/httpd-8081/
-sudo cp -r /etc/httpd/conf.modules.d /etc/httpd-8081/
-
-# Configuration du deuxième service Apache
-sudo sed -i 's/Listen 80/Listen 8081/' /etc/httpd-8081/conf/httpd.conf
-sudo sed -i 's/#ServerName www.example.com:80/ServerName localhost:8081/' /etc/httpd-8081/conf/httpd.conf
-
-# Création des répertoires PID et logs pour le deuxième service
-sudo mkdir -p /var/run/httpd-8081
-sudo mkdir -p /var/log/httpd-8081
-sudo chmod 755 /var/run/httpd-8081
-sudo chmod 755 /var/log/httpd-8081
-
-# Modifier les chemins des PID et des logs dans le fichier de configuration
-sudo sed -i 's|PidFile "/var/run/httpd/httpd.pid"|PidFile "/var/run/httpd-8081/httpd.pid"|' /etc/httpd-8081/conf/httpd.conf
-sudo sed -i 's|ErrorLog "logs/error_log"|ErrorLog "/var/log/httpd-8081/error_log"|' /etc/httpd-8081/conf/httpd.conf
-sudo sed -i 's|CustomLog "logs/access_log"|CustomLog "/var/log/httpd-8081/access_log"|' /etc/httpd-8081/conf/httpd.conf
-
-# Création du contenu pour le deuxième service
+sudo mkdir -p /var/www/html-8080
 sudo mkdir -p /var/www/html-8081
-echo "<html><body><h1>Service 2 - Port 8081</h1></body></html>" | sudo tee /var/www/html-8081/index.html
-sudo sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html-8081"|' /etc/httpd-8081/conf/httpd.conf
+sudo mkdir -p /var/log/httpd-8080
+sudo mkdir -p /var/log/httpd-8081
 
-# Création des services systemd
+# Créer un fichier de configuration minimal pour le port 8080
+cat << 'EOF' | sudo tee /etc/httpd-8080/conf/httpd.conf
+ServerRoot "/etc/httpd"
+Listen 8080
+ServerName localhost:8080
+
+LoadModule mpm_prefork_module modules/mod_mpm_prefork.so
+LoadModule authz_core_module modules/mod_authz_core.so
+LoadModule dir_module modules/mod_dir.so
+LoadModule mime_module modules/mod_mime.so
+
+TypesConfig /etc/mime.types
+AddDefaultCharset UTF-8
+
+DocumentRoot "/var/www/html-8080"
+ErrorLog "/var/log/httpd-8080/error_log"
+CustomLog "/var/log/httpd-8080/access_log" combined
+
+<Directory "/var/www/html-8080">
+    AllowOverride None
+    Require all granted
+</Directory>
+
+DirectoryIndex index.html
+EOF
+
+# Créer un fichier de configuration minimal pour le port 8081
+cat << 'EOF' | sudo tee /etc/httpd-8081/conf/httpd.conf
+ServerRoot "/etc/httpd"
+Listen 8081
+ServerName localhost:8081
+
+LoadModule mpm_prefork_module modules/mod_mpm_prefork.so
+LoadModule authz_core_module modules/mod_authz_core.so
+LoadModule dir_module modules/mod_dir.so
+LoadModule mime_module modules/mod_mime.so
+
+TypesConfig /etc/mime.types
+AddDefaultCharset UTF-8
+
+DocumentRoot "/var/www/html-8081"
+ErrorLog "/var/log/httpd-8081/error_log"
+CustomLog "/var/log/httpd-8081/access_log" combined
+
+<Directory "/var/www/html-8081">
+    AllowOverride None
+    Require all granted
+</Directory>
+
+DirectoryIndex index.html
+EOF
+
+# Créer des pages HTML simples
+echo "<html><body><h1>Service 1 - Port 8080</h1></body></html>" | sudo tee /var/www/html-8080/index.html
+echo "<html><body><h1>Service 2 - Port 8081</h1></body></html>" | sudo tee /var/www/html-8081/index.html
+
+# Définir les permissions correctes
+sudo chmod -R 755 /var/www/html-8080
+sudo chmod -R 755 /var/www/html-8081
+sudo chmod -R 755 /var/log/httpd-8080
+sudo chmod -R 755 /var/log/httpd-8081
+sudo chown -R apache:apache /var/www/html-8080
+sudo chown -R apache:apache /var/www/html-8081
+sudo chown -R apache:apache /var/log/httpd-8080
+sudo chown -R apache:apache /var/log/httpd-8081
+
+# Créer les services systemd
 cat << 'EOF' | sudo tee /etc/systemd/system/httpd-8080.service
 [Unit]
 Description=Apache Web Server on port 8080
 After=network.target
 
 [Service]
-Type=forking
-ExecStart=/usr/sbin/httpd -f /etc/httpd-8080/conf/httpd.conf -k start
-ExecReload=/usr/sbin/httpd -f /etc/httpd-8080/conf/httpd.conf -k graceful
-ExecStop=/usr/sbin/httpd -f /etc/httpd-8080/conf/httpd.conf -k graceful-stop
-PIDFile=/var/run/httpd-8080/httpd.pid
-PrivateTmp=true
+Type=simple
+User=apache
+Group=apache
+ExecStart=/usr/sbin/httpd -f /etc/httpd-8080/conf/httpd.conf -DFOREGROUND
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
@@ -85,73 +104,25 @@ Description=Apache Web Server on port 8081
 After=network.target
 
 [Service]
-Type=forking
-ExecStart=/usr/sbin/httpd -f /etc/httpd-8081/conf/httpd.conf -k start
-ExecReload=/usr/sbin/httpd -f /etc/httpd-8081/conf/httpd.conf -k graceful
-ExecStop=/usr/sbin/httpd -f /etc/httpd-8081/conf/httpd.conf -k graceful-stop
-PIDFile=/var/run/httpd-8081/httpd.pid
-PrivateTmp=true
+Type=simple
+User=apache
+Group=apache
+ExecStart=/usr/sbin/httpd -f /etc/httpd-8081/conf/httpd.conf -DFOREGROUND
+Restart=on-failure
 
 [Install]
 WantedBy=multi-user.target
 EOF
 
-# Gérer SELinux si activé
-if [ -x "$(command -v getenforce)" ] && [ "$(getenforce)" != "Disabled" ]; then
-  echo "SELinux est activé. Vérification des outils SELinux..."
-  
-  # Vérifier si semanage est disponible
-  if [ -x "$(command -v semanage)" ]; then
-    echo "Configuration des ports SELinux..."
-    sudo semanage port -a -t http_port_t -p tcp 8080 || sudo semanage port -m -t http_port_t -p tcp 8080
-    sudo semanage port -a -t http_port_t -p tcp 8081 || sudo semanage port -m -t http_port_t -p tcp 8081
-    
-    if [ -x "$(command -v restorecon)" ]; then
-      echo "Restauration des contextes SELinux..."
-      sudo restorecon -Rv /var/www/html-8080 /var/www/html-8081 2>/dev/null
-      sudo restorecon -Rv /etc/httpd-8080 /etc/httpd-8081 2>/dev/null
-      sudo restorecon -Rv /var/run/httpd-8080 /var/run/httpd-8081 2>/dev/null
-      sudo restorecon -Rv /var/log/httpd-8080 /var/log/httpd-8081 2>/dev/null
-      sudo restorecon -v /etc/systemd/system/httpd-8080.service 2>/dev/null
-      sudo restorecon -v /etc/systemd/system/httpd-8081.service 2>/dev/null
-    fi
-  else
-    echo "La commande semanage n'est pas disponible. Tentative d'installation..."
-    sudo yum install -y policycoreutils-python || {
-      echo "Impossible d'installer policycoreutils-python. Essai de désactiver temporairement SELinux..."
-      if [ -x "$(command -v setenforce)" ]; then
-        echo "Désactivation temporaire de SELinux pour permettre le démarrage des services..."
-        sudo setenforce 0
-        echo "Attention: SELinux a été temporairement désactivé. Il sera réactivé au prochain redémarrage."
-      fi
-    }
-  fi
-fi
-
-# Rechargement de systemd et démarrage des services
+# Recharger systemd et démarrer les services
 sudo systemctl daemon-reload
 sudo systemctl enable httpd-8080.service
 sudo systemctl enable httpd-8081.service
 sudo systemctl start httpd-8080.service
 sudo systemctl start httpd-8081.service
 
-# Ouverture des ports dans le pare-feu si nécessaire
-if [ -x "$(command -v firewall-cmd)" ]; then
-  sudo firewall-cmd --permanent --add-port=8080/tcp
-  sudo firewall-cmd --permanent --add-port=8081/tcp
-  sudo firewall-cmd --reload
-fi
-
-# Vérification que les services sont bien lancés
-echo "Statut des services Apache :"
+# Afficher le statut des services
+echo "Statut du service httpd-8080:"
 sudo systemctl status httpd-8080.service
+echo "Statut du service httpd-8081:"
 sudo systemctl status httpd-8081.service
-
-# Vérification des journaux en cas d'erreur
-if ! systemctl is-active --quiet httpd-8080.service; then
-  echo "Le service httpd-8080 n'a pas démarré correctement. Vérification des journaux :"
-  sudo journalctl -u httpd-8080.service -n 20
-fi
-
-if ! systemctl is-active --quiet httpd-8081.service; then
-  echo "Le s
