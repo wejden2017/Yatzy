@@ -1,33 +1,35 @@
 #!/bin/bash
 
 # Mise à jour du système
-yum update -y
+sudo yum update -y
 
 # Installation d'Apache
-yum install httpd -y
+sudo yum install httpd -y
 
 # Création du premier service Apache (port 8080)
-cp -r /etc/httpd /etc/httpd-8080
-sed -i 's/Listen 80/Listen 8080/' /etc/httpd-8080/conf/httpd.conf
-sed -i 's/#ServerName www.example.com:80/ServerName localhost:8080/' /etc/httpd-8080/conf/httpd.conf
+sudo cp -r /etc/httpd /etc/httpd-8080
+sudo sed -i 's/Listen 80/Listen 8080/' /etc/httpd-8080/conf/httpd.conf
+sudo sed -i 's/#ServerName www.example.com:80/ServerName localhost:8080/' /etc/httpd-8080/conf/httpd.conf
 
 # Création du contenu pour le premier service
-mkdir -p /var/www/html-8080
-echo "<html><body><h1>Service 1 - Port 8080</h1></body></html>" > /var/www/html-8080/index.html
-sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html-8080"|' /etc/httpd-8080/conf/httpd.conf
+sudo mkdir -p /var/www/html-8080
+sudo echo "<html><body><h1>Service 1 - Port 8080</h1></body></html>" > /tmp/index8080.html
+sudo mv /tmp/index8080.html /var/www/html-8080/index.html
+sudo sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html-8080"|' /etc/httpd-8080/conf/httpd.conf
 
 # Création du deuxième service Apache (port 8081)
-cp -r /etc/httpd /etc/httpd-8081
-sed -i 's/Listen 80/Listen 8081/' /etc/httpd-8081/conf/httpd.conf
-sed -i 's/#ServerName www.example.com:80/ServerName localhost:8081/' /etc/httpd-8081/conf/httpd.conf
+sudo cp -r /etc/httpd /etc/httpd-8081
+sudo sed -i 's/Listen 80/Listen 8081/' /etc/httpd-8081/conf/httpd.conf
+sudo sed -i 's/#ServerName www.example.com:80/ServerName localhost:8081/' /etc/httpd-8081/conf/httpd.conf
 
 # Création du contenu pour le deuxième service
-mkdir -p /var/www/html-8081
-echo "<html><body><h1>Service 2 - Port 8081</h1></body></html>" > /var/www/html-8081/index.html
-sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html-8081"|' /etc/httpd-8081/conf/httpd.conf
+sudo mkdir -p /var/www/html-8081
+sudo echo "<html><body><h1>Service 2 - Port 8081</h1></body></html>" > /tmp/index8081.html
+sudo mv /tmp/index8081.html /var/www/html-8081/index.html
+sudo sed -i 's|DocumentRoot "/var/www/html"|DocumentRoot "/var/www/html-8081"|' /etc/httpd-8081/conf/httpd.conf
 
 # Création des services systemd
-cat > /etc/systemd/system/httpd-8080.service << 'EOF'
+sudo cat > /tmp/httpd-8080.service << 'EOF'
 [Unit]
 Description=Apache Web Server on port 8080
 After=network.target
@@ -43,8 +45,9 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 EOF
+sudo mv /tmp/httpd-8080.service /etc/systemd/system/httpd-8080.service
 
-cat > /etc/systemd/system/httpd-8081.service << 'EOF'
+sudo cat > /tmp/httpd-8081.service << 'EOF'
 [Unit]
 Description=Apache Web Server on port 8081
 After=network.target
@@ -60,26 +63,27 @@ PrivateTmp=true
 [Install]
 WantedBy=multi-user.target
 EOF
+sudo mv /tmp/httpd-8081.service /etc/systemd/system/httpd-8081.service
 
 # Création des répertoires pour les PID
-mkdir -p /var/run/httpd
-chmod 755 /var/run/httpd
+sudo mkdir -p /var/run/httpd
+sudo chmod 755 /var/run/httpd
 
 # Rechargement de systemd et démarrage des services
-systemctl daemon-reload
-systemctl enable httpd-8080.service
-systemctl enable httpd-8081.service
-systemctl start httpd-8080.service
-systemctl start httpd-8081.service
+sudo systemctl daemon-reload
+sudo systemctl enable httpd-8080.service
+sudo systemctl enable httpd-8081.service
+sudo systemctl start httpd-8080.service
+sudo systemctl start httpd-8081.service
 
 # Ouverture des ports dans le pare-feu si nécessaire
 if [ -x "$(command -v firewall-cmd)" ]; then
-  firewall-cmd --permanent --add-port=8080/tcp
-  firewall-cmd --permanent --add-port=8081/tcp
-  firewall-cmd --reload
+  sudo firewall-cmd --permanent --add-port=8080/tcp
+  sudo firewall-cmd --permanent --add-port=8081/tcp
+  sudo firewall-cmd --reload
 fi
 
 # Vérification que les services sont bien lancés
 echo "Statut des services Apache :"
-systemctl status httpd-8080.service
-systemctl status httpd-8081.service
+sudo systemctl status httpd-8080.service
+sudo systemctl status httpd-8081.service
