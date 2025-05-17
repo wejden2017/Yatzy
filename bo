@@ -96,16 +96,36 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
-# SELinux settings if enabled
+# Gérer SELinux si activé
 if [ -x "$(command -v getenforce)" ] && [ "$(getenforce)" != "Disabled" ]; then
-  sudo semanage port -a -t http_port_t -p tcp 8080 || sudo semanage port -m -t http_port_t -p tcp 8080
-  sudo semanage port -a -t http_port_t -p tcp 8081 || sudo semanage port -m -t http_port_t -p tcp 8081
-  sudo restorecon -Rv /var/www/html-8080 /var/www/html-8081
-  sudo restorecon -Rv /etc/httpd-8080 /etc/httpd-8081
-  sudo restorecon -Rv /var/run/httpd-8080 /var/run/httpd-8081
-  sudo restorecon -Rv /var/log/httpd-8080 /var/log/httpd-8081
-  sudo restorecon -v /etc/systemd/system/httpd-8080.service
-  sudo restorecon -v /etc/systemd/system/httpd-8081.service
+  echo "SELinux est activé. Vérification des outils SELinux..."
+  
+  # Vérifier si semanage est disponible
+  if [ -x "$(command -v semanage)" ]; then
+    echo "Configuration des ports SELinux..."
+    sudo semanage port -a -t http_port_t -p tcp 8080 || sudo semanage port -m -t http_port_t -p tcp 8080
+    sudo semanage port -a -t http_port_t -p tcp 8081 || sudo semanage port -m -t http_port_t -p tcp 8081
+    
+    if [ -x "$(command -v restorecon)" ]; then
+      echo "Restauration des contextes SELinux..."
+      sudo restorecon -Rv /var/www/html-8080 /var/www/html-8081 2>/dev/null
+      sudo restorecon -Rv /etc/httpd-8080 /etc/httpd-8081 2>/dev/null
+      sudo restorecon -Rv /var/run/httpd-8080 /var/run/httpd-8081 2>/dev/null
+      sudo restorecon -Rv /var/log/httpd-8080 /var/log/httpd-8081 2>/dev/null
+      sudo restorecon -v /etc/systemd/system/httpd-8080.service 2>/dev/null
+      sudo restorecon -v /etc/systemd/system/httpd-8081.service 2>/dev/null
+    fi
+  else
+    echo "La commande semanage n'est pas disponible. Tentative d'installation..."
+    sudo yum install -y policycoreutils-python || {
+      echo "Impossible d'installer policycoreutils-python. Essai de désactiver temporairement SELinux..."
+      if [ -x "$(command -v setenforce)" ]; then
+        echo "Désactivation temporaire de SELinux pour permettre le démarrage des services..."
+        sudo setenforce 0
+        echo "Attention: SELinux a été temporairement désactivé. Il sera réactivé au prochain redémarrage."
+      fi
+    }
+  fi
 fi
 
 # Rechargement de systemd et démarrage des services
@@ -126,3 +146,12 @@ fi
 echo "Statut des services Apache :"
 sudo systemctl status httpd-8080.service
 sudo systemctl status httpd-8081.service
+
+# Vérification des journaux en cas d'erreur
+if ! systemctl is-active --quiet httpd-8080.service; then
+  echo "Le service httpd-8080 n'a pas démarré correctement. Vérification des journaux :"
+  sudo journalctl -u httpd-8080.service -n 20
+fi
+
+if ! systemctl is-active --quiet httpd-8081.service; then
+  echo "Le s
