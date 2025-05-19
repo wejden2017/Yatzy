@@ -1,7 +1,21 @@
-Voici la version complète corrigée de ton fichier modules/nlb/main.tf pour que le NLB expose cats-backend sur le port 80 (HTTP), compatible avec API Gateway via VPC Link.
+API Gateway REST + VPC Link qui route vers une EC2 "front" unique avec deux services :
 
-✅ modules/nlb/main.tf (corrigé, propre et prêt à coller)
-hcl
+catsweb via /catsweb/{proxy+} → port 8080
+
+catsbackend via /catsbackend/{proxy+} → port 8081
+
+Utilisation :
+
+un seul NLB
+
+un seul listener port 80
+
+deux target groups en HTTP
+
+routing par chemin
+
+✅ modules/nlb/main.tf — complet et corrigé
+h
 Copier
 Modifier
 resource "aws_lb" "nlb_cats" {
@@ -9,26 +23,15 @@ resource "aws_lb" "nlb_cats" {
   internal           = true
   load_balancer_type = "network"
   subnets            = var.subnet_ids
-
   enable_cross_zone_load_balancing = true
-  tags                             = var.tags
+  tags               = var.tags
 }
 
-# Target group pour CATS-WEB (port 8080)
+# === Target group catsweb (port 8080) ===
 resource "aws_lb_target_group" "tg_cats_web" {
   name        = "${var.entity}-${var.application}-${var.environment}-cats-web-tg"
   port        = 8080
-  protocol    = "TCP"
-  vpc_id      = var.vpc_id
-  target_type = "instance"
-  tags        = var.tags
-}
-
-# Target group pour CATS-BACKEND (port 8081, en HTTP pour API Gateway)
-resource "aws_lb_target_group" "tg_cats_backend" {
-  name        = "${var.entity}-${var.application}-${var.environment}-cats-backend-tg"
-  port        = 8081
-  protocol    = "HTTP"  # CHANGÉ : pour que API Gateway accepte via VPC Link
+  protocol    = "HTTP"
   vpc_id      = var.vpc_id
   target_type = "instance"
   tags        = var.tags
@@ -43,70 +46,182 @@ resource "aws_lb_target_group" "tg_cats_backend" {
   }
 }
 
-# Attach EC2 à TG cats-web
+# === Target group catsbackend (port 8081) ===
+resource "aws_lb_target_group" "tg_cats_backend" {
+  name        = "${var.entity}-${var.application}-${var.environment}-cats-backend-tg"
+  port        = 8081
+  protocol    = "HTTP"
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+  tags        = var.tags
+
+  health_check {
+    path                = "/"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+    matcher             = "200"
+  }
+}
+
+# === Attach EC2 to target groups ===
 resource "aws_lb_target_group_attachment" "tg_attach_web" {
   target_group_arn = aws_lb_target_group.tg_cats_web.arn
   target_id        = var.instance_id
   port             = 8080
 }
 
-# Attach EC2 à TG cats-backend
 resource "aws_lb_target_group_attachment" "tg_attach_backend" {
   target_group_arn = aws_lb_target_group.tg_cats_backend.arn
   target_id        = var.instance_id
   port             = 8081
 }
 
-# Listener HTTP (port 80) pour exposer cats-backend (vers 8081 sur EC2)
-resource "aws_lb_listener" "http_backend" {
+# === Listener 80 avec path-based routing ===
+resource "aws_lb_listener" "http_router" {
   load_balancer_arn = aws_lb.nlb_cats.arn
   port              = 80
   protocol          = "HTTP"
 
   default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.tg_cats_backend.arn
+    type = "fixed-response"
+    fixed_response {
+      content_type = "text/plain"
+      message_body = "Not Found"
+      status_code  = "404"
+    }
+  }
+
+  dynamic "default_action" {
+    for_each = {
+      "/catsweb/*"     = aws_lb_target_group.tg_cats_web.arn
+      "/catsbackend/*" = aws_lb_target_group.tg_cats_backend.arn
+    }
+    content {
+      type             = "forward"
+      target_group_arn = default_action.value
+      conditions {
+        path_pattern {
+          values = [default_action.key]
+        }
+      }
+    }
   }
 }
-✅ Rappel – À ne PAS faire :
-Ne pas utiliser le port 8081 dans uri côté API Gateway
 
-Ne pas utiliser TCP dans le TG backend si tu veux passer par API Gateway
+# === Output NLB DNS name ===
+output "nlb_dns_name" {
+  value = aws_lb.nlb_cats.dns_name
+}
 
-Prochaine étape :
-Lance :
+output "tg_web_arn" {
+  value = aws_lb_target_group.tg_cats_web.arn
+}
 
-bash
+output "tg_backend_arn" {
+  value = aws_lb_target_group.tg_cats_backend.arn
+}
+✅ api_gateway_rest/main.tf — deux intégrations, propre
+Assure-toi que ce fichier a bien deux intégrations HTTP_PROXY avec URI sans port :
+
+h
 Copier
 Modifier
-terraform apply -target=module.nlb_cats_front
-terraform apply -target=module.api_gateway_rest
-Et teste ensuite l'URL :
+# API Gateway REST principal
+resource "aws_api_gateway_rest_api" "this" {
+  name        = "${var.name_prefix}-api"
+  description = "API Gateway exposing cats-web and cats-backend via VPC Link"
+  tags        = var.common_tags
+}
 
-bash
+# === Resources & Methods ===
+resource "aws_api_gateway_resource" "catsweb" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
+  path_part   = "catsweb"
+}
+
+resource "aws_api_gateway_resource" "catsweb_proxy" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.catsweb.id
+  path_part   = "{proxy+}"
+}
+
+resource "aws_api_gateway_method" "catsweb" {
+  rest_api_id   = aws_api_gateway_rest_api.this.id
+  resource_id   = aws_api_gateway_resource.catsweb_proxy.id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "catsweb" {
+  rest_api_id             = aws_api_gateway_rest_api.this.id
+  resource_id             = aws_api_gateway_resource.catsweb_proxy.id
+  http_method             = aws_api_gateway_method.catsweb.http_method
+  integration_http_method = "ANY"
+  type                    = "HTTP_PROXY"
+  connection_type         = "VPC_LINK"
+  connection_id           = var.vpc_link_id
+  uri                     = "http://${var.nlb_dns_name}/catsweb/{proxy}"
+}
+
+# === CATSBACKEND same as above ===
+resource "aws_api_gateway_resource" "catsbackend" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
+  path_part   = "catsbackend"
+}
+
+resource "aws_api_gateway_resource" "catsbackend_proxy" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.catsbackend.id
+  path_part   = "{proxy+}"
+}
+
+resource "aws_api_gateway_method" "catsbackend" {
+  rest_api_id   = aws_api_gateway_rest_api.this.id
+  resource_id   = aws_api_gateway_resource.catsbackend_proxy.id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "catsbackend" {
+  rest_api_id             = aws_api_gateway_rest_api.this.id
+  resource_id             = aws_api_gateway_resource.catsbackend_proxy.id
+  http_method             = aws_api_gateway_method.catsbackend.http_method
+  integration_http_method = "ANY"
+  type                    = "HTTP_PROXY"
+  connection_type         = "VPC_LINK"
+  connection_id           = var.vpc_link_id
+  uri                     = "http://${var.nlb_dns_name}/catsbackend/{proxy}"
+}
+✅ Outputs côté api_gateway_rest
+hcl
 Copier
 Modifier
-https://<rest-api-id>.execute-api.eu-west-2.amazonaws.com/v1/catsbackend/
-Tu veux aussi la version équivalente si tu veux plus tard rajouter le HTTPS (port 443) ?
+output "rest_api_url" {
+  value = "https://${aws_api_gateway_rest_api.this.id}.execute-api.${var.region}.amazonaws.com/${var.environment}"
+}
 
-
-
-
-
-
-
-
-
-
-
-
-Rechercher
-
-Recherche approfondie
-
-Créer une image
-
-
-
-
-ChatGPT peut commettre des erreurs. Il est recommandé de vérif
+output "cats_api_gateway_urls" {
+  value = {
+    cats_web     = "${module.api_gateway_rest.rest_api_url}/catsweb"
+    cats_backend = "${module.api_gateway_rest.rest_api_url}/catsbackend"
+  }
+}
+✅ Et dans ton appel de module principal (dans terraform/main.tf) :
+h
+Copier
+Modifier
+module "api_gateway_rest" {
+  source         = "./modules/api_gateway_rest"
+  name_prefix    = "${var.entity}-${var.application}-${var.environment}-front-api-gateway"
+  vpc_link_id    = module.vpc_link_cats.vpc_link_id
+  catsweb_tg_arn = module.nlb_cats_front.tg_web_arn
+  catsbackend_tg_arn = module.nlb_cats_front.tg_backend_arn
+  nlb_dns_name   = module.nlb_cats_front.nlb_dns_name
+  environment    = var.environment
+  common_tags    = local.standard_tags
+  tags           = { Role = "CATS-API-GATEWAY-REST" }
+}
