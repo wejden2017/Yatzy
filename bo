@@ -1,131 +1,53 @@
 #!/bin/bash
 
-# Mise à jour du système et installation des packages nécessaires
-sudo yum update -y
-sudo yum install httpd -y
+# Arrêter tous les services précédents
+sudo systemctl stop httpd-8080.service httpd-8081.service 
+sudo systemctl disable httpd-8080.service httpd-8081.service
 
-# Arrêter le service Apache par défaut s'il est en cours d'exécution
+# S'assurer qu'Apache est installé et arrêter le service par défaut
+sudo yum install -y httpd
 sudo systemctl stop httpd
 
-# Créer les répertoires pour les deux instances
-sudo mkdir -p /etc/httpd-8080/conf
-sudo mkdir -p /etc/httpd-8081/conf
-sudo mkdir -p /var/www/html-8080
-sudo mkdir -p /var/www/html-8081
-sudo mkdir -p /var/log/httpd-8080
-sudo mkdir -p /var/log/httpd-8081
+# Créer des pages HTML simples dans les répertoires par défaut
+sudo mkdir -p /var/www/html/port-8080
+sudo mkdir -p /var/www/html/port-8081
+echo "<html><body><h1>Service 1 - Port 8080</h1></body></html>" | sudo tee /var/www/html/port-8080/index.html
+echo "<html><body><h1>Service 2 - Port 8081</h1></body></html>" | sudo tee /var/www/html/port-8081/index.html
 
-# Créer un fichier de configuration minimal pour le port 8080
-cat << 'EOF' | sudo tee /etc/httpd-8080/conf/httpd.conf
-ServerRoot "/etc/httpd"
-Listen 0.0.0.0:8080
-ServerName localhost:8080
+# Configurer Apache pour écouter sur les ports 8080 et 8081
+sudo cp /etc/httpd/conf/httpd.conf /etc/httpd/conf/httpd.conf.backup
+sudo sed -i 's/Listen 80/Listen 0.0.0.0:8080\nListen 0.0.0.0:8081/' /etc/httpd/conf/httpd.conf
 
-LoadModule mpm_prefork_module modules/mod_mpm_prefork.so
-LoadModule authz_core_module modules/mod_authz_core.so
-LoadModule dir_module modules/mod_dir.so
-LoadModule mime_module modules/mod_mime.so
+# Créer des VirtualHosts pour les deux ports
+cat << 'EOF' | sudo tee /etc/httpd/conf.d/vhosts.conf
+<VirtualHost *:8080>
+    DocumentRoot "/var/www/html/port-8080"
+    <Directory "/var/www/html/port-8080">
+        AllowOverride None
+        Require all granted
+    </Directory>
+</VirtualHost>
 
-TypesConfig /etc/mime.types
-AddDefaultCharset UTF-8
-
-DocumentRoot "/var/www/html-8080"
-ErrorLog "/var/log/httpd-8080/error_log"
-CustomLog "/var/log/httpd-8080/access_log" combined
-
-<Directory "/var/www/html-8080">
-    AllowOverride None
-    Require all granted
-</Directory>
-
-DirectoryIndex index.html
+<VirtualHost *:8081>
+    DocumentRoot "/var/www/html/port-8081"
+    <Directory "/var/www/html/port-8081">
+        AllowOverride None
+        Require all granted
+    </Directory>
+</VirtualHost>
 EOF
 
-# Créer un fichier de configuration minimal pour le port 8081
-cat << 'EOF' | sudo tee /etc/httpd-8081/conf/httpd.conf
-ServerRoot "/etc/httpd"
-Listen 0.0.0.0:8081
-ServerName localhost:8081
+# Vérifier la configuration
+sudo httpd -t
 
-LoadModule mpm_prefork_module modules/mod_mpm_prefork.so
-LoadModule authz_core_module modules/mod_authz_core.so
-LoadModule dir_module modules/mod_dir.so
-LoadModule mime_module modules/mod_mime.so
+# Démarrer Apache
+sudo systemctl start httpd
 
-TypesConfig /etc/mime.types
-AddDefaultCharset UTF-8
+# Vérifier le statut
+sudo systemctl status httpd
 
-DocumentRoot "/var/www/html-8081"
-ErrorLog "/var/log/httpd-8081/error_log"
-CustomLog "/var/log/httpd-8081/access_log" combined
-
-<Directory "/var/www/html-8081">
-    AllowOverride None
-    Require all granted
-</Directory>
-
-DirectoryIndex index.html
-EOF
-
-# Créer des pages HTML simples
-echo "<html><body><h1>Service 1 - Port 8080</h1></body></html>" | sudo tee /var/www/html-8080/index.html
-echo "<html><body><h1>Service 2 - Port 8081</h1></body></html>" | sudo tee /var/www/html-8081/index.html
-
-# Définir les permissions correctes
-sudo chmod -R 755 /var/www/html-8080
-sudo chmod -R 755 /var/www/html-8081
-sudo chmod -R 755 /var/log/httpd-8080
-sudo chmod -R 755 /var/log/httpd-8081
-sudo chmod -R 755 /etc/httpd-8080
-sudo chmod -R 755 /etc/httpd-8081
-sudo chown -R root:root /etc/httpd-8080
-sudo chown -R root:root /etc/httpd-8081
-sudo chown -R apache:apache /var/www/html-8080
-sudo chown -R apache:apache /var/www/html-8081
-sudo chown -R apache:apache /var/log/httpd-8080
-sudo chown -R apache:apache /var/log/httpd-8081
-
-# Créer les services systemd
-cat << 'EOF' | sudo tee /etc/systemd/system/httpd-8080.service
-[Unit]
-Description=Apache Web Server on port 8080
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/sbin/httpd -f /etc/httpd-8080/conf/httpd.conf -DFOREGROUND
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-cat << 'EOF' | sudo tee /etc/systemd/system/httpd-8081.service
-[Unit]
-Description=Apache Web Server on port 8081
-After=network.target
-
-[Service]
-Type=simple
-ExecStart=/usr/sbin/httpd -f /etc/httpd-8081/conf/httpd.conf -DFOREGROUND
-Restart=on-failure
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-# Recharger systemd et démarrer les services
-sudo systemctl daemon-reload
-sudo systemctl enable httpd-8080.service
-sudo systemctl enable httpd-8081.service
-sudo systemctl start httpd-8080.service
-sudo systemctl start httpd-8081.service
-
-# Afficher le statut des services
-echo "Statut du service httpd-8080:"
-sudo systemctl status httpd-8080.service
-echo "Statut du service httpd-8081:"
-sudo systemctl status httpd-8081.service
+# Vérifier si les ports sont ouverts
+sudo ss -tulpn | grep httpd
 
 # Tester l'accès aux services
 echo "Test des services avec curl :"
