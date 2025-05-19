@@ -48,9 +48,9 @@ sudo ss -tulpn | grep -E '8080|8081'
 # Tester l'accès aux services
 echo "Test des services avec curl :"
 echo "Test du port 8080 :"
-curl -v http://localhost:8080
+curl -v --noproxy '*' http://localhost:8080
 echo "Test du port 8081 :"
-curl -v http://localhost:8081
+curl -v --noproxy '*' http://localhost:8081
 
 # Si vous avez besoin de tuer les serveurs plus tard
 echo ""
