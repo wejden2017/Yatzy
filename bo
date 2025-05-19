@@ -1,56 +1,91 @@
 #!/bin/bash
 
-# Installer les outils nécessaires
-sudo yum install -y socat nc
+# Installer socat
+sudo yum update -y
+sudo yum install -y socat
 
-# Arrêter Apache s'il est en cours d'exécution
+# Arrêter les services précédents et libérer les ports
 sudo systemctl stop httpd
+sudo fuser -k 8080/tcp 2>/dev/null || true
+sudo fuser -k 8081/tcp 2>/dev/null || true
 
-PORT1=8080
-PORT2=8081
-
-# Créer des réponses HTTP pour les deux services
-cat > /tmp/response_$PORT1.http << EOF
+# Créer des fichiers de réponse HTTP simples
+cat > /tmp/response_8080.http << 'EOF'
 HTTP/1.1 200 OK
 Content-Type: text/html
 
-<html><body><h1>Service 1 - Port $PORT1</h1></body></html>
+<html><body><h1>Service 1 - Port 8080</h1></body></html>
 EOF
 
-cat > /tmp/response_$PORT2.http << EOF
+cat > /tmp/response_8081.http << 'EOF'
 HTTP/1.1 200 OK
 Content-Type: text/html
 
-<html><body><h1>Service 2 - Port $PORT2</h1></body></html>
+<html><body><h1>Service 2 - Port 8081</h1></body></html>
 EOF
 
-# Tuer les processus netcat précédents s'ils existent
-sudo pkill -f "nc -l.*$PORT1" || true
-sudo pkill -f "nc -l.*$PORT2" || true
+# Arrêter les processus socat s'ils existent déjà
+sudo pkill -f "socat.*:8080" || true
+sudo pkill -f "socat.*:8081" || true
 
-# Lancer netcat en arrière-plan pour le premier port
-echo "Démarrage du serveur sur le port $PORT1"
-while true; do sudo nc -l $PORT1 < /tmp/response_$PORT1.http; done &
-NC_PID_1=$!
+# Démarrer socat pour le port 8080 en arrière-plan
+echo "Démarrage du serveur sur le port 8080"
+sudo nohup socat TCP-LISTEN:8080,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8080.http" > /var/log/socat_8080.log 2>&1 &
+SOCAT_PID_1=$!
 
-# Lancer netcat en arrière-plan pour le deuxième port
-echo "Démarrage du serveur sur le port $PORT2"
-while true; do sudo nc -l $PORT2 < /tmp/response_$PORT2.http; done &
-NC_PID_2=$!
+# Démarrer socat pour le port 8081 en arrière-plan
+echo "Démarrage du serveur sur le port 8081"
+sudo nohup socat TCP-LISTEN:8081,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8081.http" > /var/log/socat_8081.log 2>&1 &
+SOCAT_PID_2=$!
 
 # Attendre quelques secondes pour que les serveurs démarrent
-sleep 2
+sleep 3
 
 # Vérifier les ports ouverts
 echo "Ports en écoute :"
-sudo ss -tulpn | grep -E "$PORT1|$PORT2"
+sudo ss -tulpn | grep -E '8080|8081'
 
 # Tester l'accès aux services
 echo "Test des services avec curl :"
-echo "Test du port $PORT1 :"
-curl -v http://localhost:$PORT1
-echo "Test du port $PORT2 :"
-curl -v http://localhost:$PORT2
+echo "Test du port 8080 :"
+curl -v http://localhost:8080
+echo "Test du port 8081 :"
+curl -v http://localhost:8081
 
-echo "Serveurs lancés avec les PIDs $NC_PID_1 et $NC_PID_2"
-echo "Pour arrêter les serveurs, exécutez : sudo pkill -f 'nc -l.*$PORT1'; sudo pkill -f 'nc -l.*$PORT2'"
+# Si vous avez besoin de tuer les serveurs plus tard
+echo ""
+echo "Les serveurs sont démarrés en arrière-plan. Pour les arrêter, exécutez :"
+echo "sudo pkill -f 'socat.*:8080'"
+echo "sudo pkill -f 'socat.*:8081'"
+
+# Générer la partie pour user_data_front.tpl
+echo ""
+echo "Code à inclure dans user_data_front.tpl :"
+cat << 'EOF'
+#!/bin/bash
+
+# Installer socat
+yum update -y
+yum install -y socat
+
+# Créer des fichiers de réponse HTTP simples
+cat > /tmp/response_8080.http << 'INNEREOF'
+HTTP/1.1 200 OK
+Content-Type: text/html
+
+<html><body><h1>Service 1 - Port 8080</h1></body></html>
+INNEREOF
+
+cat > /tmp/response_8081.http << 'INNEREOF'
+HTTP/1.1 200 OK
+Content-Type: text/html
+
+<html><body><h1>Service 2 - Port 8081</h1></body></html>
+INNEREOF
+
+# Démarrer socat pour les deux ports
+nohup socat TCP-LISTEN:8080,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8080.http" > /var/log/socat_8080.log 2>&1 &
+nohup socat TCP-LISTEN:8081,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8081.http" > /var/log/socat_8081.log 2>&1 &
+
+echo "Serveurs web démarrés sur les ports 8080 et 8081"
+EOF
