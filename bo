@@ -1,70 +1,6 @@
 #!/bin/bash
 
 # Installer socat
-sudo yum update -y
-sudo yum install -y socat
-
-# Arrêter les services précédents et libérer les ports
-sudo systemctl stop httpd
-sudo fuser -k 8080/tcp 2>/dev/null || true
-sudo fuser -k 8081/tcp 2>/dev/null || true
-
-# Créer des fichiers de réponse HTTP simples
-cat > /tmp/response_8080.http << 'EOF'
-HTTP/1.1 200 OK
-Content-Type: text/html
-
-<html><body><h1>Service 1 - Port 8080</h1></body></html>
-EOF
-
-cat > /tmp/response_8081.http << 'EOF'
-HTTP/1.1 200 OK
-Content-Type: text/html
-
-<html><body><h1>Service 2 - Port 8081</h1></body></html>
-EOF
-
-# Arrêter les processus socat s'ils existent déjà
-sudo pkill -f "socat.*:8080" || true
-sudo pkill -f "socat.*:8081" || true
-
-# Démarrer socat pour le port 8080 en arrière-plan
-echo "Démarrage du serveur sur le port 8080"
-sudo nohup socat TCP-LISTEN:8080,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8080.http" > /var/log/socat_8080.log 2>&1 &
-SOCAT_PID_1=$!
-
-# Démarrer socat pour le port 8081 en arrière-plan
-echo "Démarrage du serveur sur le port 8081"
-sudo nohup socat TCP-LISTEN:8081,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8081.http" > /var/log/socat_8081.log 2>&1 &
-SOCAT_PID_2=$!
-
-# Attendre quelques secondes pour que les serveurs démarrent
-sleep 3
-
-# Vérifier les ports ouverts
-echo "Ports en écoute :"
-sudo ss -tulpn | grep -E '8080|8081'
-
-# Tester l'accès aux services
-echo "Test des services avec curl :"
-echo "Test du port 8080 :"
-curl -v --noproxy '*' http://localhost:8080
-echo "Test du port 8081 :"
-curl -v --noproxy '*' http://localhost:8081
-
-# Si vous avez besoin de tuer les serveurs plus tard
-echo ""
-echo "Les serveurs sont démarrés en arrière-plan. Pour les arrêter, exécutez :"
-echo "sudo pkill -f 'socat.*:8080'"
-echo "sudo pkill -f 'socat.*:8081'"
-
-# Générer la partie pour user_data_front.tpl
-echo ""
-echo "Code à inclure dans user_data_front.tpl :"
-cat << 'EOF'
-#!/bin/bash
-
-# Installer socat
 yum update -y
 yum install -y socat
 
@@ -88,4 +24,3 @@ nohup socat TCP-LISTEN:8080,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8080.h
 nohup socat TCP-LISTEN:8081,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8081.http" > /var/log/socat_8081.log 2>&1 &
 
 echo "Serveurs web démarrés sur les ports 8080 et 8081"
-EOF
