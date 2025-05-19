@@ -10,3 +10,32 @@ output "http_vpc_link_id" {
   description = "ID of the HTTP API Gateway VPC Link"
   value       = aws_apigatewayv2_vpc_link.http_vpc_link.id
 }
+
+
+# Ajouter cette section en plus ou en remplacement de votre module "api_gateway_rest"
+module "api_gateway_http" {
+  source           = "./modules/api_gateway_http"
+  name_prefix      = "${var.entity}-${var.application}-${var.environment}-front-api-gateway"
+  vpc_link_id      = module.vpc_link_cats.http_vpc_link_id  # Utilisez le nouveau HTTP VPC Link ID
+  catsweb_tg_arn   = module.nlb_cats_front.tg_web_arn
+  catsbackend_tg_arn = module.nlb_cats_front.tg_backend_arn
+  nlb_dns_name     = module.nlb_cats_front.nlb_dns_name
+  environment      = var.environment
+  common_tags      = local.standard_tags
+  tags             = { Role = "CATS-API-GATEWAY-HTTP" }
+}
+
+output "api_gateway_http_endpoint" {
+  description = "The endpoint URL of the HTTP API Gateway"
+  value       = module.api_gateway_http.api_endpoint
+}
+
+output "catsweb_http_url" {
+  description = "URL for accessing the catsweb service via HTTP API"
+  value       = module.api_gateway_http.catsweb_url
+}
+
+output "catsbackend_http_url" {
+  description = "URL for accessing the catsbackend service via HTTP API"
+  value       = module.api_gateway_http.catsbackend_url
+}
