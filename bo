@@ -69,3 +69,46 @@ resource "aws_cloudwatch_log_group" "api_gw" {
   name              = "/aws/api_gw/${aws_apigatewayv2_api.this.name}"
   retention_in_days = 30
 }
+
+
+variable "name_prefix" {
+  description = "Prefix for the API Gateway name"
+  type        = string
+}
+
+variable "vpc_link_id" {
+  description = "VPC Link ID to connect to the NLB"
+  type        = string
+}
+
+variable "catsweb_tg_arn" {
+  description = "ARN of the catsweb target group"
+  type        = string
+}
+
+variable "catsbackend_tg_arn" {
+  description = "ARN of the catsbackend target group"
+  type        = string
+}
+
+variable "nlb_dns_name" {
+  description = "DNS name of the NLB"
+  type        = string
+}
+
+variable "environment" {
+  description = "Environment name (dev, staging, prod, etc.)"
+  type        = string
+}
+
+variable "common_tags" {
+  description = "Common tags to apply to all resources"
+  type        = map(string)
+  default     = {}
+}
+
+variable "tags" {
+  description = "Tags specific to API Gateway"
+  type        = map(string)
+  default     = {}
+}
