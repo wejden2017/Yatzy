@@ -19,8 +19,15 @@ Content-Type: text/html
 <html><body><h1>Service 2 - Port 8081</h1></body></html>
 INNEREOF
 
+# Créer un répertoire pour les logs avec les bonnes permissions
+mkdir -p /tmp/logs
+chmod 777 /tmp/logs
+
 # Démarrer socat pour les deux ports
-nohup socat TCP-LISTEN:8080,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8080.http" > /var/log/socat_8080.log 2>&1 &
-nohup socat TCP-LISTEN:8081,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8081.http" > /var/log/socat_8081.log 2>&1 &
+nohup socat TCP-LISTEN:8080,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8080.http" > /tmp/logs/socat_8080.log 2>&1 &
+nohup socat TCP-LISTEN:8081,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8081.http" > /tmp/logs/socat_8081.log 2>&1 &
 
 echo "Serveurs web démarrés sur les ports 8080 et 8081"
+
+# Vérifier que les serveurs sont bien en écoute
+ss -tulpn | grep -E '8080|8081'
