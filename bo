@@ -1,124 +1,83 @@
-########################################
-# modules/api_gateway_rest/variables.tf
-########################################
-
-variable "name_prefix" { type = string }
-variable "vpc_link_id" { type = string }
-variable "catsweb_tg_arn" { type = string }
-variable "catsbackend_tg_arn" { type = string }
-variable "common_tags" { type = map(string) }
-
-######################################
-# modules/api_gateway_rest/main.tf
-######################################
-
-resource "aws_api_gateway_rest_api" "this" {
-  name        = "${var.name_prefix}-api"
-  description = "API Gateway for CATS Web and Backend"
-  tags        = var.common_tags
-}
-
-resource "aws_api_gateway_resource" "catsweb" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
-  path_part   = "catsweb"
-}
-
-resource "aws_api_gateway_resource" "catsweb_proxy" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  parent_id   = aws_api_gateway_resource.catsweb.id
-  path_part   = "{proxy+}"
-}
-
-resource "aws_api_gateway_method" "catsweb_any" {
-  rest_api_id   = aws_api_gateway_rest_api.this.id
-  resource_id   = aws_api_gateway_resource.catsweb_proxy.id
-  http_method   = "ANY"
-  authorization = "NONE"
-}
-
+✅ 1. Dans le module api_gateway_rest/main.tf
+🔄 Modifie aws_api_gateway_integration "catsweb" :
+hcl
+Copier
+Modifier
 resource "aws_api_gateway_integration" "catsweb" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.catsweb_proxy.id
-  http_method = aws_api_gateway_method.catsweb_any.http_method
-
+  rest_api_id             = aws_api_gateway_rest_api.this.id
+  resource_id             = aws_api_gateway_resource.catsweb_proxy.id
+  http_method             = aws_api_gateway_method.catsweb_any.http_method
   integration_http_method = "ANY"
   type                    = "HTTP_PROXY"
-  uri                     = "http://${var.catsweb_tg_arn}/{proxy}"
+  uri                     = "http://${var.nlb_dns_name}/"  # ✅ Plus de port
   connection_type         = "VPC_LINK"
   connection_id           = var.vpc_link_id
 }
-
-resource "aws_api_gateway_resource" "catsbackend" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
-  path_part   = "catsbackend"
-}
-
-resource "aws_api_gateway_resource" "catsbackend_proxy" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  parent_id   = aws_api_gateway_resource.catsbackend.id
-  path_part   = "{proxy+}"
-}
-
-resource "aws_api_gateway_method" "catsbackend_any" {
-  rest_api_id   = aws_api_gateway_rest_api.this.id
-  resource_id   = aws_api_gateway_resource.catsbackend_proxy.id
-  http_method   = "ANY"
-  authorization = "NONE"
-}
-
+🔄 Modifie aws_api_gateway_integration "catsbackend" :
+hcl
+Copier
+Modifier
 resource "aws_api_gateway_integration" "catsbackend" {
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  resource_id = aws_api_gateway_resource.catsbackend_proxy.id
-  http_method = aws_api_gateway_method.catsbackend_any.http_method
-
+  rest_api_id             = aws_api_gateway_rest_api.this.id
+  resource_id             = aws_api_gateway_resource.catsbackend_proxy.id
+  http_method             = aws_api_gateway_method.catsbackend_any.http_method
   integration_http_method = "ANY"
   type                    = "HTTP_PROXY"
-  uri                     = "http://${var.catsbackend_tg_arn}/{proxy}"
+  uri                     = "http://${var.nlb_dns_name}/"  # ✅ Plus de port
   connection_type         = "VPC_LINK"
   connection_id           = var.vpc_link_id
 }
+✅ 2. Dans variables.tf de ton module api_gateway_rest
+Si ce n’est pas déjà fait, assure-toi d’avoir :
 
-resource "aws_api_gateway_deployment" "this" {
-  depends_on  = [aws_api_gateway_integration.catsweb, aws_api_gateway_integration.catsbackend]
-  rest_api_id = aws_api_gateway_rest_api.this.id
-  stage_name  = "v1"
+hcl
+Copier
+Modifier
+variable "nlb_dns_name" {
+  description = "NLB DNS name"
+  type        = string
 }
+✅ 3. Dans le main.tf global (appel du module)
+Tu gardes comme ça :
 
-########################################
-# modules/api_gateway_rest/outputs.tf
-########################################
-
-output "rest_api_id" {
-  value = aws_api_gateway_rest_api.this.id
-}
-
-output "rest_api_url" {
-  value = "https://${aws_api_gateway_rest_api.this.id}.execute-api.${data.aws_region.current.name}.amazonaws.com/v1"
-}
-
-########################################
-# usage depuis root module
-########################################
-
+hcl
+Copier
+Modifier
 module "api_gateway_rest" {
-  source             = "./modules/api_gateway_rest"
-  name_prefix        = local.name_prefix
-  vpc_link_id        = module.vpc_link.id
-  catsweb_tg_arn     = module.nlb.tg_arn_web
-  catsbackend_tg_arn = module.nlb.tg_arn_backend
-  common_tags        = local.standard_tags
-}
-
-output "api_url" {
-  value = module.api_gateway_rest.rest_api_url
-}
-
-output "cats_api_gateway_urls" {
-  description = "API Gateway URLs for cats-web and cats-backend"
-  value = {
-    cats_web     = "${module.api_gateway_rest.rest_api_url}/catsweb"
-    cats_backend = "${module.api_gateway_rest.rest_api_url}/catsbackend"
+  source               = "./modules/api_gateway_rest"
+  name_prefix          = "${var.entity}-${var.application}-${var.environment}-front-api-gateway"
+  vpc_link_id          = module.vpc_link_cats.vpc_link_id
+  catsweb_tg_arn       = module.nlb_cats_front.tg_web_arn
+  catsbackend_tg_arn   = module.nlb_cats_front.tg_backend_arn
+  environment          = var.environment
+  common_tags          = local.standard_tags
+  nlb_dns_name         = module.nlb_cats_front.dns_name
+  tags = {
+    "Role" = "CATS-API-GATEWAY-REST"
   }
 }
+✅ 4. Dans le module NLB (modules/nlb/outputs.tf)
+Si tu n’as pas encore cet output :
+
+hcl
+Copier
+Modifier
+output "dns_name" {
+  value = aws_lb.nlb_cats.dns_name
+}
+✅ 5. Vérifie le NLB (ce que tu as déjà fait)
+Tu dois avoir :
+
+Listener TCP:8080 → TG web (port 8080)
+
+Listener TCP:8081 → TG backend (port 8081)
+
+Ça permet de router dynamiquement selon le listener (et donc la route).
+
+✅ Résultat attendu
+
+https://.../catsweb/{proxy+} ira sur le port 8080 via le listener 8080
+
+https://.../catsbackend/{proxy+} ira sur le port 8081 via le listener 8081
+
+Dis-moi si tu veux aussi un refactor de ton module nlb ou un contrôle complet de la cohérence finale.
