@@ -114,4 +114,11 @@ module "api_gateway_rest" {
 output "api_url" {
   value = module.api_gateway_rest.rest_api_url
 }
-s
+
+output "cats_api_gateway_urls" {
+  description = "API Gateway URLs for cats-web and cats-backend"
+  value = {
+    cats_web     = "${module.api_gateway_rest.rest_api_url}/catsweb"
+    cats_backend = "${module.api_gateway_rest.rest_api_url}/catsbackend"
+  }
+}
