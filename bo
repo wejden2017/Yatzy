@@ -1,33 +1,117 @@
-#!/bin/bash
+########################################
+# modules/api_gateway_rest/variables.tf
+########################################
 
-# Installer socat
-yum update -y
-yum install -y socat
+variable "name_prefix" { type = string }
+variable "vpc_link_id" { type = string }
+variable "catsweb_tg_arn" { type = string }
+variable "catsbackend_tg_arn" { type = string }
+variable "common_tags" { type = map(string) }
 
-# Créer des fichiers de réponse HTTP simples
-cat > /tmp/response_8080.http << 'INNEREOF'
-HTTP/1.1 200 OK
-Content-Type: text/html
+######################################
+# modules/api_gateway_rest/main.tf
+######################################
 
-<html><body><h1>Service 1 - Port 8080</h1></body></html>
-INNEREOF
+resource "aws_api_gateway_rest_api" "this" {
+  name        = "${var.name_prefix}-api"
+  description = "API Gateway for CATS Web and Backend"
+  tags        = var.common_tags
+}
 
-cat > /tmp/response_8081.http << 'INNEREOF'
-HTTP/1.1 200 OK
-Content-Type: text/html
+resource "aws_api_gateway_resource" "catsweb" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
+  path_part   = "catsweb"
+}
 
-<html><body><h1>Service 2 - Port 8081</h1></body></html>
-INNEREOF
+resource "aws_api_gateway_resource" "catsweb_proxy" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.catsweb.id
+  path_part   = "{proxy+}"
+}
 
-# Créer un répertoire pour les logs avec les bonnes permissions
-mkdir -p /tmp/logs
-chmod 777 /tmp/logs
+resource "aws_api_gateway_method" "catsweb_any" {
+  rest_api_id   = aws_api_gateway_rest_api.this.id
+  resource_id   = aws_api_gateway_resource.catsweb_proxy.id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
 
-# Démarrer socat pour les deux ports
-nohup socat TCP-LISTEN:8080,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8080.http" > /tmp/logs/socat_8080.log 2>&1 &
-nohup socat TCP-LISTEN:8081,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_8081.http" > /tmp/logs/socat_8081.log 2>&1 &
+resource "aws_api_gateway_integration" "catsweb" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  resource_id = aws_api_gateway_resource.catsweb_proxy.id
+  http_method = aws_api_gateway_method.catsweb_any.http_method
 
-echo "Serveurs web démarrés sur les ports 8080 et 8081"
+  integration_http_method = "ANY"
+  type                    = "HTTP_PROXY"
+  uri                     = "http://${var.catsweb_tg_arn}/{proxy}"
+  connection_type         = "VPC_LINK"
+  connection_id           = var.vpc_link_id
+}
 
-# Vérifier que les serveurs sont bien en écoute
-ss -tulpn | grep -E '8080|8081'
+resource "aws_api_gateway_resource" "catsbackend" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
+  path_part   = "catsbackend"
+}
+
+resource "aws_api_gateway_resource" "catsbackend_proxy" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_resource.catsbackend.id
+  path_part   = "{proxy+}"
+}
+
+resource "aws_api_gateway_method" "catsbackend_any" {
+  rest_api_id   = aws_api_gateway_rest_api.this.id
+  resource_id   = aws_api_gateway_resource.catsbackend_proxy.id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "catsbackend" {
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  resource_id = aws_api_gateway_resource.catsbackend_proxy.id
+  http_method = aws_api_gateway_method.catsbackend_any.http_method
+
+  integration_http_method = "ANY"
+  type                    = "HTTP_PROXY"
+  uri                     = "http://${var.catsbackend_tg_arn}/{proxy}"
+  connection_type         = "VPC_LINK"
+  connection_id           = var.vpc_link_id
+}
+
+resource "aws_api_gateway_deployment" "this" {
+  depends_on  = [aws_api_gateway_integration.catsweb, aws_api_gateway_integration.catsbackend]
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  stage_name  = "v1"
+}
+
+########################################
+# modules/api_gateway_rest/outputs.tf
+########################################
+
+output "rest_api_id" {
+  value = aws_api_gateway_rest_api.this.id
+}
+
+output "rest_api_url" {
+  value = "https://${aws_api_gateway_rest_api.this.id}.execute-api.${data.aws_region.current.name}.amazonaws.com/v1"
+}
+
+########################################
+# usage depuis root module
+########################################
+
+module "api_gateway_rest" {
+  source             = "./modules/api_gateway_rest"
+  name_prefix        = local.name_prefix
+  vpc_link_id        = module.vpc_link.id
+  catsweb_tg_arn     = module.nlb.tg_arn_web
+  catsbackend_tg_arn = module.nlb.tg_arn_backend
+  common_tags        = local.standard_tags
+}
+
+output "api_url" {
+  value = module.api_gateway_rest.rest_api_url
+}
+s
