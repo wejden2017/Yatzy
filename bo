@@ -1,57 +1,56 @@
 #!/bin/bash
 
-# Arrêter tous les services précédents
-sudo systemctl stop httpd-8080.service httpd-8081.service 
-sudo systemctl disable httpd-8080.service httpd-8081.service
+# Installer les outils nécessaires
+sudo yum install -y socat nc
 
-# S'assurer qu'Apache est installé et arrêter le service par défaut
-sudo yum install -y httpd
+# Arrêter Apache s'il est en cours d'exécution
 sudo systemctl stop httpd
 
-# Créer des pages HTML simples dans les répertoires par défaut
-sudo mkdir -p /var/www/html/port-8080
-sudo mkdir -p /var/www/html/port-8081
-echo "<html><body><h1>Service 1 - Port 8080</h1></body></html>" | sudo tee /var/www/html/port-8080/index.html
-echo "<html><body><h1>Service 2 - Port 8081</h1></body></html>" | sudo tee /var/www/html/port-8081/index.html
+PORT1=8080
+PORT2=8081
 
-# Configurer Apache pour écouter sur les ports 8080 et 8081
-sudo cp /etc/httpd/conf/httpd.conf /etc/httpd/conf/httpd.conf.backup
-sudo sed -i 's/Listen 80/Listen 0.0.0.0:8080\nListen 0.0.0.0:8081/' /etc/httpd/conf/httpd.conf
+# Créer des réponses HTTP pour les deux services
+cat > /tmp/response_$PORT1.http << EOF
+HTTP/1.1 200 OK
+Content-Type: text/html
 
-# Créer des VirtualHosts pour les deux ports
-cat << 'EOF' | sudo tee /etc/httpd/conf.d/vhosts.conf
-<VirtualHost *:8080>
-    DocumentRoot "/var/www/html/port-8080"
-    <Directory "/var/www/html/port-8080">
-        AllowOverride None
-        Require all granted
-    </Directory>
-</VirtualHost>
-
-<VirtualHost *:8081>
-    DocumentRoot "/var/www/html/port-8081"
-    <Directory "/var/www/html/port-8081">
-        AllowOverride None
-        Require all granted
-    </Directory>
-</VirtualHost>
+<html><body><h1>Service 1 - Port $PORT1</h1></body></html>
 EOF
 
-# Vérifier la configuration
-sudo httpd -t
+cat > /tmp/response_$PORT2.http << EOF
+HTTP/1.1 200 OK
+Content-Type: text/html
 
-# Démarrer Apache
-sudo systemctl start httpd
+<html><body><h1>Service 2 - Port $PORT2</h1></body></html>
+EOF
 
-# Vérifier le statut
-sudo systemctl status httpd
+# Tuer les processus netcat précédents s'ils existent
+sudo pkill -f "nc -l.*$PORT1" || true
+sudo pkill -f "nc -l.*$PORT2" || true
 
-# Vérifier si les ports sont ouverts
-sudo ss -tulpn | grep httpd
+# Lancer netcat en arrière-plan pour le premier port
+echo "Démarrage du serveur sur le port $PORT1"
+while true; do sudo nc -l $PORT1 < /tmp/response_$PORT1.http; done &
+NC_PID_1=$!
+
+# Lancer netcat en arrière-plan pour le deuxième port
+echo "Démarrage du serveur sur le port $PORT2"
+while true; do sudo nc -l $PORT2 < /tmp/response_$PORT2.http; done &
+NC_PID_2=$!
+
+# Attendre quelques secondes pour que les serveurs démarrent
+sleep 2
+
+# Vérifier les ports ouverts
+echo "Ports en écoute :"
+sudo ss -tulpn | grep -E "$PORT1|$PORT2"
 
 # Tester l'accès aux services
 echo "Test des services avec curl :"
-echo "Test du port 8080 :"
-curl -v http://localhost:8080
-echo "Test du port 8081 :"
-curl -v http://localhost:8081
+echo "Test du port $PORT1 :"
+curl -v http://localhost:$PORT1
+echo "Test du port $PORT2 :"
+curl -v http://localhost:$PORT2
+
+echo "Serveurs lancés avec les PIDs $NC_PID_1 et $NC_PID_2"
+echo "Pour arrêter les serveurs, exécutez : sudo pkill -f 'nc -l.*$PORT1'; sudo pkill -f 'nc -l.*$PORT2'"
