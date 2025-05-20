@@ -16,3 +16,4 @@ module "nlb_cats_front" {
   }
 }
 
+curl -v http://lch-cats-dev-cats-nlb-6653d6d6ea2ac097.elb.eu-west-2.amazonaws.com/catsweb
