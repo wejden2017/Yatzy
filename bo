@@ -1,13 +1,15 @@
-module "api_gateway_http" {
-  source              = "./modules/api_gateway_http"
-  name_prefix         = "${var.entity}-${var.application}-${var.environment}-front-api-gateway"
-  vpc_link_id         = module.vpc_link_cats.http_vpc_link_id
-  web_listener_arn    = module.nlb_cats_front.web_listener_arn
-  backend_listener_arn = module.nlb_cats_front.backend_listener_arn
-  catsweb_tg_arn      = module.nlb_cats_front.tg_web_arn         # Gardez cette ligne
-  catsbackend_tg_arn  = module.nlb_cats_front.tg_backend_arn     # Gardez cette ligne
-  nlb_dns_name        = module.nlb_cats_front.nlb_dns_name
-  environment         = var.environment
-  common_tags         = local.standard_tags
-  tags                = { Role = "CATS-API-GATEWAY-HTTP" }
-}
+# 1. Installer Apache
+sudo yum install -y httpd
+
+# 2. Modifier le port (on va écouter sur 9001)
+sudo sed -i 's/^Listen 80/Listen 9001/' /etc/httpd/conf/httpd.conf
+
+# 3. Ajouter un fichier HTML simulé
+echo "<h1>Swagger App1 simulé</h1>" | sudo tee /var/www/html/index.html
+
+# 4. Lancer Apache
+sudo systemctl start httpd
+sudo systemctl enable httpd
+
+# 5. Vérifier
+curl http://localhost:9001/
