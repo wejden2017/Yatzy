@@ -1,1 +1,32 @@
+output "nlb_arn" {
+  description = "ARN of the Network Load Balancer"
+  value       = aws_lb.nlb_cats.arn
+}
+
+output "nlb_dns_name" {
+  description = "DNS name of the NLB (used by VPC Link and for direct curl tests)"
+  value       = aws_lb.nlb_cats.dns_name
+}
+
+output "tg_cats_web_arn" {
+  description = "ARN of Target Group for catsweb"
+  value       = aws_lb_target_group.tg_cats_web.arn
+}
+
+output "tg_cats_backend_arn" {
+  description = "ARN of Target Group for catsbackend"
+  value       = aws_lb_target_group.tg_cats_backend.arn
+}
+
+output "tg_apps_arns" {
+  description = "Map of ARNs of Target Groups for each Swagger app (app1 to app6)"
+  value = {
+    for app, tg in aws_lb_target_group.tg_apps : app => tg.arn
+  }
+}
+
+output "http_listener_arn" {
+  description = "ARN of the main HTTP listener"
+  value       = aws_lb_listener.main_http.arn
+}
 
