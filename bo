@@ -13,3 +13,6 @@ sudo systemctl enable httpd
 
 # 5. Vérifier
 curl http://localhost:9001/
+
+sudo systemctl status httpd.service -l
+sudo journalctl -xe
