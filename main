@@ -1,1 +1,18 @@
+module "nlb_cats_front" {
+  source       = "./modules/nlb"
+  entity       = var.entity
+  application  = var.application
+  environment  = var.environment
+
+  vpc_id       = data.aws_vpc.cats_vpc.id
+  subnet_ids   = data.aws_subnets.ec2_subnets.ids
+
+  front_instance_id    = module.ec2_cats_front.instance_id       # <- EC2-front
+  services_instance_id = module.ec2_cats_services.instance_id    # <- EC2-services
+
+  common_tags  = local.standard_tags
+  tags = {
+    "Role" = "CATS-NETWORK-LOAD-BALANCER"
+  }
+}
 
