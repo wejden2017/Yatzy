@@ -1,0 +1,44 @@
+variable "entity" {
+  type        = string
+  description = "Entity name (ex: legal, finance, etc.)"
+}
+
+variable "application" {
+  type        = string
+  description = "Application name (ex: cats, myapp)"
+}
+
+variable "environment" {
+  type        = string
+  description = "Environment name (ex: dev, poc, uat)"
+}
+
+variable "vpc_id" {
+  type        = string
+  description = "VPC ID where NLB and Target Groups will be created"
+}
+
+variable "subnet_ids" {
+  type        = list(string)
+  description = "List of private subnet IDs for the NLB"
+}
+
+variable "front_instance_id" {
+  type        = string
+  description = "ID of the EC2 instance hosting catsweb and catsbackend"
+}
+
+variable "services_instance_id" {
+  type        = string
+  description = "ID of the EC2 instance hosting Swagger UIs (app1–app6)"
+}
+
+variable "tags" {
+  type        = map(string)
+  description = "Tags to apply to all resources"
+}
+
+variable "common_tags" {
+  type        = map(any)
+  description = "Common tags shared across modules"
+}
