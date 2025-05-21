@@ -3,12 +3,14 @@ module "api_gateway_rest_cats" {
   entity      = var.entity
   application = var.application
   environment = var.environment
-  vpc_link_id = module.vpc_link_cats.vpc_link_id
   tags        = local.standard_tags
 
-  path_map = {
-    catsweb     = "10.105.57.176:8080"  # EC2 private IP:PORT
-    catsbackend = "10.105.57.176:8081"
-    concorde    = "10.105.57.179:9001"
-  }
+  vpc_link_id   = module.vpc_link_cats.vpc_link_id
+  nlb_dns_name  = module.nlb_cats_front.nlb_dns_name
+
+  path_list = [
+    "catsweb",
+    "catsbackend",
+    "concorde"
+  ]
 }
