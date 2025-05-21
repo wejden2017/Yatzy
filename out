@@ -1,7 +1,9 @@
 output "rest_api_id" {
-  value = aws_api_gateway_rest_api.this.id
+  description = "ID of the REST API Gateway"
+  value       = aws_api_gateway_rest_api.this.id
 }
 
 output "rest_api_url" {
-  value = "https://${aws_api_gateway_rest_api.this.id}.execute-api.${var.region}.amazonaws.com"
+  description = "Private base URL of the REST API"
+  value       = "https://${aws_api_gateway_rest_api.this.id}.execute-api.${var.region}.amazonaws.com"
 }
