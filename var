@@ -1,24 +1,14 @@
-variable "nlb_arn" {
-  description = "ARN of the Network Load Balancer for VPC Link"
-  type        = string
-}
+variable "entity"       { type = string }
+variable "application"  { type = string }
+variable "environment"  { type = string }
+variable "vpc_link_id"  { type = string }
 
-variable "entity" {
-  type        = string
-  description = "Entity name used in naming"
-}
-
-variable "application" {
-  type        = string
-  description = "Application name used in naming"
-}
-
-variable "environment" {
-  type        = string
-  description = "Deployment environment (dev, poc, etc.)"
+variable "path_map" {
+  description = "Map of path → target group DNS"
+  type        = map(string)
 }
 
 variable "tags" {
+  description = "Standard resource tags"
   type        = map(string)
-  description = "Common tags for resources"
 }
