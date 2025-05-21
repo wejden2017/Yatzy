@@ -1,9 +1,8 @@
-output "rest_api_id" {
-  description = "ID of the REST API Gateway"
-  value       = aws_api_gateway_rest_api.this.id
-}
-
-output "rest_api_url" {
-  description = "Private base URL of the REST API"
-  value       = "https://${aws_api_gateway_rest_api.this.id}.execute-api.${var.region}.amazonaws.com"
+output "cats_api_gateway_urls" {
+  description = "Exposed API Gateway URLs for all CATS services"
+  value = {
+    catsweb     = "${module.api_gateway_rest_cats.rest_api_url}/catsweb"
+    catsbackend = "${module.api_gateway_rest_cats.rest_api_url}/catsbackend"
+    concorde    = "${module.api_gateway_rest_cats.rest_api_url}/concorde"
+  }
 }
