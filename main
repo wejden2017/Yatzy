@@ -1,20 +1,104 @@
-module "nlb_cats_front" {
-  source       = "./modules/nlb"
-  entity       = var.entity
-  application  = var.application
-  environment  = var.environment
+resource "aws_lb" "nlb_cats" {
+  name                             = "${var.entity}-${var.application}-${var.environment}-nlb"
+  internal                         = true
+  load_balancer_type               = "network"
+  subnets                          = var.subnet_ids
+  enable_cross_zone_load_balancing = true
+  tags                             = var.tags
+}
 
-  vpc_id       = data.aws_vpc.cats_vpc.id
-  subnet_ids   = data.aws_subnets.ec2_subnets.ids
+# CATS-WEB
+resource "aws_lb_target_group" "tg_cats_web" {
+  name        = "${var.entity}-${var.application}-${var.environment}-cats-web-tg"
+  port        = 8080
+  protocol    = "TCP"
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+  tags        = var.tags
 
-  front_instance_id    = module.ec2_cats_front.instance_id       # <- EC2-front
-  services_instance_id = module.ec2_cats_services.instance_id    # <- EC2-services
-
-  common_tags  = local.standard_tags
-  tags = {
-    "Role" = "CATS-NETWORK-LOAD-BALANCER"
+  health_check {
+    protocol            = "TCP"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
   }
 }
 
-env -u http_proxy -u https_proxy curl -v http://lch-cats-dev-cats-nlb-<...>.elb.eu-west-2.amazonaws.com/catsweb
+# CATS-BACKEND
+resource "aws_lb_target_group" "tg_cats_backend" {
+  name        = "${var.entity}-${var.application}-${var.environment}-cats-backend-tg"
+  port        = 8081
+  protocol    = "TCP"
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+  tags        = var.tags
+
+  health_check {
+    protocol            = "TCP"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+  }
+}
+
+resource "aws_lb_target_group_attachment" "tg_attach_web" {
+  target_group_arn = aws_lb_target_group.tg_cats_web.arn
+  target_id        = var.front_instance_id
+  port             = 8080
+}
+
+resource "aws_lb_target_group_attachment" "tg_attach_backend" {
+  target_group_arn = aws_lb_target_group.tg_cats_backend.arn
+  target_id        = var.front_instance_id
+  port             = 8081
+}
+
+# APPS SWAGGER
+locals {
+  swagger_apps = {
+    concorde       = 9001
+    natop-manager  = 9002
+    swift          = 9003
+  }
+}
+
+resource "aws_lb_target_group" "tg_apps" {
+  for_each    = local.swagger_apps
+  name        = "${var.entity}-${var.application}-${var.environment}-${each.key}-tg"
+  port        = each.value
+  protocol    = "TCP"
+  vpc_id      = var.vpc_id
+  target_type = "instance"
+  tags        = var.tags
+
+  health_check {
+    protocol            = "TCP"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 3
+  }
+}
+
+resource "aws_lb_target_group_attachment" "tg_attach_apps" {
+  for_each         = local.swagger_apps
+  target_group_arn = aws_lb_target_group.tg_apps[each.key].arn
+  target_id        = var.services_instance_id
+  port             = each.value
+}
+
+# SINGLE TCP LISTENER
+resource "aws_lb_listener" "main_tcp" {
+  load_balancer_arn = aws_lb.nlb_cats.arn
+  port              = 80
+  protocol          = "TCP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.tg_cats_web.arn
+  }
+}
+
 
