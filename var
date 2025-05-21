@@ -1,10 +1,6 @@
-variable "vpc_id" {
-  description = "VPC ID for the VPC Link"
-  type        = string
+variable "exposed_services" {
+  description = "Map of exposed services and their corresponding ports"
+  type        = map(number)
 }
 
-variable "subnet_ids" {
-  description = "Subnet IDs for the VPC Link"
-  type        = list(string)
-}
 
