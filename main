@@ -1,33 +1,17 @@
-#!/bin/bash
-yum update -y
-yum install -y socat
+resource "aws_lb_listener_rule" "apps_rules" {
+  for_each = local.swagger_apps
 
-# Swagger Concorde simulation
-cat > /tmp/response_9001.http << 'EOF'
-HTTP/1.1 200 OK
-Content-Type: text/html
+  listener_arn = aws_lb_listener.main_tcp.arn
+  priority     = 30 + index(keys(local.swagger_apps), each.key)
 
-<html><body><h1>Swagger Concorde - Port 9001</h1></body></html>
-EOF
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.tg_apps[each.key].arn
+  }
 
-# Swagger Natop Manager simulation
-cat > /tmp/response_9002.http << 'EOF'
-HTTP/1.1 200 OK
-Content-Type: text/html
-
-<html><body><h1>Swagger Natop Manager - Port 9002</h1></body></html>
-EOF
-
-mkdir -p /tmp/logs
-chmod 777 /tmp/logs
-
-# Launching simulated services
-nohup socat TCP-LISTEN:9001,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_9001.http" > /tmp/logs/socat_9001.log 2>&1 &
-nohup socat TCP-LISTEN:9002,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_9002.http" > /tmp/logs/socat_9002.log 2>&1 &
-
-# Display ports
-echo "Services running on ports 9001 and 9002"
-
-# Confirm ports
-ss -tulnp | grep -E '9001|9002'
-
+  condition {
+    path_pattern {
+      values = ["/${each.key}", "/${each.key}/*"]
+    }
+  }
+}
