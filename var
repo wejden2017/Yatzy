@@ -1,44 +1,24 @@
+variable "nlb_arn" {
+  description = "ARN of the Network Load Balancer for VPC Link"
+  type        = string
+}
+
 variable "entity" {
   type        = string
-  description = "Entity name used in resource naming (e.g. lch)"
+  description = "Entity name used in naming"
 }
 
 variable "application" {
   type        = string
-  description = "Application name used in resource naming (e.g. cats)"
+  description = "Application name used in naming"
 }
 
 variable "environment" {
   type        = string
-  description = "Deployment environment (e.g. dev, poc, uat)"
-}
-
-variable "vpc_id" {
-  type        = string
-  description = "ID of the VPC where the NLB and target groups are deployed"
-}
-
-variable "subnet_ids" {
-  type        = list(string)
-  description = "List of private subnet IDs for the NLB"
-}
-
-variable "front_instance_id" {
-  type        = string
-  description = "ID of the EC2 instance hosting catsweb and catsbackend"
-}
-
-variable "services_instance_id" {
-  type        = string
-  description = "ID of the EC2 instance hosting Swagger apps (app1–app6)"
+  description = "Deployment environment (dev, poc, etc.)"
 }
 
 variable "tags" {
   type        = map(string)
-  description = "Map of tags to apply to the resources"
-}
-
-variable "common_tags" {
-  type        = map(any)
-  description = "Standardized tags shared across all modules"
+  description = "Common tags for resources"
 }
