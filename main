@@ -101,4 +101,35 @@ resource "aws_lb_listener" "main_tcp" {
   }
 }
 
+resource "aws_lb_listener_rule" "catsbackend_rule" {
+  listener_arn = aws_lb_listener.main_tcp.arn
+  priority     = 10
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.tg_cats_backend.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/catsbackend", "/catsbackend/*"]
+    }
+  }
+}
+
+resource "aws_lb_listener_rule" "catsweb_rule" {
+  listener_arn = aws_lb_listener.main_tcp.arn
+  priority     = 20
+
+  action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.tg_cats_web.arn
+  }
+
+  condition {
+    path_pattern {
+      values = ["/catsweb", "/catsweb/*"]
+    }
+  }
+}
 
