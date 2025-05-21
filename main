@@ -1,37 +1,24 @@
-resource "aws_api_gateway_rest_api" "this" {
-  name        = "${var.entity}-${var.application}-${var.environment}-api"
-  description = "Private REST API for ${var.application}"
-  endpoint_configuration {
-    types = ["PRIVATE"]
-  }
-  tags = var.tags
-}
-
-resource "aws_api_gateway_resource" "paths" {
-  for_each    = toset(var.path_list)
+resource "aws_api_gateway_resource" "catsweb" {
   rest_api_id = aws_api_gateway_rest_api.this.id
   parent_id   = aws_api_gateway_rest_api.this.root_resource_id
-  path_part   = each.key
+  path_part   = "catsweb"
 }
 
-resource "aws_api_gateway_method" "any_method" {
-  for_each           = aws_api_gateway_resource.paths
-  rest_api_id        = aws_api_gateway_rest_api.this.id
-  resource_id        = each.value.id
-  http_method        = "ANY"
-  authorization      = "NONE"
-  api_key_required   = false
+resource "aws_api_gateway_method" "catsweb" {
+  rest_api_id   = aws_api_gateway_rest_api.this.id
+  resource_id   = aws_api_gateway_resource.catsweb.id
+  http_method   = "ANY"
+  authorization = "NONE"
 }
 
-resource "aws_api_gateway_integration" "integration" {
-  for_each                 = aws_api_gateway_method.any_method
-  rest_api_id              = aws_api_gateway_rest_api.this.id
-  resource_id              = each.value.resource_id
-  http_method              = each.value.http_method
-  integration_http_method  = "ANY"
-  type                     = "HTTP_PROXY"
-  uri                      = "http://${var.nlb_dns_name}/${each.key}"
-  connection_type          = "VPC_LINK"
-  connection_id            = var.vpc_link_id
-  passthrough_behavior     = "WHEN_NO_MATCH"
+resource "aws_api_gateway_integration" "catsweb" {
+  rest_api_id             = aws_api_gateway_rest_api.this.id
+  resource_id             = aws_api_gateway_resource.catsweb.id
+  http_method             = aws_api_gateway_method.catsweb.http_method
+  integration_http_method = "ANY"
+  type                    = "HTTP_PROXY"
+  uri                     = "http://${var.nlb_dns_name}:8080"
+  connection_type         = "VPC_LINK"
+  connection_id           = var.vpc_link_id
+  passthrough_behavior    = "WHEN_NO_MATCH"
 }
