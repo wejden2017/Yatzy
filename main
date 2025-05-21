@@ -1,32 +1,7 @@
-resource "aws_lb_listener" "catsweb" {
-  load_balancer_arn = aws_lb.nlb_cats.arn
-  port              = 8080
-  protocol          = "TCP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.tg_cats_web.arn
-  }
-}
-
-resource "aws_lb_listener" "catsbackend" {
-  load_balancer_arn = aws_lb.nlb_cats.arn
-  port              = 8081
-  protocol          = "TCP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.tg_cats_backend.arn
-  }
-}
-
-resource "aws_lb_listener" "concorde" {
-  load_balancer_arn = aws_lb.nlb_cats.arn
-  port              = 9001
-  protocol          = "TCP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.tg_apps["concorde"].arn
-  }
+module "api_gateway_rest" {
+  source            = "./modules/api_gateway_rest"
+  exposed_services  = var.exposed_services
+  vpc_link_id       = module.vpc_link.id
+  nlb_dns_name      = module.nlb.dns_name
+  ...
 }
