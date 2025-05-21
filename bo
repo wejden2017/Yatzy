@@ -1,8 +1,29 @@
-# outputs.tf
-output "tg_arns" {
-  value = { for name, tg in aws_lb_target_group.tg_apps : name => tg.arn }
+swagger_apps = {
+  catsweb     = 8080
+  catsbackend = 8081
+  concorde    = 9001
 }
 
-output "listener_arns" {
-  value = { for name, listener in aws_lb_listener.listeners : name => listener.arn }
+swagger_apps = {
+  catsweb     = 18080
+  catsbackend = 18081
+  concorde    = 19001
+}
+
+swagger_apps = {
+  catsweb     = 28080
+  catsbackend = 28081
+  concorde    = 29001
+}
+
+module "nlb" {
+  source       = "./modules/nlb"
+  swagger_apps = var.swagger_apps
+  ...
+}
+
+module "api_gateway_rest" {
+  source       = "./modules/api_gateway_rest"
+  swagger_apps = var.swagger_apps
+  ...
 }
