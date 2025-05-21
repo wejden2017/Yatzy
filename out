@@ -1,13 +1,82 @@
-output "cats_api_gateway_urls" {
-  description = "Exposed API Gateway URLs for all CATS services"
-  value = {
-    catsweb     = "${module.api_gateway_rest_cats.rest_api_url}/catsweb"
-    catsbackend = "${module.api_gateway_rest_cats.rest_api_url}/catsbackend"
-    concorde    = "${module.api_gateway_rest_cats.rest_api_url}/concorde"
-  }
+### Voici les modifications à faire pour rendre tes ports dynamiques selon l'environnement ###
+
+#######################################
+# 1. FILE: modules/api_gateway_rest/variables.tf
+#######################################
+
+variable "exposed_services" {
+  description = "Map of exposed services and their corresponding ports"
+  type        = map(number)
 }
 
+#######################################
+# 2. FILE: modules/api_gateway_rest/main.tf
+#######################################
 
-output "catsweb_url"     { value = "https://${aws_api_gateway_rest_api.this.id}.execute-api.${var.region}.amazonaws.com/catsweb" }
-output "catsbackend_url" { value = "https://${aws_api_gateway_rest_api.this.id}.execute-api.${var.region}.amazonaws.com/catsbackend" }
-output "concorde_url"    { value = "https://${aws_api_gateway_rest_api.this.id}.execute-api.${var.region}.amazonaws.com/concorde" }
+resource "aws_api_gateway_resource" "app" {
+  for_each    = var.exposed_services
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
+  path_part   = each.key
+}
+
+resource "aws_api_gateway_method" "app" {
+  for_each      = var.exposed_services
+  rest_api_id   = aws_api_gateway_rest_api.this.id
+  resource_id   = aws_api_gateway_resource.app[each.key].id
+  http_method   = "ANY"
+  authorization = "NONE"
+}
+
+resource "aws_api_gateway_integration" "app" {
+  for_each                = var.exposed_services
+  rest_api_id             = aws_api_gateway_rest_api.this.id
+  resource_id             = aws_api_gateway_resource.app[each.key].id
+  http_method             = aws_api_gateway_method.app[each.key].http_method
+  integration_http_method = "ANY"
+  type                    = "HTTP_PROXY"
+  uri                     = "http://${var.nlb_dns_name}:${each.value}"
+  connection_type         = "VPC_LINK"
+  connection_id           = var.vpc_link_id
+  passthrough_behavior    = "WHEN_NO_MATCH"
+}
+
+#######################################
+# 3. FILE: environments/dev.tfvars
+#######################################
+
+exposed_services = {
+  catsweb     = 8080
+  catsbackend = 8081
+  concorde    = 9001
+}
+
+#######################################
+# 4. FILE: environments/poc.tfvars
+#######################################
+
+exposed_services = {
+  catsweb     = 18080
+  catsbackend = 18081
+  concorde    = 19001
+}
+
+#######################################
+# 5. FILE: main.tf (racine du projet)
+#######################################
+
+module "api_gateway_rest" {
+  source            = "./modules/api_gateway_rest"
+  exposed_services  = var.exposed_services
+  vpc_link_id       = module.vpc_link.id
+  nlb_dns_name      = module.nlb.dns_name
+  # autres variables...
+}
+
+#######################################
+# 6. SUPPRIMER: modules/api_gateway_rest/locals.tf si il contient exposed_services
+#######################################
+# Supprimer le bloc suivant s'il existe :
+# locals {
+#   exposed_services = {...}
+# }
