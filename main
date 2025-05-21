@@ -1,6 +1,33 @@
-variable "name_prefix" {
-  type        = string
-  description = "Nom stable utilisé comme préfixe pour toutes les ressources de l'EC2 (par exemple: lch-cats-dev-services)"
-}
-name_prefix = "${var.entity}-${var.application}-${var.environment}-services"
-name_prefix = "${var.entity}-${var.application}-${var.environment}-database"
+#!/bin/bash
+yum update -y
+yum install -y socat
+
+# Swagger Concorde simulation
+cat > /tmp/response_9001.http << 'EOF'
+HTTP/1.1 200 OK
+Content-Type: text/html
+
+<html><body><h1>Swagger Concorde - Port 9001</h1></body></html>
+EOF
+
+# Swagger Natop Manager simulation
+cat > /tmp/response_9002.http << 'EOF'
+HTTP/1.1 200 OK
+Content-Type: text/html
+
+<html><body><h1>Swagger Natop Manager - Port 9002</h1></body></html>
+EOF
+
+mkdir -p /tmp/logs
+chmod 777 /tmp/logs
+
+# Launching simulated services
+nohup socat TCP-LISTEN:9001,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_9001.http" > /tmp/logs/socat_9001.log 2>&1 &
+nohup socat TCP-LISTEN:9002,crlf,reuseaddr,fork SYSTEM:"cat /tmp/response_9002.http" > /tmp/logs/socat_9002.log 2>&1 &
+
+# Display ports
+echo "Services running on ports 9001 and 9002"
+
+# Confirm ports
+ss -tulnp | grep -E '9001|9002'
+
