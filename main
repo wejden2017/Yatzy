@@ -1,54 +1,9 @@
-Tu dois ajouter la variable ami_id dans ton module modules/active_directory (le même principe que ce que tu as fait pour ec2/instances).
-
-🔧 Étape 1 — Ajoute dans modules/active_directory/variables.tf :
-h
-Copier
-Modifier
 variable "ami_id" {
-  description = "AMI ID to use for the EC2 instance"
   type        = string
+  description = "AMI ID to launch"
 }
-Et :
 
-hcl
-Copier
-Modifier
 variable "ami_name" {
-  description = "Logical name or tag for the AMI used"
   type        = string
-}
-🔧 Étape 2 — Dans modules/active_directory/main.tf (ou instance.tf)
-Remplace :
-
-hcl
-Copier
-Modifier
-ami = data.aws_ami.filtered.id
-🟢 Par :
-
-hcl
-Copier
-Modifier
-ami = var.ami_id
-Et dans les tags (si tu as ceci) :
-
-hcl
-Copier
-Modifier
-"AMI" = data.aws_ami.filtered.name
-🟢 Remplace par :
-
-hcl
-Copier
-Modifier
-"AMI" = var.ami_name
-🔧 Étape 3 — Ton appel de module (main.tf) devient parfaitement correct :
-hcl
-Copier
-Modifier
-module "ec2_active_directory" {
-  source   = "./modules/active_directory"
-  ami_id   = var.ami_ids.windows_server_2019
-  ami_name = "windows_server_2019"
-  ...
+  description = "Logical name to tag for traceability"
 }
