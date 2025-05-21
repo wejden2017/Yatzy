@@ -1,6 +1,7 @@
-variable "exposed_services" {
-  description = "Map of exposed services and their corresponding ports"
-  type        = map(number)
+variable "app_targets" {
+  description = "Map associant chaque service à l'instance EC2 cible"
+  type        = map(string)
 }
+
 
 
