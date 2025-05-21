@@ -4,29 +4,30 @@ output "nlb_arn" {
 }
 
 output "nlb_dns_name" {
-  description = "DNS name of the NLB (used by VPC Link and for direct curl tests)"
+  description = "DNS name of the NLB (used by API Gateway via VPC Link)"
   value       = aws_lb.nlb_cats.dns_name
 }
 
 output "tg_cats_web_arn" {
-  description = "ARN of Target Group for catsweb"
+  description = "ARN of the Target Group for catsweb (port 8080)"
   value       = aws_lb_target_group.tg_cats_web.arn
 }
 
 output "tg_cats_backend_arn" {
-  description = "ARN of Target Group for catsbackend"
+  description = "ARN of the Target Group for catsbackend (port 8081)"
   value       = aws_lb_target_group.tg_cats_backend.arn
 }
 
-output "tg_apps_arns" {
-  description = "Map of ARNs of Target Groups for each Swagger app (app1 to app6)"
+output "tg_swagger_apps_arns" {
+  description = "Map of ARNs of the Swagger app target groups (9001-9003)"
   value = {
     for app, tg in aws_lb_target_group.tg_apps : app => tg.arn
   }
 }
 
-output "http_listener_arn" {
-  description = "ARN of the main HTTP listener"
-  value       = aws_lb_listener.main_http.arn
+output "main_tcp_listener_arn" {
+  description = "ARN of the main TCP listener on port 80"
+  value       = aws_lb_listener.main_tcp.arn
 }
+
 
