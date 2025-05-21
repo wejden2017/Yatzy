@@ -1,9 +1,11 @@
-variable "ami_id" {
-  type        = string
-  description = "AMI ID to launch"
-}
+resource "aws_api_gateway_vpc_link" "rest_vpc_link" {
+  name        = "${var.entity}-${var.application}-${var.environment}-vpc-link"
+  target_arns = [var.nlb_arn]  # 👈 passé en variable depuis ton module NLB
 
-variable "ami_name" {
-  type        = string
-  description = "Logical name to tag for traceability"
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.entity}-${var.application}-${var.environment}-vpc-link"
+    }
+  )
 }
