@@ -1,63 +1,6 @@
-resource "aws_cloudwatch_event_rule" "start_instance" {
-  count                = var.enable_schedule ? 1 : 0
-  name                 = "${var.name_prefix}-start-instance"
-  description          = "Rule to start instance ${var.name_prefix}"
-  schedule_expression  = local.start_instance
-
-  tags = merge(
-    var.standard_tags
-  )
+variable "name_prefix" {
+  type        = string
+  description = "Nom stable utilisé comme préfixe pour toutes les ressources de l'EC2 (par exemple: lch-cats-dev-services)"
 }
-
-resource "aws_cloudwatch_event_rule" "stop_instance" {
-  count                = var.enable_schedule ? 1 : 0
-  name                 = "${var.name_prefix}-stop-instance"
-  description          = "Rule to stop instance ${var.name_prefix}"
-  schedule_expression  = local.stop_instance
-
-  tags = merge(
-    var.standard_tags
-  )
-}
-
-resource "aws_cloudwatch_event_target" "start_target" {
-  count     = var.enable_schedule ? 1 : 0
-  arn       = var.lambda_function_arn
-  rule      = aws_cloudwatch_event_rule.start_instance[count.index].name
-  target_id = "${var.name_prefix}-start-target"
-
-  input = jsonencode({
-    instance_id = aws_instance.this.id,
-    action      = "start"
-  })
-}
-
-resource "aws_cloudwatch_event_target" "stop_target" {
-  count     = var.enable_schedule ? 1 : 0
-  arn       = var.lambda_function_arn
-  rule      = aws_cloudwatch_event_rule.stop_instance[count.index].name
-  target_id = "${var.name_prefix}-stop-target"
-
-  input = jsonencode({
-    instance_id = aws_instance.this.id,
-    action      = "stop"
-  })
-}
-
-resource "aws_lambda_permission" "allow_cloudwatch_start" {
-  count         = var.enable_schedule ? 1 : 0
-  statement_id  = "AllowExecutionFromCloudWatchStart-${var.name_prefix}"
-  action        = "lambda:InvokeFunction"
-  function_name = var.lambda_function_arn
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.start_instance[count.index].arn
-}
-
-resource "aws_lambda_permission" "allow_cloudwatch_stop" {
-  count         = var.enable_schedule ? 1 : 0
-  statement_id  = "AllowExecutionFromCloudWatchStop-${var.name_prefix}"
-  action        = "lambda:InvokeFunction"
-  function_name = var.lambda_function_arn
-  principal     = "events.amazonaws.com"
-  source_arn    = aws_cloudwatch_event_rule.stop_instance[count.index].arn
-}
+name_prefix = "${var.entity}-${var.application}-${var.environment}-services"
+name_prefix = "${var.entity}-${var.application}-${var.environment}-database"
