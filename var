@@ -60,12 +60,18 @@ exposed_services = {
   swift         = 9003
 }
 
+# Ces outputs viennent des modules EC2 déclarés plus haut
+dependencies = {
+  front_instance_id    = module.ec2_front.instance_id
+  services_instance_id = module.ec2_services.instance_id
+}
+
 app_targets = {
-  catsweb       = "i-front-dev-id"
-  catsbackend   = "i-front-dev-id"
-  concorde      = "i-services-dev-id"
-  natop-manager = "i-services-dev-id"
-  swift         = "i-services-dev-id"
+  catsweb       = dependencies.front_instance_id
+  catsbackend   = dependencies.front_instance_id
+  concorde      = dependencies.services_instance_id
+  natop-manager = dependencies.services_instance_id
+  swift         = dependencies.services_instance_id
 }
 
 #######################################
@@ -80,17 +86,34 @@ exposed_services = {
   swift         = 19003
 }
 
+dependencies = {
+  front_instance_id    = module.ec2_front.instance_id
+  services_instance_id = module.ec2_services.instance_id
+}
+
 app_targets = {
-  catsweb       = "i-front-poc-id"
-  catsbackend   = "i-front-poc-id"
-  concorde      = "i-services-poc-id"
-  natop-manager = "i-services-poc-id"
-  swift         = "i-services-poc-id"
+  catsweb       = dependencies.front_instance_id
+  catsbackend   = dependencies.front_instance_id
+  concorde      = dependencies.services_instance_id
+  natop-manager = dependencies.services_instance_id
+  swift         = dependencies.services_instance_id
 }
 
 #######################################
 # 5. FILE: main.tf (racine du projet)
 #######################################
+
+module "ec2_front" {
+  source         = "./modules/ec2/instances"
+  name_prefix    = "${var.entity}-${var.application}-${var.environment}-front"
+  # autres variables...
+}
+
+module "ec2_services" {
+  source         = "./modules/ec2/instances"
+  name_prefix    = "${var.entity}-${var.application}-${var.environment}-services"
+  # autres variables...
+}
 
 module "api_gateway_rest" {
   source            = "./modules/api_gateway_rest"
