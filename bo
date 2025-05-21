@@ -1,8 +1,10 @@
-0-terraform-clean:
-  stage: Validation
-  script:
-    - echo "🧹 Nettoyage .terraform & fichiers obsolètes"
-    - rm -rf .terraform terraform.tfstate terraform.tfstate.backup
-    - find . -name "*.tfplan" -exec rm -f {} \;
-  tags:
-    - default
+module "vpc_link" {
+  source      = "./modules/vpc_link"
+  entity      = var.entity
+  application = var.application
+  environment = var.environment
+  tags        = local.standard_tags
+
+  nlb_arn = module.nlb_cats_front.nlb_arn
+}
+
