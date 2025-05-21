@@ -1,11 +1,37 @@
-resource "aws_api_gateway_vpc_link" "rest_vpc_link" {
-  name        = "${var.entity}-${var.application}-${var.environment}-vpc-link"
-  target_arns = [var.nlb_arn]  # 👈 passé en variable depuis ton module NLB
+resource "aws_api_gateway_rest_api" "this" {
+  name        = "${var.entity}-${var.application}-${var.environment}-api"
+  description = "REST API exposing internal services via NLB and VPC Link"
+  endpoint_configuration {
+    types = ["PRIVATE"]
+  }
+  tags = var.tags
+}
 
-  tags = merge(
-    var.tags,
-    {
-      Name = "${var.entity}-${var.application}-${var.environment}-vpc-link"
-    }
-  )
+resource "aws_api_gateway_resource" "proxy" {
+  for_each    = var.path_map
+  rest_api_id = aws_api_gateway_rest_api.this.id
+  parent_id   = aws_api_gateway_rest_api.this.root_resource_id
+  path_part   = each.key
+}
+
+resource "aws_api_gateway_method" "any_method" {
+  for_each           = var.path_map
+  rest_api_id        = aws_api_gateway_rest_api.this.id
+  resource_id        = aws_api_gateway_resource.proxy[each.key].id
+  http_method        = "ANY"
+  authorization      = "NONE"
+  api_key_required   = false
+}
+
+resource "aws_api_gateway_integration" "vpc_proxy" {
+  for_each             = var.path_map
+  rest_api_id          = aws_api_gateway_rest_api.this.id
+  resource_id          = aws_api_gateway_resource.proxy[each.key].id
+  http_method          = aws_api_gateway_method.any_method[each.key].http_method
+  integration_http_method = "ANY"
+  type                 = "HTTP_PROXY"
+  uri                  = "http://${each.value}/" # will be http://${target_group_dns}/{proxy}
+  connection_type      = "VPC_LINK"
+  connection_id        = var.vpc_link_id
+  passthrough_behavior = "WHEN_NO_MATCH"
 }
