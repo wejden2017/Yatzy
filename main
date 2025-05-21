@@ -1,135 +1,63 @@
-resource "aws_lb" "nlb_cats" {
-  name                             = "${var.entity}-${var.application}-${var.environment}-nlb"
-  internal                         = true
-  load_balancer_type               = "network"
-  subnets                          = var.subnet_ids
-  enable_cross_zone_load_balancing = true
-  tags                             = var.tags
+resource "aws_cloudwatch_event_rule" "start_instance" {
+  count                = var.enable_schedule ? 1 : 0
+  name                 = "${var.name_prefix}-start-instance"
+  description          = "Rule to start instance ${var.name_prefix}"
+  schedule_expression  = local.start_instance
+
+  tags = merge(
+    var.standard_tags
+  )
 }
 
-# CATS-WEB
-resource "aws_lb_target_group" "tg_cats_web" {
-  name        = "${var.entity}-${var.application}-${var.environment}-cats-web-tg"
-  port        = 8080
-  protocol    = "TCP"
-  vpc_id      = var.vpc_id
-  target_type = "instance"
-  tags        = var.tags
+resource "aws_cloudwatch_event_rule" "stop_instance" {
+  count                = var.enable_schedule ? 1 : 0
+  name                 = "${var.name_prefix}-stop-instance"
+  description          = "Rule to stop instance ${var.name_prefix}"
+  schedule_expression  = local.stop_instance
 
-  health_check {
-    protocol            = "TCP"
-    interval            = 30
-    timeout             = 5
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
-  }
+  tags = merge(
+    var.standard_tags
+  )
 }
 
-# CATS-BACKEND
-resource "aws_lb_target_group" "tg_cats_backend" {
-  name        = "${var.entity}-${var.application}-${var.environment}-cats-backend-tg"
-  port        = 8081
-  protocol    = "TCP"
-  vpc_id      = var.vpc_id
-  target_type = "instance"
-  tags        = var.tags
+resource "aws_cloudwatch_event_target" "start_target" {
+  count     = var.enable_schedule ? 1 : 0
+  arn       = var.lambda_function_arn
+  rule      = aws_cloudwatch_event_rule.start_instance[count.index].name
+  target_id = "${var.name_prefix}-start-target"
 
-  health_check {
-    protocol            = "TCP"
-    interval            = 30
-    timeout             = 5
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
-  }
+  input = jsonencode({
+    instance_id = aws_instance.this.id,
+    action      = "start"
+  })
 }
 
-resource "aws_lb_target_group_attachment" "tg_attach_web" {
-  target_group_arn = aws_lb_target_group.tg_cats_web.arn
-  target_id        = var.front_instance_id
-  port             = 8080
+resource "aws_cloudwatch_event_target" "stop_target" {
+  count     = var.enable_schedule ? 1 : 0
+  arn       = var.lambda_function_arn
+  rule      = aws_cloudwatch_event_rule.stop_instance[count.index].name
+  target_id = "${var.name_prefix}-stop-target"
+
+  input = jsonencode({
+    instance_id = aws_instance.this.id,
+    action      = "stop"
+  })
 }
 
-resource "aws_lb_target_group_attachment" "tg_attach_backend" {
-  target_group_arn = aws_lb_target_group.tg_cats_backend.arn
-  target_id        = var.front_instance_id
-  port             = 8081
+resource "aws_lambda_permission" "allow_cloudwatch_start" {
+  count         = var.enable_schedule ? 1 : 0
+  statement_id  = "AllowExecutionFromCloudWatchStart-${var.name_prefix}"
+  action        = "lambda:InvokeFunction"
+  function_name = var.lambda_function_arn
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.start_instance[count.index].arn
 }
 
-# APPS SWAGGER
-locals {
-  swagger_apps = {
-    concorde       = 9001
-    natop-manager  = 9002
-    swift          = 9003
-  }
+resource "aws_lambda_permission" "allow_cloudwatch_stop" {
+  count         = var.enable_schedule ? 1 : 0
+  statement_id  = "AllowExecutionFromCloudWatchStop-${var.name_prefix}"
+  action        = "lambda:InvokeFunction"
+  function_name = var.lambda_function_arn
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.stop_instance[count.index].arn
 }
-
-resource "aws_lb_target_group" "tg_apps" {
-  for_each    = local.swagger_apps
-  name        = "${var.entity}-${var.application}-${var.environment}-${each.key}-tg"
-  port        = each.value
-  protocol    = "TCP"
-  vpc_id      = var.vpc_id
-  target_type = "instance"
-  tags        = var.tags
-
-  health_check {
-    protocol            = "TCP"
-    interval            = 30
-    timeout             = 5
-    healthy_threshold   = 3
-    unhealthy_threshold = 3
-  }
-}
-
-resource "aws_lb_target_group_attachment" "tg_attach_apps" {
-  for_each         = local.swagger_apps
-  target_group_arn = aws_lb_target_group.tg_apps[each.key].arn
-  target_id        = var.services_instance_id
-  port             = each.value
-}
-
-# SINGLE TCP LISTENER
-resource "aws_lb_listener" "main_tcp" {
-  load_balancer_arn = aws_lb.nlb_cats.arn
-  port              = 80
-  protocol          = "TCP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.tg_cats_web.arn
-  }
-}
-
-resource "aws_lb_listener_rule" "catsbackend_rule" {
-  listener_arn = aws_lb_listener.main_tcp.arn
-  priority     = 10
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.tg_cats_backend.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/catsbackend", "/catsbackend/*"]
-    }
-  }
-}
-
-resource "aws_lb_listener_rule" "catsweb_rule" {
-  listener_arn = aws_lb_listener.main_tcp.arn
-  priority     = 20
-
-  action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.tg_cats_web.arn
-  }
-
-  condition {
-    path_pattern {
-      values = ["/catsweb", "/catsweb/*"]
-    }
-  }
-}
-
