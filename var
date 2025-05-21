@@ -1,15 +1,10 @@
-variable "entity"        { type = string }
-variable "application"   { type = string }
-variable "environment"   { type = string }
-variable "vpc_link_id"   { type = string }
-variable "nlb_dns_name"  { type = string }
+variable "vpc_id" {
+  description = "VPC ID for the VPC Link"
+  type        = string
+}
 
-variable "path_list" {
-  description = "List of URL paths to expose via API Gateway"
+variable "subnet_ids" {
+  description = "Subnet IDs for the VPC Link"
   type        = list(string)
 }
 
-variable "tags" {
-  description = "Standard tags to apply to all resources"
-  type        = map(string)
-}
