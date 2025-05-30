@@ -1,30 +1,33 @@
-# Data source pour récupérer toutes les instances avec le tag Protection = "true"
-data "aws_instances" "protected" {
-  filter {
-    name   = "tag:Protection"
-    values = ["true"]
-  }
-  
-  filter {
-    name   = "instance-state-name"
-    values = ["running", "stopped", "stopping", "pending"]
+Fichier : outputs.tf (dans votre répertoire principal):
+
+
+output "database_instance_info" {
+  description = "Information sur l'instance database"
+  value = {
+    instance_id = module.ec2_database.instance_id
+    instance_name = module.ec2_database.instance_name  # si cet output existe
+    tags = module.ec2_database.tags  # si cet output existe
   }
 }
 
-# Créer une ressource de protection pour chaque instance taguée
-resource "terraform_data" "instance_protection" {
-  for_each = toset(data.aws_instances.protected.ids)
-  
-  lifecycle {
-    prevent_destroy = true
-  }
-  
-  # Se déclenche si l'ID de l'instance change
-  triggers_replace = [each.key]
-  
-  # Optionnel : ajouter des métadonnées pour debugging
-  input = {
-    instance_id = each.key
-    protected_at = timestamp()
-  }
+output "protected_instances_found" {
+  description = "Instances trouvées avec tag Protection"
+  value = data.aws_instances.protected.ids
+}
+
+Fichier : modules/ec2/instances/outputs.tf
+
+output "instance_id" {
+  description = "ID of the EC2 instance"
+  value       = aws_instance.this.id
+}
+
+output "instance_name" {
+  description = "Name of the EC2 instance"
+  value       = aws_instance.this.tags["Name"]
+}
+
+output "all_tags" {
+  description = "All tags of the instance"
+  value       = aws_instance.this.tags
 }
