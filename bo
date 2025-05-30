@@ -1,33 +1,8 @@
-Fichier : outputs.tf (dans votre répertoire principal):
-
-
-output "database_instance_info" {
-  description = "Information sur l'instance database"
+# DEBUG: Output pour voir ce qui est trouvé
+output "debug_protection" {
   value = {
-    instance_id = module.ec2_database.instance_id
-    instance_name = module.ec2_database.instance_name  # si cet output existe
-    tags = module.ec2_database.tags  # si cet output existe
+    instances_with_protected_tag = data.aws_instances.protected.ids
+    instances_count = length(data.aws_instances.protected.ids)
+    private_ips = data.aws_instances.protected.private_ips
   }
-}
-
-output "protected_instances_found" {
-  description = "Instances trouvées avec tag Protection"
-  value = data.aws_instances.protected.ids
-}
-
-Fichier : modules/ec2/instances/outputs.tf
-
-output "instance_id" {
-  description = "ID of the EC2 instance"
-  value       = aws_instance.this.id
-}
-
-output "instance_name" {
-  description = "Name of the EC2 instance"
-  value       = aws_instance.this.tags["Name"]
-}
-
-output "all_tags" {
-  description = "All tags of the instance"
-  value       = aws_instance.this.tags
 }
