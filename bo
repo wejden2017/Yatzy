@@ -1,29 +1,30 @@
-swagger_apps = {
-  catsweb     = 8080
-  catsbackend = 8081
-  concorde    = 9001
+# Data source pour récupérer toutes les instances avec le tag Protection = "true"
+data "aws_instances" "protected" {
+  filter {
+    name   = "tag:Protection"
+    values = ["true"]
+  }
+  
+  filter {
+    name   = "instance-state-name"
+    values = ["running", "stopped", "stopping", "pending"]
+  }
 }
 
-swagger_apps = {
-  catsweb     = 18080
-  catsbackend = 18081
-  concorde    = 19001
-}
-
-swagger_apps = {
-  catsweb     = 28080
-  catsbackend = 28081
-  concorde    = 29001
-}
-
-module "nlb" {
-  source       = "./modules/nlb"
-  swagger_apps = var.swagger_apps
-  ...
-}
-
-module "api_gateway_rest" {
-  source       = "./modules/api_gateway_rest"
-  swagger_apps = var.swagger_apps
-  ...
+# Créer une ressource de protection pour chaque instance taguée
+resource "terraform_data" "instance_protection" {
+  for_each = toset(data.aws_instances.protected.ids)
+  
+  lifecycle {
+    prevent_destroy = true
+  }
+  
+  # Se déclenche si l'ID de l'instance change
+  triggers_replace = [each.key]
+  
+  # Optionnel : ajouter des métadonnées pour debugging
+  input = {
+    instance_id = each.key
+    protected_at = timestamp()
+  }
 }
