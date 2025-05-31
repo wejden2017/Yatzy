@@ -1,8 +1,1 @@
-# DEBUG: Output pour voir ce qui est trouvé
-output "debug_protection" {
-  value = {
-    instances_with_protected_tag = data.aws_instances.protected.ids
-    instances_count = length(data.aws_instances.protected.ids)
-    private_ips = data.aws_instances.protected.private_ips
-  }
-}
+Invoke-WebRequest -Uri "https://oracle-packages-dev.s3.eu-west-2.amazonaws.com/vtom-ihm.7.1.2.fr.exe" -OutFile "C:\Users\Administrator\Downloads\vtom-ihm.7.1.2.fr.exe"
