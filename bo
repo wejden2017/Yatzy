@@ -1,1 +1,1 @@
-Invoke-WebRequest -Uri "https://oracle-packages-dev.s3.eu-west-2.amazonaws.com/vtom-ihm.7.1.2.fr.exe" -OutFile "C:\Users\Administrator\Downloads\vtom-ihm.7.1.2.fr.exe"
+sudo yum install -y samba-client cifs-utils
