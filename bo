@@ -1,1 +1,13 @@
-sudo yum install -y samba-client cifs-utils
+# roles/vtom_server/defaults/main.yml
+
+vtom_s3_bucket: vtom-packages
+vtom_files:
+  - install_vtom
+  - install_vtom.ini
+  - VT-CS-LINUX_X64.71.Z
+  - VT-SDS-LINUX_X64.71.Z
+
+vtom_tmp_dir: /tmp/vtom_install
+vtom_install_dir: /opt/absyss/vtom
+vtom_user: vtom
+vtom_group: vtom
