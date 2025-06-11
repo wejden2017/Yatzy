@@ -1,13 +1,97 @@
-# roles/vtom_server/defaults/main.yml
+# roles/vtom_server/tasks/main.yml
 
-vtom_s3_bucket: vtom-packages
-vtom_files:
-  - install_vtom
-  - install_vtom.ini
-  - VT-CS-LINUX_X64.71.Z
-  - VT-SDS-LINUX_X64.71.Z
+- name: Ensure ksh is installed
+  package:
+    name: ksh
+    state: present
 
-vtom_tmp_dir: /tmp/vtom_install
-vtom_install_dir: /opt/absyss/vtom
-vtom_user: vtom
+- name: Create group vtom
+  group:
+    name: "{{ vtom_group }}"
+    state: present
+
+- name: Create user vtom
+  user:
+    name: "{{ vtom_user }}"
+    shell: /bin/ksh
+    group: "{{ vtom_group }}"
+    home: /home/vtom
+    create_home: yes
+
+- name: Add vtom to wheel
+  user:
+    name: "{{ vtom_user }}"
+    groups: wheel
+    append: yes
+
+- name: Create install and target directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ vtom_user }}"
+    group: "{{ vtom_group }}"
+    mode: '0755'
+  loop:
+    - "{{ vtom_tmp_dir }}"
+    - "{{ vtom_install_dir }}"
+    - "/opt/absyss"
+
+- name: Download VTOM files from S3
+  shell: >
+    aws s3 cp s3://{{ vtom_s3_bucket }}/{{ item }} {{ vtom_tmp_dir }}/{{ item }}
+  args:
+    creates: "{{ vtom_tmp_dir }}/{{ item }}"
+  environment:
+    AWS_REGION: "{{ lookup('env', 'AWS_REGION') | default('eu-west-2') }}"
+  with_items: "{{ vtom_files }}"
+
+- name: Make install_vtom executable
+  file:
+    path: "{{ vtom_tmp_dir }}/install_vtom"
+    mode: '0755'
+
+- name: Run VTOM install script via expect
+  shell: |
+    expect -c '
+      spawn {{ vtom_tmp_dir }}/install_vtom VT-CS-LINUX_X64.71.Z VT-SDS-LINUX_X64.71.Z
+      expect "procéder à l'installation ?"
+      send "n\r"
+      expect "procéder à l'installation ?"
+      send "o\r"
+      expect "procéder à l'installation ?"
+      send "o\r"
+      expect "/home/ec2-user/vtom"
+      send "{{ vtom_install_dir }}\r"
+      expect "Visual TOM ?"
+      send "{{ vtom_user }}\r"
+      expect "Visual TOM ?"
+      send "{{ vtom_install_dir }}/bases\r"
+      expect "backup ?"
+      send "{{ vtom_install_dir }}/backup\r"
+      expect "traces ?"
+      send "{{ vtom_install_dir }}/traces\r"
+      expect "logs ?"
+      send "{{ vtom_install_dir }}/logs\r"
+      expect "existante ?"
+      send "o\r"
+      expect "port tcp pour tomDBd ?"
+      send "30001\r"
+      expect "port pour vtmanager ?"
+      send "30000\r"
+      interact
+    '
+  args:
+    chdir: "{{ vtom_tmp_dir }}"
+
+- name: Add VTOM ports to /etc/services
+  blockinfile:
+    path: /etc/services
+    marker: "# {mark} Visual TOM PORTS"
+    block: "{{ lookup('template', 'insert_services.j2') }}"
+
+- name: Remove temp install dir
+  file:
+    path: "{{ vtom_tmp_dir }}"
+    state: absent
+
 vtom_group: vtom
