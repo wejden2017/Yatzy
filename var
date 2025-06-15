@@ -74,3 +74,6 @@ expect {
         exit 1
     }
 }
+
+sudo ./install_expect.sh /opt/absyss/vtom /home/ec2-user/tmp/vtom_install_files VT-CS-LINUX_X64.71.Z VT-SDS-LINUX_X64.71.Z
+
