@@ -1,1 +1,64 @@
+Fichier : roles/vtom_server/install/tasks/main.yml :
+- name: Install required packages
+  yum:
+    name: ksh
+    state: present
+
+- name: Create group
+  group:
+    name: "{{ vtom_group }}"
+    state: present
+
+- name: Create user
+  user:
+    name: "{{ vtom_user }}"
+    group: "{{ vtom_group }}"
+    shell: /bin/ksh
+    home: "/home/{{ vtom_user }}"
+    create_home: yes
+    state: present
+
+- name: Add user to wheel group
+  user:
+    name: "{{ vtom_user }}"
+    groups: wheel
+    append: yes
+
+- name: Create installation base directory
+  file:
+    path: "{{ vtom_install_dir | dirname }}"  # /opt/absyss
+    state: directory
+    owner: "{{ vtom_user }}"
+    group: "{{ vtom_group }}"
+    mode: '0755'
+Fichier : roles/vtom_server/defaults/main.yml:
+vtom_s3_bucket: vtom-packages
+vtom_files:
+  - install_vtom
+  - install_vtom.ini
+  - VT-CS-LINUX_X64.71.Z
+  - VT-SDS-LINUX_X64.71.Z
+
+vtom_tmp_dir: /tmp/vtom_install
+vtom_install_dir: /opt/absyss/vtom
+
+vtom_user: vtom
+vtom_group: vtom
+playbooks/install_vtom_server.yml :
+---
+- name: Install VTOM Server - Étape 1
+  hosts: vtom_servers
+  become: true
+  roles:
+    - role: vtom_server.install
+
+
+Type	Chemin attendu
+Rôle	roles/vtom_server/install/tasks/main.yml
+Defaults	roles/vtom_server/defaults/main.yml
+Playbook	playbooks/install_vtom_server.yml
+Inventaire	inventory/hosts ou dynamique via aws_ec2_inventory.py
+
+ansible-playbook -i inventory/hosts playbooks/install_vtom_server.yml
+
 
