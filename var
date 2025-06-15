@@ -1,8 +1,8 @@
-# Étape 2 : Téléchargement des fichiers VTOM
+# Étape 2 : Téléchargement des fichiers VTOM depuis S3 (en local), puis copie vers l'EC2
 
 - name: Create local tmp install directory
   delegate_to: localhost
-  become: false
+  become: false         # ← essentiel pour ne pas déclencher sudo
   run_once: true
   file:
     path: "{{ vtom_tmp_dir }}"
@@ -12,9 +12,9 @@
 
 - name: Download VTOM install files from S3 to localhost
   delegate_to: localhost
-  become: false
+  become: false         # ← essentiel ici aussi
   run_once: true
-  aws_s3:
+  amazon.aws.aws_s3:
     bucket: "{{ vtom_s3_bucket }}"
     object: "{{ item }}"
     dest: "{{ vtom_tmp_dir }}/{{ item }}"
@@ -36,4 +36,3 @@
     mode: '0644'
   loop: "{{ vtom_files }}"
   when: do_install | bool
-
