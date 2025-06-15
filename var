@@ -1,53 +1,5 @@
-#!/usr/bin/expect -f
+chmod +x install_vtom_expect.sh
+./install_vtom_expect.sh /opt/absyss/vtom /home/ec2-user/tmp/vtom_install_files VT-CS-LINUX_X64.71.Z VT-SDS-LINUX_X64.71.Z
 
-set install_dir [lindex $argv 0]
-set tmp_dir     [lindex $argv 1]
-set file1       [lindex $argv 2]
-set file2       [lindex $argv 3]
-
-set timeout -1
-
-cd $tmp_dir
-
-# Lancement du script avec sudo
-spawn sudo ./install_vtom $file1 $file2
-
-expect "Nom du serveur de backup*" {
-    send "\r"
-}
-expect "Repertoire de base d'installation*" {
-    send "$install_dir\r"
-}
-expect "Definissez l'administrateur UNIX*" {
-    send "\r"
-}
-expect "Repertoire de la base de donnees*" {
-    send "\r"
-}
-expect "Repertoire de backup de la base*" {
-    send "\r"
-}
-expect "Repertoire des traces du moteur*" {
-    send "\r"
-}
-expect "Repertoire des fichiers logs*" {
-    send "\r"
-}
-expect "Sauvegarder l'installation existante*" {
-    send "o\r"
-}
-expect "Confirmez-vous ces parametres*" {
-    send "o\r"
-}
-expect {
-    "Numero de port tcp pour tomDBd*" {
-        send "30001\r"
-        exp_continue
-    }
-    "Numero de port tcp pour vtmanager*" {
-        send "30000\r"
-    }
-}
-expect eof
 
 
