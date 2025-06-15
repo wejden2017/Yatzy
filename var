@@ -1,37 +1,12 @@
-Fichier : roles/vtom_server/install/tasks/main.yml :
-- name: Install required packages
-  yum:
-    name: ksh
-    state: present
+. Fichier roles/vtom_server/tasks/main.yml
+- name: Run VTOM installation
+  import_tasks: ../install/tasks/main.yml
+  when: do_install
 
-- name: Create group
-  group:
-    name: "{{ vtom_group }}"
-    state: present
-
-- name: Create user
-  user:
-    name: "{{ vtom_user }}"
-    group: "{{ vtom_group }}"
-    shell: /bin/ksh
-    home: "/home/{{ vtom_user }}"
-    create_home: yes
-    state: present
-
-- name: Add user to wheel group
-  user:
-    name: "{{ vtom_user }}"
-    groups: wheel
-    append: yes
-
-- name: Create installation base directory
-  file:
-    path: "{{ vtom_install_dir | dirname }}"  # /opt/absyss
-    state: directory
-    owner: "{{ vtom_user }}"
-    group: "{{ vtom_group }}"
-    mode: '0755'
-Fichier : roles/vtom_server/defaults/main.yml:
+- name: Run VTOM uninstallation (rollback)
+  import_tasks: ../uninstall/tasks/main.yml
+  when: do_uninstall
+3. Variables dans roles/vtom_server/defaults/main.yml :
 vtom_s3_bucket: vtom-packages
 vtom_files:
   - install_vtom
@@ -41,33 +16,39 @@ vtom_files:
 
 vtom_tmp_dir: /tmp/vtom_install
 vtom_install_dir: /opt/absyss/vtom
-
 vtom_user: vtom
 vtom_group: vtom
-playbooks/install_vtom_server.yml :
+Fichier roles/vtom_server/uninstall/tasks/main.yml :
 ---
-- name: Install VTOM Server - Étape 1
+- name: Remove VTOM user
+  user:
+    name: "{{ vtom_user }}"
+    state: absent
+    remove: yes
+
+- name: Remove VTOM group
+  group:
+    name: "{{ vtom_group }}"
+    state: absent
+
+- name: Remove VTOM install directory
+  file:
+    path: "{{ vtom_install_dir | dirname }}"
+    state: absent
+
+- name: Remove VTOM home directory
+  file:
+    path: "/home/{{ vtom_user }}"
+    state: absent
+
+- name: Remove tmp install directory
+  file:
+    path: "{{ vtom_tmp_dir }}"
+    state: absent
+Ton playbook playbooks/install_vtom_server.yml :
+---
+- name: VTOM Server lifecycle
   hosts: vtom_servers
   become: true
   roles:
-    - role: vtom_server.install
-
-
-Type	Chemin attendu
-Rôle	roles/vtom_server/install/tasks/main.yml
-Defaults	roles/vtom_server/defaults/main.yml
-Playbook	playbooks/install_vtom_server.yml
-Inventaire	inventory/hosts ou dynamique via aws_ec2_inventory.py
-
-ansible-playbook \
-  -i inventory/aws_ec2_inventory.py \
-  playbooks/install_vtom_server.yml \
-  --vault-password-file=.vault_pass.txt \
-  -e "env=poc \
-      ansible_ssh_common_args='-o StrictHostKeyChecking=no' \
-      ansible_ssh_private_key_file=/home/henri.aycard/.ssh/dev_ec2_keypair.pem \
-      ansible_python_interpreter=/usr/bin/python3"
-
-
-
-
+    - role: vtom_server
