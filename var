@@ -1,13 +1,18 @@
-- name: Create tmp install directory
-  file:
-    path: "{{ vtom_tmp_dir }}"
-    state: directory
-    mode: '0755'
-
-- name: Download VTOM install files from S3
-  aws_s3:
+- name: Download VTOM file from S3
+  ansible.builtin.aws_s3:
     bucket: "{{ vtom_s3_bucket }}"
     object: "{{ item }}"
     dest: "{{ vtom_tmp_dir }}/{{ item }}"
     mode: get
   loop: "{{ vtom_files }}"
+  delegate_to: localhost
+  run_once: true
+
+
+- name: Upload VTOM file to EC2
+  copy:
+    src: "{{ vtom_tmp_dir }}/{{ item }}"
+    dest: "{{ vtom_tmp_dir }}/{{ item }}"
+    mode: '0644'
+  loop: "{{ vtom_files }}"
+
