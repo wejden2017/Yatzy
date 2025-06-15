@@ -59,6 +59,14 @@ Defaults	roles/vtom_server/defaults/main.yml
 Playbook	playbooks/install_vtom_server.yml
 Inventaire	inventory/hosts ou dynamique via aws_ec2_inventory.py
 
-ansible-playbook -i inventory/hosts playbooks/install_vtom_server.yml
+ansible-playbook \
+  -i inventory/aws_ec2_inventory.py \
+  playbooks/install_vtom_server.yml \
+  --vault-password-file=.vault_pass.txt \
+  -e "env=poc \
+      ansible_ssh_common_args='-o StrictHostKeyChecking=no' \
+      ansible_ssh_private_key_file=/home/user/.ssh/dev_ec2_keypair.pem \
+      ansible_python_interpreter=/usr/bin/python3"
+
 
 
