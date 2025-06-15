@@ -1,18 +1,39 @@
-- name: Download VTOM file from S3
-  ansible.builtin.aws_s3:
+# Étape 2 : Téléchargement des fichiers VTOM
+
+- name: Create local tmp install directory
+  delegate_to: localhost
+  become: false
+  run_once: true
+  file:
+    path: "{{ vtom_tmp_dir }}"
+    state: directory
+    mode: '0755'
+  when: do_install | bool
+
+- name: Download VTOM install files from S3 to localhost
+  delegate_to: localhost
+  become: false
+  run_once: true
+  aws_s3:
     bucket: "{{ vtom_s3_bucket }}"
     object: "{{ item }}"
     dest: "{{ vtom_tmp_dir }}/{{ item }}"
     mode: get
   loop: "{{ vtom_files }}"
-  delegate_to: localhost
-  run_once: true
+  when: do_install | bool
 
+- name: Ensure tmp dir exists on EC2 instance
+  file:
+    path: "{{ vtom_tmp_dir }}"
+    state: directory
+    mode: '0755'
+  when: do_install | bool
 
-- name: Upload VTOM file to EC2
+- name: Copy VTOM install files from localhost to EC2
   copy:
     src: "{{ vtom_tmp_dir }}/{{ item }}"
     dest: "{{ vtom_tmp_dir }}/{{ item }}"
     mode: '0644'
   loop: "{{ vtom_files }}"
+  when: do_install | bool
 
