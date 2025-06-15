@@ -60,11 +60,11 @@ expect {
         exp_continue
     }
     eof {
-        puts "✅ Script terminé"
+        puts "Script terminé"
         exit
     }
     timeout {
-        puts "⏰ Timeout atteint"
+        puts "Timeout atteint"
         exit 1
     }
 }
