@@ -52,7 +52,13 @@ Ton playbook playbooks/install_vtom_server.yml :
   become: true
   roles:
     - role: vtom_server
+#############################
+- name: Install required packages with raw
+  ansible.builtin.raw: sudo yum install -y ksh unzip
+  register: install_packages
+  changed_when: "'Complete!' in install_packages.stdout"
 
+###########################
 
 ansible-playbook \
   -i inventory/aws_ec2_inventory.py \
