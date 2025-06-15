@@ -1,11 +1,99 @@
-ansible-playbook \
-  -i inventory/aws_ec2_inventory.py \
-  playbooks/install_vtom_server.yml \
-  --vault-password-file=.vault_pass.txt \
-  -e "env=poc do_install=true do_uninstall=false" \
-  -e ansible_ssh_common_args='-o StrictHostKeyChecking=no' \
-  -e ansible_ssh_private_key_file=~/.ssh/poc_ec2_keypair1.pem \
-  -e ansible_python_interpreter=/usr/bin/python3
+#!/usr/bin/expect -f
 
+# Variables d'environnement (peuvent être injectées depuis Ansible plus tard)
+set install_dir "/opt/absyss/vtom"
+set tmp_dir "/home/ec2-user/tmp/vtom_install_files"
+set file1 "VT-CS-LINUX_X64.71.Z"
+set file2 "VT-SDS-LINUX_X64.71.Z"
 
--e "env=poc do_install=false do_uninstall=true"
+set timeout -1
+
+# Lancement de l'installation
+spawn sudo $tmp_dir/install_vtom $tmp_dir/$file1 $tmp_dir/$file2
+
+expect {
+    "Installation des modules Visual TOM*" {}
+    "Solution serveur de backup" {}
+    "Confirmez-vous ces parametres*" {
+        send "n\r"
+    }
+}
+
+expect {
+    "Nom du serveur de backup*" {
+        send "\r"
+    }
+}
+
+expect {
+    "Repertoire de base d'installation*" {
+        send "$install_dir\r"
+    }
+}
+
+expect {
+    "Administrateur UNIX*" {
+        send "\r"
+    }
+}
+
+expect {
+    "Repertoire de la base de donnees*" {
+        send "\r"
+    }
+}
+
+expect {
+    "Repertoire de backup de la base*" {
+        send "\r"
+    }
+}
+
+expect {
+    "Repertoire des traces du moteur*" {
+        send "\r"
+    }
+}
+
+expect {
+    "Repertoire des fichiers logs*" {
+        send "\r"
+    }
+}
+
+expect {
+    "Sauvegarder l'installation existante*" {
+        send "o\r"
+    }
+}
+
+expect {
+    "Confirmez-vous ces parametres*" {
+        send "o\r"
+    }
+}
+
+# Cas d'une machine vierge : ports manuels
+expect {
+    "Numero de port tcp pour tomDBd*" {
+        send "30001\r"
+    }
+    timeout {}
+}
+
+expect {
+    "Numero de port tcp pour vtmanager*" {
+        send "30000\r"
+    }
+    timeout {}
+}
+
+# Fin d'installation, attente Entrée
+expect {
+    "appuyez sur la touche Entree" {
+        send "\r"
+    }
+    timeout {}
+}
+
+expect eof
