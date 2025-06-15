@@ -1,38 +1,50 @@
-# Étape 2 : Téléchargement des fichiers VTOM depuis S3 (en local), puis copie vers l'EC2
+- name: Install required packages (ksh + unzip)
+  ansible.builtin.yum:
+    name: [ksh, unzip]
+    state: present
+  become: true
 
-- name: Create local tmp install directory
-  delegate_to: localhost
-  become: false         # ← essentiel pour ne pas déclencher sudo
-  run_once: true
-  file:
+- name: Create group
+  ansible.builtin.group:
+    name: "{{ vtom_group }}"
+    state: present
+
+- name: Create user
+  ansible.builtin.user:
+    name: "{{ vtom_user }}"
+    group: "{{ vtom_group }}"
+    shell: /bin/ksh
+    home: "/home/{{ vtom_user }}"
+    create_home: true
+    state: present
+
+- name: Add user to wheel group
+  ansible.builtin.user:
+    name: "{{ vtom_user }}"
+    groups: wheel
+    append: yes
+
+- name: Create installation base directory
+  ansible.builtin.file:
+    path: "{{ vtom_install_dir | dirname }}"
+    state: directory
+    owner: "{{ vtom_user }}"
+    group: "{{ vtom_group }}"
+    mode: '0755'
+
+- name: Create temp install directory on EC2
+  ansible.builtin.file:
     path: "{{ vtom_tmp_dir }}"
     state: directory
+    owner: "{{ vtom_user }}"
+    group: "{{ vtom_group }}"
     mode: '0755'
-  when: do_install | bool
 
-- name: Download VTOM install files from S3 to localhost
-  delegate_to: localhost
-  become: false         # ← essentiel ici aussi
-  run_once: true
+- name: Download VTOM install files from S3 (directly from EC2)
   amazon.aws.aws_s3:
     bucket: "{{ vtom_s3_bucket }}"
     object: "{{ item }}"
     dest: "{{ vtom_tmp_dir }}/{{ item }}"
     mode: get
-  loop: "{{ vtom_files }}"
-  when: do_install | bool
-
-- name: Ensure tmp dir exists on EC2 instance
-  file:
-    path: "{{ vtom_tmp_dir }}"
-    state: directory
-    mode: '0755'
-  when: do_install | bool
-
-- name: Copy VTOM install files from localhost to EC2
-  copy:
-    src: "{{ vtom_tmp_dir }}/{{ item }}"
-    dest: "{{ vtom_tmp_dir }}/{{ item }}"
-    mode: '0644'
   loop: "{{ vtom_files }}"
   when: do_install | bool
