@@ -1,2 +1,6 @@
-- name: Execute VTOM installer with expect
-  ansible.builtin.script: install_vtom_expect.sh "{{ vtom_install_dir }}" "{{ vtom_tmp_dir }}" "{{ vtom_files[3] }}" "{{ vtom_files[4] }}"
+- name: Install expect package
+  ansible.builtin.yum:
+    name: expect
+    state: present
+  become: true
+
