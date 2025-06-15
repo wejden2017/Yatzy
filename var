@@ -65,8 +65,9 @@ ansible-playbook \
   --vault-password-file=.vault_pass.txt \
   -e "env=poc \
       ansible_ssh_common_args='-o StrictHostKeyChecking=no' \
-      ansible_ssh_private_key_file=/home/user/.ssh/dev_ec2_keypair.pem \
+      ansible_ssh_private_key_file=/home/henri.aycard/.ssh/dev_ec2_keypair.pem \
       ansible_python_interpreter=/usr/bin/python3"
+
 
 
 
