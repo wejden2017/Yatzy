@@ -1,72 +1,13 @@
-. Fichier roles/vtom_server/tasks/main.yml
-- name: Run VTOM installation
-  import_tasks: ../install/tasks/main.yml
-  when: do_install
-
-- name: Run VTOM uninstallation (rollback)
-  import_tasks: ../uninstall/tasks/main.yml
-  when: do_uninstall
-3. Variables dans roles/vtom_server/defaults/main.yml :
-vtom_s3_bucket: vtom-packages
-vtom_files:
-  - install_vtom
-  - install_vtom.ini
-  - VT-CS-LINUX_X64.71.Z
-  - VT-SDS-LINUX_X64.71.Z
-
-vtom_tmp_dir: /tmp/vtom_install
-vtom_install_dir: /opt/absyss/vtom
-vtom_user: vtom
-vtom_group: vtom
-Fichier roles/vtom_server/uninstall/tasks/main.yml :
----
-- name: Remove VTOM user
-  user:
-    name: "{{ vtom_user }}"
-    state: absent
-    remove: yes
-
-- name: Remove VTOM group
-  group:
-    name: "{{ vtom_group }}"
-    state: absent
-
-- name: Remove VTOM install directory
-  file:
-    path: "{{ vtom_install_dir | dirname }}"
-    state: absent
-
-- name: Remove VTOM home directory
-  file:
-    path: "/home/{{ vtom_user }}"
-    state: absent
-
-- name: Remove tmp install directory
+- name: Create tmp install directory
   file:
     path: "{{ vtom_tmp_dir }}"
-    state: absent
-Ton playbook playbooks/install_vtom_server.yml :
----
-- name: VTOM Server lifecycle
-  hosts: vtom_servers
-  become: true
-  roles:
-    - role: vtom_server
-#############################
-- name: Install required packages with raw
-  ansible.builtin.raw: sudo yum install -y ksh unzip
-  register: install_packages
-  changed_when: "'Complete!' in install_packages.stdout"
+    state: directory
+    mode: '0755'
 
-###########################
-
-ansible-playbook \
-  -i inventory/aws_ec2_inventory.py \
-  playbooks/install_vtom_server.yml \
-  --vault-password-file=.vault_pass.txt \
-  -e "env=poc \
-      do_uninstall=true \
-      ansible_ssh_common_args='-o StrictHostKeyChecking=no' \
-      ansible_ssh_private_key_file=/home/zied.ouertani/.ssh/poc_ec2_keypair1.pem \
-      ansible_python_interpreter=/usr/bin/python3"
-
+- name: Download VTOM install files from S3
+  aws_s3:
+    bucket: "{{ vtom_s3_bucket }}"
+    object: "{{ item }}"
+    dest: "{{ vtom_tmp_dir }}/{{ item }}"
+    mode: get
+  loop: "{{ vtom_files }}"
