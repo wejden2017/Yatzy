@@ -13,4 +13,9 @@ mode: "{{ '0755' if item == 'install_vtom' else '0644' }}"
   become: true
   when: do_install | bool
 
+ansible.builtin.shell: >
+  bash -c "cd {{ vtom_install_dir }} && ./install_vtom_expect.sh '{{ vtom_install_dir }}' '{{ vtom_install_dir }}' '{{ vtom_files[3] }}' '{{ vtom_files[4] }}' > install_vtom_ansible.log 2>&1"
+args:
+  chdir: "{{ vtom_install_dir }}"
+become: true
 
