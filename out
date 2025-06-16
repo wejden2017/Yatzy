@@ -1,11 +1,17 @@
-# Tâches d'installation
-- include_tasks: install.yml
-  when: do_install | bool
+- name: Deploy VTOM start server Expect script
+  ansible.builtin.copy:
+    src: start_vtom_server_expect.sh
+    dest: "{{ vtom_install_dir }}/start_vtom_server_expect.sh"
+    owner: "{{ vtom_user }}"
+    group: "{{ vtom_group }}"
+    mode: '0755'
+  when: do_start_vtom | bool
 
-# Tâches de désinstallation  
-- include_tasks: uninstall.yml
-  when: do_uninstall | bool
-
-# Tâches de démarrage
-- include_tasks: deploy/main.yml
+- name: Start VTOM server with Expect script
+  ansible.builtin.shell: |
+    cd {{ vtom_install_dir }} && \
+    ./start_vtom_server_expect.sh > start_vtom_server.log 2>&1
+  args:
+    chdir: "{{ vtom_install_dir }}"
+  become: true
   when: do_start_vtom | bool
