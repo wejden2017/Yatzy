@@ -6,17 +6,41 @@
     state: present
   loop:
     # VTSERVER section
+    - regexp: '^;?TRACE_LEVEL=1'
+      line: "TRACE_LEVEL=1"
     - regexp: '^;?TRACE_FILE=/tmp/vtserver\.log'
       line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtserver.log"
+    - regexp: '^;?TRACE_FILE_SIZE=10'
+      line: "TRACE_FILE_SIZE=10"
+    - regexp: '^;?TRACE_FILE_COUNT=10'
+      line: "TRACE_FILE_COUNT=10"
     
     # VTMIGRATE section  
+    - regexp: '^;?TRACE_LEVEL=1'
+      line: "TRACE_LEVEL=1"
     - regexp: '^;?TRACE_FILE=/tmp/vtmigrate\.log'
       line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtmigrate.log"
+    - regexp: '^;?TRACE_FILE_SIZE=10'
+      line: "TRACE_FILE_SIZE=10"
+    - regexp: '^;?TRACE_FILE_COUNT=10'
+      line: "TRACE_FILE_COUNT=10"
     
     # VTSGBD section
+    - regexp: '^;?TRACE_LEVEL=1'
+      line: "TRACE_LEVEL=1"
     - regexp: '^;?TRACE_FILE=/tmp/vtsgbd\.log'
       line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtsgbd.log"
+    - regexp: '^;?TRACE_FILE_SIZE=10'
+      line: "TRACE_FILE_SIZE=10"
+    - regexp: '^;?TRACE_FILE_COUNT=2'
+      line: "TRACE_FILE_COUNT=2"
     
     # BDAEMON section
+    - regexp: '^;?TRACE_LEVEL=6'
+      line: "TRACE_LEVEL=6"
     - regexp: '^;?TRACE_FILE=/tmp/bdaemon\.log'
       line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/bdaemon.log"
+    - regexp: '^;?TRACE_FILE_SIZE=10'
+      line: "TRACE_FILE_SIZE=10"
+    - regexp: '^;?TRACE_FILE_COUNT=10'
+      line: "TRACE_FILE_COUNT=10"
