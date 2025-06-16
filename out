@@ -1,9 +1,22 @@
-- name: Restore /etc/services from backup
-  ansible.builtin.copy:
-    src: /etc/services.back
-    dest: /etc/services
-    owner: root
-    group: root
-    mode: '0644'
-    remote_src: true
-  become: true
+- name: Configure VTOM trace files in .vtom.ini
+  lineinfile:
+    path: "{{ vtom_install_dir }}/vtom/admin/.vtom.ini"
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    # VTSERVER section
+    - regexp: '^#?TRACE_FILE=/tmp/vtserver\.log'
+      line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtserver.log"
+    
+    # VTMIGRATE section  
+    - regexp: '^#?TRACE_FILE=/tmp/vtmigrate\.log'
+      line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtmigrate.log"
+    
+    # VTSGBD section
+    - regexp: '^#?TRACE_FILE=/tmp/vtsgbd\.log'
+      line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtsgbd.log"
+    
+    # BDAEMON section
+    - regexp: '^#?TRACE_FILE=/tmp/bdaemon\.log'
+      line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/bdaemon.log"
