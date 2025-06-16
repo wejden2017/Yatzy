@@ -1,1 +1,5 @@
 mode: "{{ '0755' if item == 'install_vtom' else '0644' }}"
+- name: Execute VTOM installer with expect
+  ansible.builtin.script:
+    cmd: "{{ vtom_install_dir }}/install_vtom_expect.sh {{ vtom_install_dir }} {{ vtom_install_dir }} {{ vtom_files[3] }} {{ vtom_files[4] }}"
+
