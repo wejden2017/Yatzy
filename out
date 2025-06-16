@@ -23,4 +23,13 @@
     owner: root
     group: root
     mode: '0644'
-content: "{{ lookup('file', '/tmp/insert_services.j2') }}"
+- name: Insert VTOM ports into /etc/services
+  ansible.builtin.blockinfile:
+    path: /etc/services
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - VTOM PORTS"
+    insertafter: EOF
+    block: "{{ lookup('file', vtom_install_dir + '/insert_services.j2') }}"
+    create: yes
+    backup: yes
+    validate: /usr/sbin/sshd -T
+  become: true
