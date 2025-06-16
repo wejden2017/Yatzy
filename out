@@ -1,18 +1,34 @@
-
-
-- name: Deploy insert_services.j2 template to remote (optionnel)
-  ansible.builtin.template:
-    src: insert_services.j2
-    dest: "{{ vtom_install_dir }}/insert_services.j2"
-    owner: root
-    group: root
-    mode: '0644'
-- name: Insert VTOM ports into /etc/services
-  ansible.builtin.blockinfile:
+- name: Comment conflicting Visual TOM ports in /etc/services
+  ansible.builtin.replace:
     path: /etc/services
-    marker: "# {mark} ANSIBLE MANAGED BLOCK - VTOM PORTS"
-    insertafter: EOF
-    block: "{{ lookup('template', 'vtom_server/templates/insert_services.j2') }}"
-    create: yes
-    backup: yes
+    regexp: '^(?!#)(ndmps\s+30000/tcp\s+# Secure Network Data Management Protocol)'
+    replace: '# \1'
+  become: true
+
+- name: Comment pago-services1 TCP in /etc/services
+  ansible.builtin.replace:
+    path: /etc/services
+    regexp: '^(?!#)(pago-services1\s+30001/tcp\s+# Pago Services 1)'
+    replace: '# \1'
+  become: true
+
+- name: Comment pago-services1 UDP in /etc/services
+  ansible.builtin.replace:
+    path: /etc/services
+    regexp: '^(?!#)(pago-services1\s+30001/udp\s+# Pago Services 1)'
+    replace: '# \1'
+  become: true
+
+- name: Comment pago-services2 TCP in /etc/services
+  ansible.builtin.replace:
+    path: /etc/services
+    regexp: '^(?!#)(pago-services2\s+30002/tcp\s+# Pago Services 2)'
+    replace: '# \1'
+  become: true
+
+- name: Comment pago-services2 UDP in /etc/services
+  ansible.builtin.replace:
+    path: /etc/services
+    regexp: '^(?!#)(pago-services2\s+30002/udp\s+# Pago Services 2)'
+    replace: '# \1'
   become: true
