@@ -1,5 +1,3 @@
-- name: Deploy VTOM Server
-  hosts: vtom_servers
-  become: yes
-  roles:
-    - vtom_server
+set install_cmd [file join $tmp_dir "install_vtom"]
+spawn sudo $install_cmd $file1 $file2
+
