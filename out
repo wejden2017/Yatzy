@@ -1,3 +1,9 @@
-set install_cmd [file join $tmp_dir "install_vtom"]
-spawn sudo $install_cmd $file1 $file2
+set install_dir [lindex $argv 0]
+set tmp_dir     [lindex $argv 1]
+set file1       [lindex $argv 2]
+set file2       [lindex $argv 3]
+
+cd $tmp_dir
+spawn sudo ./install_vtom $file1 $file2
+
 
