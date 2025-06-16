@@ -1,46 +1,49 @@
 - name: Configure VTOM trace files in .vtom.ini
-  lineinfile:
+  replace:
     path: "{{ vtom_install_dir }}/vtom/admin/.vtom.ini"
     regexp: "{{ item.regexp }}"
-    line: "{{ item.line }}"
-    state: present
+    replace: "{{ item.replace }}"
   loop:
-    # VTSERVER section
-    - regexp: '^;?TRACE_LEVEL=1'
-      line: "TRACE_LEVEL=1"
-    - regexp: '^;?TRACE_FILE=/tmp/vtserver\.log'
-      line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtserver.log"
-    - regexp: '^;?TRACE_FILE_SIZE=10'
-      line: "TRACE_FILE_SIZE=10"
-    - regexp: '^;?TRACE_FILE_COUNT=10'
-      line: "TRACE_FILE_COUNT=10"
+    # VTSERVER section - décommenter tout le bloc
+    - regexp: '(\[VTSERVER\][\s\S]*?);TRACE_LEVEL=1'
+      replace: '\1TRACE_LEVEL=1'
+    - regexp: '(\[VTSERVER\][\s\S]*?);TRACE_FILE=/tmp/vtserver\.log'
+      replace: '\1TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtserver.log'
+    - regexp: '(\[VTSERVER\][\s\S]*?);TRACE_FILE_SIZE=10'
+      replace: '\1TRACE_FILE_SIZE=10'
+    - regexp: '(\[VTSERVER\][\s\S]*?);TRACE_FILE_COUNT=10'
+      replace: '\1TRACE_FILE_COUNT=10'
     
-    # VTMIGRATE section  
-    - regexp: '^;?TRACE_LEVEL=1'
-      line: "TRACE_LEVEL=1"
-    - regexp: '^;?TRACE_FILE=/tmp/vtmigrate\.log'
-      line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtmigrate.log"
-    - regexp: '^;?TRACE_FILE_SIZE=10'
-      line: "TRACE_FILE_SIZE=10"
-    - regexp: '^;?TRACE_FILE_COUNT=10'
-      line: "TRACE_FILE_COUNT=10"
+    # VTMIGRATE section - décommenter tout le bloc
+    - regexp: '(\[VTMIGRATE\][\s\S]*?);TRACE_LEVEL=1'
+      replace: '\1TRACE_LEVEL=1'
+    - regexp: '(\[VTMIGRATE\][\s\S]*?);TRACE_FILE=/tmp/vtmigrate\.log'
+      replace: '\1TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtmigrate.log'
+    - regexp: '(\[VTMIGRATE\][\s\S]*?);TRACE_FILE_SIZE=10'
+      replace: '\1TRACE_FILE_SIZE=10'
+    - regexp: '(\[VTMIGRATE\][\s\S]*?);TRACE_FILE_COUNT=10'
+      replace: '\1TRACE_FILE_COUNT=10'
     
-    # VTSGBD section
-    - regexp: '^;?TRACE_LEVEL=1'
-      line: "TRACE_LEVEL=1"
-    - regexp: '^;?TRACE_FILE=/tmp/vtsgbd\.log'
-      line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtsgbd.log"
-    - regexp: '^;?TRACE_FILE_SIZE=10'
-      line: "TRACE_FILE_SIZE=10"
-    - regexp: '^;?TRACE_FILE_COUNT=2'
-      line: "TRACE_FILE_COUNT=2"
+    # VTSGBD section - décommenter tout le bloc
+    - regexp: '(\[VTSGBD\][\s\S]*?);TRACE_LEVEL=1'
+      replace: '\1TRACE_LEVEL=1'
+    - regexp: '(\[VTSGBD\][\s\S]*?);TRACE_FILE=/tmp/vtsgbd\.log'
+      replace: '\1TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtsgbd.log'
+    - regexp: '(\[VTSGBD\][\s\S]*?);TRACE_FILE_SIZE=10'
+      replace: '\1TRACE_FILE_SIZE=10'
+    - regexp: '(\[VTSGBD\][\s\S]*?);TRACE_FILE_COUNT=2'
+      replace: '\1TRACE_FILE_COUNT=2'
     
-    # BDAEMON section
-    - regexp: '^;?TRACE_LEVEL=6'
-      line: "TRACE_LEVEL=6"
-    - regexp: '^;?TRACE_FILE=/tmp/bdaemon\.log'
-      line: "TRACE_FILE={{ vtom_install_dir }}/vtom/traces/bdaemon.log"
-    - regexp: '^;?TRACE_FILE_SIZE=10'
-      line: "TRACE_FILE_SIZE=10"
-    - regexp: '^;?TRACE_FILE_COUNT=10'
-      line: "TRACE_FILE_COUNT=10"
+    # BDAEMON section - décommenter tout le bloc
+    - regexp: '(\[BDAEMON\][\s\S]*?);TRACE_LEVEL=6'
+      replace: '\1TRACE_LEVEL=6'
+    - regexp: '(\[BDAEMON\][\s\S]*?);TRACE_FILE=/tmp/bdaemon\.log'
+      replace: '\1TRACE_FILE={{ vtom_install_dir }}/vtom/traces/bdaemon.log'
+    - regexp: '(\[BDAEMON\][\s\S]*?);TRACE_FILE_SIZE=10'
+      replace: '\1TRACE_FILE_SIZE=10'
+    - regexp: '(\[BDAEMON\][\s\S]*?);TRACE_FILE_COUNT=10'
+      replace: '\1TRACE_FILE_COUNT=10'
+    
+    # TENGINE section - décommenter seulement TRACE_LEVEL=1
+    - regexp: '(\[TENGINE:<envname>\][\s\S]*?);TRACE_LEVEL=1'
+      replace: '\1TRACE_LEVEL=1'
