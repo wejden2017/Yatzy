@@ -1,31 +1,14 @@
 #!/usr/bin/expect -f
-
-# Script Expect pour démarrer automatiquement VTOM Server
-# Usage: ./start_vtom.exp
-
 set timeout 30
-
-# Se connecter en tant qu'utilisateur vtom
 spawn sudo su - vtom
-
-# Attendre le prompt de vtom et lancer la commande admins
 expect "$ "
 send "admins\r"
-
-# Attendre le menu principal et choisir option 2 (Démarrage)
 expect "commande : "
 send "2\r"
-
-# Confirmer le démarrage avec 'o' (oui)
 expect "confirmez vous le démarrage des serveurs ? (o/n) : \[n\] "
 send "o\r"
-
-# Attendre le retour au menu principal
 expect "commande : "
 send "q\r"
-
-# Attendre le prompt final et quitter
 expect "$ "
 send "exit\r"
-
 expect eof
