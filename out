@@ -31,3 +31,37 @@
     block: "{{ lookup('file', 'vtom_server/templates/insert_services.j2') }}"
     insertafter: EOF
   when: do_install | bool
+
+
+- name: Backup /etc/services before modification
+  become: true
+  ansible.builtin.copy:
+    src: /etc/services
+    dest: /etc/services.bak
+    remote_src: true
+    mode: '0644'
+  when: do_install | bool
+
+- name: Comment conflicting ports in /etc/services before appending VTOM ports
+  become: true
+  ansible.builtin.lineinfile:
+    path: /etc/services
+    regexp: '^({{ item }})(\s+.*)$'
+    line: '#\1\2'
+    backrefs: true
+  loop:
+    - 30000/tcp
+    - 30001/tcp
+    - 30001/udp
+    - 30002/tcp
+    - 30002/udp
+  when: do_install | bool
+
+- name: Insert VTOM ports into /etc/services
+  become: true
+  ansible.builtin.blockinfile:
+    path: /etc/services
+    marker: "# {mark} ANSIBLE MANAGED BLOCK - VTOM PORTS"
+    block: "{{ lookup('file', 'vtom_server/templates/insert_services.j2') }}"
+    insertafter: EOF
+  when: do_install | bool
