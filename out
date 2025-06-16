@@ -1,34 +1,9 @@
-- name: Comment conflicting Visual TOM ports in /etc/services
-  ansible.builtin.replace:
-    path: /etc/services
-    regexp: '^(?!#)(ndmps\s+30000/tcp\s+# Secure Network Data Management Protocol)'
-    replace: '# \1'
-  become: true
-
-- name: Comment pago-services1 TCP in /etc/services
-  ansible.builtin.replace:
-    path: /etc/services
-    regexp: '^(?!#)(pago-services1\s+30001/tcp\s+# Pago Services 1)'
-    replace: '# \1'
-  become: true
-
-- name: Comment pago-services1 UDP in /etc/services
-  ansible.builtin.replace:
-    path: /etc/services
-    regexp: '^(?!#)(pago-services1\s+30001/udp\s+# Pago Services 1)'
-    replace: '# \1'
-  become: true
-
-- name: Comment pago-services2 TCP in /etc/services
-  ansible.builtin.replace:
-    path: /etc/services
-    regexp: '^(?!#)(pago-services2\s+30002/tcp\s+# Pago Services 2)'
-    replace: '# \1'
-  become: true
-
-- name: Comment pago-services2 UDP in /etc/services
-  ansible.builtin.replace:
-    path: /etc/services
-    regexp: '^(?!#)(pago-services2\s+30002/udp\s+# Pago Services 2)'
-    replace: '# \1'
+- name: Restore /etc/services from backup
+  ansible.builtin.copy:
+    src: /etc/services.back
+    dest: /etc/services
+    owner: root
+    group: root
+    mode: '0644'
+    remote_src: true
   become: true
