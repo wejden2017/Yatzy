@@ -1,49 +1,31 @@
-- name: Configure VTOM trace files in .vtom.ini
-  replace:
-    path: "{{ vtom_install_dir }}/vtom/admin/.vtom.ini"
-    regexp: "{{ item.regexp }}"
-    replace: "{{ item.replace }}"
-  loop:
-    # VTSERVER section - décommenter tout le bloc
-    - regexp: '(\[VTSERVER\][\s\S]*?);TRACE_LEVEL=1'
-      replace: '\1TRACE_LEVEL=1'
-    - regexp: '(\[VTSERVER\][\s\S]*?);TRACE_FILE=/tmp/vtserver\.log'
-      replace: '\1TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtserver.log'
-    - regexp: '(\[VTSERVER\][\s\S]*?);TRACE_FILE_SIZE=10'
-      replace: '\1TRACE_FILE_SIZE=10'
-    - regexp: '(\[VTSERVER\][\s\S]*?);TRACE_FILE_COUNT=10'
-      replace: '\1TRACE_FILE_COUNT=10'
-    
-    # VTMIGRATE section - décommenter tout le bloc
-    - regexp: '(\[VTMIGRATE\][\s\S]*?);TRACE_LEVEL=1'
-      replace: '\1TRACE_LEVEL=1'
-    - regexp: '(\[VTMIGRATE\][\s\S]*?);TRACE_FILE=/tmp/vtmigrate\.log'
-      replace: '\1TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtmigrate.log'
-    - regexp: '(\[VTMIGRATE\][\s\S]*?);TRACE_FILE_SIZE=10'
-      replace: '\1TRACE_FILE_SIZE=10'
-    - regexp: '(\[VTMIGRATE\][\s\S]*?);TRACE_FILE_COUNT=10'
-      replace: '\1TRACE_FILE_COUNT=10'
-    
-    # VTSGBD section - décommenter tout le bloc
-    - regexp: '(\[VTSGBD\][\s\S]*?);TRACE_LEVEL=1'
-      replace: '\1TRACE_LEVEL=1'
-    - regexp: '(\[VTSGBD\][\s\S]*?);TRACE_FILE=/tmp/vtsgbd\.log'
-      replace: '\1TRACE_FILE={{ vtom_install_dir }}/vtom/traces/vtsgbd.log'
-    - regexp: '(\[VTSGBD\][\s\S]*?);TRACE_FILE_SIZE=10'
-      replace: '\1TRACE_FILE_SIZE=10'
-    - regexp: '(\[VTSGBD\][\s\S]*?);TRACE_FILE_COUNT=2'
-      replace: '\1TRACE_FILE_COUNT=2'
-    
-    # BDAEMON section - décommenter tout le bloc
-    - regexp: '(\[BDAEMON\][\s\S]*?);TRACE_LEVEL=6'
-      replace: '\1TRACE_LEVEL=6'
-    - regexp: '(\[BDAEMON\][\s\S]*?);TRACE_FILE=/tmp/bdaemon\.log'
-      replace: '\1TRACE_FILE={{ vtom_install_dir }}/vtom/traces/bdaemon.log'
-    - regexp: '(\[BDAEMON\][\s\S]*?);TRACE_FILE_SIZE=10'
-      replace: '\1TRACE_FILE_SIZE=10'
-    - regexp: '(\[BDAEMON\][\s\S]*?);TRACE_FILE_COUNT=10'
-      replace: '\1TRACE_FILE_COUNT=10'
-    
-    # TENGINE section - décommenter seulement TRACE_LEVEL=1
-    - regexp: '(\[TENGINE:<envname>\][\s\S]*?);TRACE_LEVEL=1'
-      replace: '\1TRACE_LEVEL=1'
+#!/usr/bin/expect -f
+
+# Script Expect pour démarrer automatiquement VTOM Server
+# Usage: ./start_vtom.exp
+
+set timeout 30
+
+# Se connecter en tant qu'utilisateur vtom
+spawn sudo su - vtom
+
+# Attendre le prompt de vtom et lancer la commande admins
+expect "$ "
+send "admins\r"
+
+# Attendre le menu principal et choisir option 2 (Démarrage)
+expect "commande : "
+send "2\r"
+
+# Confirmer le démarrage avec 'o' (oui)
+expect "confirmez vous le démarrage des serveurs ? (o/n) : \[n\] "
+send "o\r"
+
+# Attendre le retour au menu principal
+expect "commande : "
+send "q\r"
+
+# Attendre le prompt final et quitter
+expect "$ "
+send "exit\r"
+
+expect eof
