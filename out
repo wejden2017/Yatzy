@@ -16,3 +16,11 @@
     line: '#\1'
     backrefs: yes
   become: true
+- name: Deploy insert_services.j2 template to remote
+  ansible.builtin.template:
+    src: insert_services.j2
+    dest: /tmp/insert_services.j2
+    owner: root
+    group: root
+    mode: '0644'
+content: "{{ lookup('file', '/tmp/insert_services.j2') }}"
