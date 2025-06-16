@@ -1,14 +1,16 @@
-#!/usr/bin/expect -f
-set timeout 30
-spawn sudo su - vtom
-expect "$ "
-send "admins\r"
-expect "commande : "
-send "2\r"
-expect "confirmez vous le démarrage des serveurs ? (o/n) : \[n\] "
-send "o\r"
-expect "commande : "
-send "q\r"
-expect "$ "
-send "exit\r"
-expect eof
+- name: Deploy VTOM start server Expect script
+  ansible.builtin.copy:
+    src: start_vtom_server_expect.sh
+    dest: "{{ install_vtom_dir }}/start_vtom_server_expect.sh"
+    owner: "{{ vtom_user }}"
+    group: "{{ vtom_group }}"
+    mode: '0755'
+
+- name: Start VTOM server with Expect script
+  ansible.builtin.shell: |
+    cd {{ install_vtom_dir }} && \
+    ./start_vtom_server_expect.sh > start_vtom_server.log 2>&1
+  args:
+    chdir: "{{ install_vtom_dir }}"
+  become: true
+  when: do_start_vtom | bool
