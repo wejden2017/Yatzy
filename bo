@@ -1,18 +1,1 @@
-
-- name: Set ownership and permissions on VTOM install files
-  ansible.builtin.file:
-    path: "{{ vtom_install_dir }}/{{ item }}"
-    owner: "{{ vtom_user }}"
-    group: "{{ vtom_group }}"
-    mode: '0644'
-  loop: "{{ vtom_files }}"
-  when: do_install | bool
-
-# 3. Copier le script Expect avec les bons droits d’exécution
-- name: Deploy VTOM install Expect script
-  ansible.builtin.copy:
-    src: install_vtom_expect.sh
-    dest: "{{ vtom_install_dir }}/install_vtom_expect.sh"
-    owner: "{{ vtom_user }}"
-    group: "{{ vtom_group }}"
-    mode: '0755'
+mode: "{{ '0755' if item == 'install_vtom' else '0644' }}"
