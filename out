@@ -1,25 +1,9 @@
-- name: Insert VTOM ports into /etc/services
-  ansible.builtin.blockinfile:
-    path: /etc/services
-    marker: "# {mark} ANSIBLE MANAGED BLOCK - VTOM PORTS"
-    insertafter: EOF
-    block: "{{ lookup('file', 'vtom_server/templates/insert_services.j2') }}"
-    create: yes
-    backup: yes
-    validate: /usr/sbin/sshd -T
-  become: true
 
-- name: Comment conflicting port lines (30001, 30002)
-  ansible.builtin.lineinfile:
-    path: /etc/services
-    regexp: '^(?!#)(.*\s(30001|30002)/(tcp|udp).*)$'
-    line: '#\1'
-    backrefs: yes
-  become: true
-- name: Deploy insert_services.j2 template to remote
+
+- name: Deploy insert_services.j2 template to remote (optionnel)
   ansible.builtin.template:
     src: insert_services.j2
-    dest: /tmp/insert_services.j2
+    dest: "{{ vtom_install_dir }}/insert_services.j2"
     owner: root
     group: root
     mode: '0644'
@@ -28,8 +12,7 @@
     path: /etc/services
     marker: "# {mark} ANSIBLE MANAGED BLOCK - VTOM PORTS"
     insertafter: EOF
-    block: "{{ lookup('file', vtom_install_dir + '/insert_services.j2') }}"
+    block: "{{ lookup('template', 'vtom_server/templates/insert_services.j2') }}"
     create: yes
     backup: yes
-    validate: /usr/sbin/sshd -T
   become: true
