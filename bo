@@ -3,3 +3,14 @@ mode: "{{ '0755' if item == 'install_vtom' else '0644' }}"
   ansible.builtin.script:
     cmd: "{{ vtom_install_dir }}/install_vtom_expect.sh {{ vtom_install_dir }} {{ vtom_install_dir }} {{ vtom_files[3] }} {{ vtom_files[4] }}"
 
+
+- name: Install VTOM with root privileges in correct directory
+  ansible.builtin.shell: |
+    cd {{ vtom_install_dir }} && \
+    ./install_vtom "{{ vtom_files[3] }}" "{{ vtom_files[4] }}"
+  args:
+    chdir: "{{ vtom_install_dir }}"
+  become: true
+  when: do_install | bool
+
+
