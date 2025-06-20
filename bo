@@ -1,24 +1,36 @@
-.before_script_common: &before_script_common
-  - pip3 install boto3
-  - chmod +x inventory/aws_ec2_inventory.py
+- name: Get Tomcat download page
+  uri:
+    url: "{{ apache_url }}"
+    return_content: yes
+  register: tomcat_page
+  environment:
+    http_proxy: "{{ http_proxy_value }}"
+    https_proxy: "{{ http_proxy_value }}"
 
-  # Supprimer les droits "world-writable" pour que Ansible accepte ansible.cfg
-  - chmod o-w $(pwd)
+- name: Parse Tomcat versions from page
+  set_fact:
+    tomcat_versions: >-
+      {{ tomcat_page.content
+         | regex_findall('v9\\.0\\.\\d+/')
+         | map('regex_replace', '^v', '')
+         | map('regex_replace', '/$', '')
+         | list }}
 
-  # Forcer Ansible à utiliser le fichier de config local
-  - export ANSIBLE_CONFIG=./ansible.cfg
+- name: Extract Tomcat 9 version
+  set_fact:
+    tomcat_version: >-
+      {{ tomcat_versions
+         | map('split','.')
+         | map('map','int')
+         | sort(reverse=true)
+         | first
+         | join('.') }}
 
-  # Déchiffrer Vault (si utilisé)
-  - echo "$VAULT_PASSWORD" > $ANSIBLE_VAULT_PASSWORD_FILE
-
-  # Générer la clé privée SSH à partir de la variable d'environnement
-  - echo "$SSH_PRIVATE_KEY" > ssh_key.pem
-  - chmod 600 ssh_key.pem
-
-  # Exporter les credentials AWS
-  - export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
-  - export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
-  - export AWS_REGION="${AWS_REGION}"
-
-  # Exporter l'environnement cible (dev, poc, uat, etc.)
-  - export ENV="${ENV}"
+- name: Download Tomcat
+  ansible.builtin.get_url:
+    url: "{{ apache_url }}v{{ tomcat_version }}/bin/apache-tomcat-{{ tomcat_version }}.tar.gz"
+    dest: "/tmp/apache-tomcat-{{ tomcat_version }}.tar.gz"
+    mode: '0644'
+  environment:
+    http_proxy: "{{ http_proxy_value }}"
+    https_proxy: "{{ http_proxy_value }}"
