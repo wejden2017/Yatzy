@@ -1,10 +1,42 @@
-- name: Extraire les versions Tomcat de la page
-  set_fact:
-    tomcat_versions: >-
-      {{ tomcat_page.content 
-      | regex_findall('(\d+\.\d+\.\d+)') 
-      | list }}
-- name: Afficher les versions trouvées
-  debug:
-    msg: "Versions trouvées : {{ tomcat_versions }}"
+---
+- name: Get Tomcat versions
+  hosts: localhost
+  tasks:
+    - name: Fetch Tomcat page
+      uri:
+        url: "https://downloads.apache.org/tomcat/tomcat-9/"
+        method: GET
+        return_content: yes
+      register: tomcat_page
 
+    - name: Parse Tomcat versions from page
+      set_fact:
+        tomcat_versions: >-
+          {{ tomcat_page.content 
+          | regex_findall('href="v(\d+\.\d+\.\d+)/"') 
+          | list }}
+
+    - name: Parse versions (alternative method if empty)
+      set_fact:
+        tomcat_versions: >-
+          {{ tomcat_page.content 
+          | regex_findall('v(\d+\.\d+\.\d+)') 
+          | unique 
+          | list }}
+      when: tomcat_versions | length == 0
+
+    - name: Extract latest Tomcat version
+      set_fact:
+        tomcat_version: >-
+          {{ tomcat_versions 
+          | map('split', '.') 
+          | map('map', 'int') 
+          | sort(reverse=true) 
+          | first 
+          | join('.') }}
+
+    - name: Display results
+      debug:
+        msg:
+          - "Found versions: {{ tomcat_versions }}"
+          - "Latest version: {{ tomcat_version }}"
