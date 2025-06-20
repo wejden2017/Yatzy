@@ -2,8 +2,9 @@
   set_fact:
     tomcat_versions: >-
       {{ tomcat_page.content
-         | regex_findall('href="v9\\.0\\.\\d+/?"')
-         | map('regex_replace', '^href="v', '')
-         | map('regex_replace', '/?"$', '')
+         | regex_findall('href=\\"v9\\.0\\.\\d+/\\"')
+         | map('regex_replace', '^href=\\"v', '')
+         | map('regex_replace', '/\\"$', '')
          | list }}
   failed_when: tomcat_versions | length == 0
+
