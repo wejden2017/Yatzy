@@ -1,21 +1,24 @@
-mode: "{{ '0755' if item == 'install_vtom' else '0644' }}"
-- name: Execute VTOM installer with expect
-  ansible.builtin.script:
-    cmd: "{{ vtom_install_dir }}/install_vtom_expect.sh {{ vtom_install_dir }} {{ vtom_install_dir }} {{ vtom_files[3] }} {{ vtom_files[4] }}"
+.before_script_common: &before_script_common
+  - pip3 install boto3
+  - chmod +x inventory/aws_ec2_inventory.py
 
+  # Supprimer les droits "world-writable" pour que Ansible accepte ansible.cfg
+  - chmod o-w $(pwd)
 
-- name: Install VTOM with root privileges in correct directory
-  ansible.builtin.shell: |
-    cd {{ vtom_install_dir }} && \
-    ./install_vtom "{{ vtom_files[3] }}" "{{ vtom_files[4] }}"
-  args:
-    chdir: "{{ vtom_install_dir }}"
-  become: true
-  when: do_install | bool
+  # Forcer Ansible à utiliser le fichier de config local
+  - export ANSIBLE_CONFIG=./ansible.cfg
 
-ansible.builtin.shell: >
-  bash -c "cd {{ vtom_install_dir }} && ./install_vtom_expect.sh '{{ vtom_install_dir }}' '{{ vtom_install_dir }}' '{{ vtom_files[3] }}' '{{ vtom_files[4] }}' > install_vtom_ansible.log 2>&1"
-args:
-  chdir: "{{ vtom_install_dir }}"
-become: true
+  # Déchiffrer Vault (si utilisé)
+  - echo "$VAULT_PASSWORD" > $ANSIBLE_VAULT_PASSWORD_FILE
 
+  # Générer la clé privée SSH à partir de la variable d'environnement
+  - echo "$SSH_PRIVATE_KEY" > ssh_key.pem
+  - chmod 600 ssh_key.pem
+
+  # Exporter les credentials AWS
+  - export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
+  - export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+  - export AWS_REGION="${AWS_REGION}"
+
+  # Exporter l'environnement cible (dev, poc, uat, etc.)
+  - export ENV="${ENV}"
