@@ -1,41 +1,9 @@
-- name: Get Tomcat download page
-  uri:
-    url: "{{ apache_url }}"
-    return_content: yes
-  register: tomcat_page
-  environment:
-    http_proxy: "{{ http_proxy_value }}"
-    https_proxy: "{{ http_proxy_value }}"
-
-- name: Afficher le contenu brut de la page Tomcat (debug temporaire)
-  debug:
-    msg: "{{ tomcat_page.content | truncate(1000, end='...') }}"
-
 - name: Parse Tomcat versions from page
   set_fact:
     tomcat_versions: >-
       {{ tomcat_page.content
-         | regex_findall('v9\\.0\\.\\d+/')
-         | map('regex_replace', '^v', '')
-         | map('regex_replace', '/$', '')
+         | regex_findall('href="v9\\.0\\.\\d+/?"')
+         | map('regex_replace', '^href="v', '')
+         | map('regex_replace', '/?"$', '')
          | list }}
   failed_when: tomcat_versions | length == 0
-
-- name: Extract Tomcat 9 version
-  set_fact:
-    tomcat_version: >-
-      {{ tomcat_versions
-         | map('split', '.')
-         | map('map', 'int')
-         | sort(reverse=true)
-         | first
-         | join('.') }}
-
-- name: Download Tomcat
-  ansible.builtin.get_url:
-    url: "{{ apache_url }}v{{ tomcat_version }}/bin/apache-tomcat-{{ tomcat_version }}.tar.gz"
-    dest: "/tmp/apache-tomcat-{{ tomcat_version }}.tar.gz"
-    mode: '0644'
-  environment:
-    http_proxy: "{{ http_proxy_value }}"
-    https_proxy: "{{ http_proxy_value }}"
