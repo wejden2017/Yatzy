@@ -1,19 +1,57 @@
-  - name: Parse Tomcat versions from page
-    set_fact:
-      tomcat_versions: >-
-        {{ tomcat_page.content 
-        | regex_findall('href="v(\d+\.\d+\.\d+)/"') 
-        | list }}
+- name: Assurer que vtmanager est root:root
+  ansible.builtin.file:
+    path: /opt/absyss/vtom/manager/bin/vtmanager
+    owner: root
+    group: root
+    mode: '4755'  # 4 = setuid bit
+    state: file
 
-  - name: Parse versions (alternative method if empty)
-    set_fact:
-      tomcat_versions: >-
-        {{ tomcat_page.content 
-        | regex_findall('v(\d+\.\d+\.\d+)') 
-        | unique 
-        | list }}
-    when: tomcat_versions | length == 0
+#!/usr/bin/expect -f
+set timeout 30
 
-  - name: Extract latest Tomcat version
-    set_fact:
-      tomcat_version: "{{ tomcat_versions | sort | last }}"
+# Connexion en tant que vtom
+spawn sudo su - vtom
+expect "$ "
+send "admins\r"
+
+# ==== 1. DÉMARRAGE DES SERVEURS ====
+expect "commande : "
+send "2\r"
+expect "confirmez vous le demarrage des serveurs ? (o/n) : \\\[n\\] "
+send "o\r"
+expect "Press Return to continue"
+send "\r"
+
+# ==== 2. GESTION DE L'AGENT ====
+expect "commande : "
+send "5\r"
+
+# ==== 2.1 DÉMARRAGE DE L'AGENT ====
+expect "commande : "
+send "2\r"
+expect "confirmez vous le demarrage de l'agent ? (o/n) : \\\[n\\] "
+send "o\r"
+expect "Press Return to continue"
+send "\r"
+
+# ==== 2.2 DÉMARRAGE DU MANAGER (svtmanager) ====
+expect "commande : "
+send "4\r"
+expect "confirmez vous le demarrage du manager ? (o/n) : \\\[n\\] "
+send "o\r"
+expect "Press Return to continue"
+send "\r"
+
+# ==== 3. SORTIE ====
+# Quitter le menu agent
+expect "commande : "
+send "q\r"
+
+# Quitter le menu principal
+expect "commande : "
+send "q\r"
+
+# Fermer la session shell
+expect "$ "
+send "exit\r"
+expect eof
