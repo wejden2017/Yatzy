@@ -1,17 +1,53 @@
-- name: Deploy VTOM start server Expect script
-  ansible.builtin.copy:
-    src: start_vtom_server_expect.sh
-    dest: "{{ vtom_install_dir }}/start_vtom_server_expect.sh"
-    owner: "{{ vtom_user }}"
-    group: "{{ vtom_group }}"
-    mode: '0755'
-  when: do_start_vtom | bool
+#!/usr/bin/expect -f
+set timeout 600
+exp_internal 1
+log_user 1
+log_file -a /tmp/install_vtom_agent.log
 
-- name: Start VTOM server with Expect script
-  ansible.builtin.shell: |
-    cd {{ vtom_install_dir }} && \
-    ./start_vtom_server_expect.sh > start_vtom_server.log 2>&1
-  args:
-    chdir: "{{ vtom_install_dir }}"
-  become: true
-  when: do_start_vtom | bool
+# Arguments : install_dir tmp_dir install_file
+set install_dir [lindex $argv 0]
+set tmp_dir     [lindex $argv 1]
+set file1       [lindex $argv 2]
+
+set install_cmd [file join $tmp_dir "install_vtom"]
+
+# Lancer le script d'installation VTOM avec le fichier donné
+spawn sudo $install_cmd $file1
+
+expect "Confirmez-vous ces parametres pour proceder a l'installation ?"
+send "n\r"
+
+expect "Repertoire de base d'installation ?"
+send "/opt/absyss\r"
+
+expect "Definissez l'administrateur UNIX de Visual TOM ?"
+send "\r"
+
+expect "Repertoire des traces du moteur de Visual TOM ?"
+send "\r"
+
+expect "Repertoire des fichiers logs ?"
+send "\r"
+
+expect "Sauvegarder l'installation existante ?"
+send "n\r"
+
+expect "Confirmez-vous ces parametres pour proceder a l'installation ?"
+send "o\r"
+
+# Entrée pour valider les ports
+expect "Numero de port tcp pour tomDBd ?"
+send "30001\r"
+
+expect "Numero de port tcp pour vtmanager ?"
+send "30000\r"
+
+# Entrée finale pour terminer
+expect {
+    "appuyez sur la touche Entree" {
+        send "\r"
+    }
+    eof
+}
+
+puts "✅ Installation de VTOM Agent terminée par script Expect."
