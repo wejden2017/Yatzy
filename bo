@@ -1,48 +1,18 @@
-#!/usr/bin/expect -f
-set timeout 30
-
-# Connexion en tant que vtom
-spawn sudo su - vtom
-expect "$ "
-send "admins\r"
-
-# ==== 1. GESTION DE L'AGENT ====
-expect "commande : "
-send "5\r"
-
-# ==== 1.1 ARRÊT DU MANAGER (svtmanager) ====
-expect "commande : "
-send "5\r"
-expect "confirmez vous l'arret du manager ? (o/n) : \\\[n\\] "
-send "o\r"
-expect "Press Return to continue"
-send "\r"
-
-# ==== 1.2 ARRÊT DE L'AGENT ====
-expect "commande : "
-send "3\r"
-expect "confirmez vous l'arret de l'agent ? (o/n) : \\\[n\\] "
-send "o\r"
-expect "Press Return to continue"
-send "\r"
-
-# ==== 1.3 SORTIE DU MENU AGENT ====
-expect "commande : "
-send "q\r"
-
-# ==== 2. ARRÊT DES SERVEURS ====
-expect "commande : "
-send "3\r"
-expect "confirmez vous l'arret des serveurs ? (o/n) : \\\[n\\] "
-send "o\r"
-expect "Press Return to continue"
-send "\r"
-
-# ==== 3. SORTIE COMPLÈTE ====
-expect "commande : "
-send "q\r"
-
-# Fermer la session shell
-expect "$ "
-send "exit\r"
-expect eof
+- name: Install VTOM with root privileges
+  expect:
+    command: "./install_vtom {{ vtom_files | last }}"
+    timeout: 500
+    chdir: "{{ vtom_install_dir }}"
+    responses:
+      'Confirmez-vous ces parametres.*installation.*\[o\]': 'o'
+      'Repertoire de base.*\]': '{{ vtom_install_dir }}/vtom'
+      'Definissez l.*administrateur UNIX.*\]': 'vtom'
+      'Repertoire des traces.*\]': ''
+      'Repertoire des fichiers logs.*\]': ''
+      'Sauvegarder l.*installation existante.*\]': 'n'
+      'Numero de port tcp pour tomDBd.*\]': '30001'
+      'Numero de port tcp pour vtmanager.*\]': '30000'
+      'appuyez sur la touche Entree': ''
+  become: true
+  when: do_install | bool
+  register: vtom_installation
