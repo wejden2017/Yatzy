@@ -1,3 +1,9 @@
+- name: Installer pexpect pour le module expect
+  pip:
+    name: pexpect
+    state: present
+  become: true
+
 - name: Install VTOM with root privileges
   expect:
     command: "./install_vtom {{ vtom_files | last }}"
