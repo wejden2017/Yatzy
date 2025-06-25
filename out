@@ -4,7 +4,6 @@ exp_internal 1
 log_user 1
 log_file -a /tmp/install_vtom_agent.log
 
-# Arguments : install_dir tmp_dir install_file
 set install_dir [lindex $argv 0]
 set tmp_dir     [lindex $argv 1]
 set file1       [lindex $argv 2]
@@ -12,37 +11,44 @@ set file1       [lindex $argv 2]
 set install_cmd [file join $tmp_dir "install_vtom"]
 spawn sudo "$install_cmd" $file1
 
-expect "Confirmez-vous ces parametres pour proceder a l'installation *?"
-send "o\r"
-
-expect "Repertoire de base d'installation *?"
-send "$install_dir/vtom\r"
-
-expect "Definissez l'administrateur UNIX de Visual TOM *?"
-send "vtom\r"
-
-expect "Repertoire des traces du moteur de Visual TOM *?"
-send "\r"
-
-expect "Repertoire des fichiers logs *?"
-send "\r"
-
-expect "Sauvegarder l'installation existante *?"
-send "n\r"
-
-expect "Confirmez-vous ces parametres pour proceder a l'installation *?"
-send "o\r"
-
-expect "Numero de port tcp pour tomDBd *?"
-send "30001\r"
-
-expect "Numero de port tcp pour vtmanager *?"
-send "30000\r"
-
-# Attente finale après installation
 expect {
-    "appuyez sur la touche Entree" {
+    -re "Confirmez-vous ces parametres.*installation.*\\[o\\]" {
+        send "o\r"
+        exp_continue
+    }
+    -re "Repertoire de base d'installation.*\\]" {
+        send "$install_dir/vtom\r"
+        exp_continue
+    }
+    -re "Definissez l'administrateur UNIX de Visual TOM.*\\]" {
+        send "vtom\r"
+        exp_continue
+    }
+    -re "Repertoire des traces.*\\]" {
+        send "\r"
+        exp_continue
+    }
+    -re "Repertoire des fichiers logs.*\\]" {
+        send "\r"
+        exp_continue
+    }
+    -re "Sauvegarder l'installation existante.*\\]" {
+        send "n\r"
+        exp_continue
+    }
+    -re "Confirmez-vous ces parametres.*installation.*\\[o\\]" {
+        send "o\r"
+        exp_continue
+    }
+    -re "Numero de port tcp pour tomDBd.*\\]" {
+        send "30001\r"
+        exp_continue
+    }
+    -re "Numero de port tcp pour vtmanager.*\\]" {
+        send "30000\r"
+        exp_continue
+    }
+    -re "appuyez sur la touche Entree" {
         send "\r"
     }
-    eof
 }
