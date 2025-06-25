@@ -1,24 +1,12 @@
-- name: Install VTOM with root privileges (DEBUG)
-  expect:
-    command: "./install_vtom {{ vtom_files | last }}"
-    timeout: 60  # Timeout plus court pour tester
-    chdir: "{{ vtom_install_dir }}"
-    echo: true   # IMPORTANT: Affiche les interactions
-    responses:
-      # Patterns plus larges pour capturer plus de prompts
-      '.*[Cc]onfirm.*\[o\]': 'o'
-      '.*[Rr]epertoire.*base.*\]': '{{ vtom_install_dir }}/vtom'
-      '.*administrateur.*UNIX.*\]': 'vtom'
-      '.*[Rr]epertoire.*traces.*\]': ''
-      '.*[Rr]epertoire.*logs.*\]': ''
-      '.*[Ss]auvegarder.*\]': 'n'
-      '.*port.*tomDBd.*\]': '30001'
-      '.*port.*vtmanager.*\]': '30000'
-      '.*[Ee]ntree': ''
-      '.*[Cc]ontinue.*\]': 'o'
-      '.*oui.*non.*\]': 'o'
-      # Pattern catch-all pour voir ce qui est manqué
-      '.*\]': ''
+- name: permissions .profile VTOM
+  file:
+    path: "{{ item }}"
+    owner: vtom
+    group: vtom
   become: true
+  loop:
+    - "{{ vtom_install_dir }}/.profile"
+    - "{{ vtom_install_dir }}/.bashrc"
+    - "{{ vtom_install_dir }}/.kshrc"
   when: do_install | bool
-  register: vtom_installation
+  ignore_errors: true  
