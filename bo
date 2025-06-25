@@ -1,24 +1,24 @@
-- name: Installer pexpect pour le module expect
-  pip:
-    name: pexpect
-    state: present
-  become: true
-
-- name: Install VTOM with root privileges
+- name: Install VTOM with root privileges (DEBUG)
   expect:
     command: "./install_vtom {{ vtom_files | last }}"
-    timeout: 500
+    timeout: 60  # Timeout plus court pour tester
     chdir: "{{ vtom_install_dir }}"
+    echo: true   # IMPORTANT: Affiche les interactions
     responses:
-      'Confirmez-vous ces parametres.*installation.*\[o\]': 'o'
-      'Repertoire de base.*\]': '{{ vtom_install_dir }}/vtom'
-      'Definissez l.*administrateur UNIX.*\]': 'vtom'
-      'Repertoire des traces.*\]': ''
-      'Repertoire des fichiers logs.*\]': ''
-      'Sauvegarder l.*installation existante.*\]': 'n'
-      'Numero de port tcp pour tomDBd.*\]': '30001'
-      'Numero de port tcp pour vtmanager.*\]': '30000'
-      'appuyez sur la touche Entree': ''
+      # Patterns plus larges pour capturer plus de prompts
+      '.*[Cc]onfirm.*\[o\]': 'o'
+      '.*[Rr]epertoire.*base.*\]': '{{ vtom_install_dir }}/vtom'
+      '.*administrateur.*UNIX.*\]': 'vtom'
+      '.*[Rr]epertoire.*traces.*\]': ''
+      '.*[Rr]epertoire.*logs.*\]': ''
+      '.*[Ss]auvegarder.*\]': 'n'
+      '.*port.*tomDBd.*\]': '30001'
+      '.*port.*vtmanager.*\]': '30000'
+      '.*[Ee]ntree': ''
+      '.*[Cc]ontinue.*\]': 'o'
+      '.*oui.*non.*\]': 'o'
+      # Pattern catch-all pour voir ce qui est manqué
+      '.*\]': ''
   become: true
   when: do_install | bool
   register: vtom_installation
