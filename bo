@@ -10,3 +10,13 @@
     - "{{ vtom_install_dir }}/.kshrc"
   when: do_install | bool
   ignore_errors: true  
+
+
+- name: Corriger les permissions de tout /opt/absyss pour vtom
+  file:
+    path: /opt/absyss
+    owner: vtom
+    group: vtom
+    recurse: yes
+  become: true
+  when: do_install | bool
