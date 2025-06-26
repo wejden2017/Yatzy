@@ -1,5 +1,4 @@
-- name: Install required packages via raw
-  ansible.builtin.raw: sudo yum install -y ksh unzip expect libselinux-python python3-pexpect
-  register: install_packages
-  changed_when: "'Complete' in install_packages.stdout"
+- name: Install Python 3 pexpect via yum
+  ansible.builtin.raw: sudo yum install -y python3-pexpect python37-pexpect
+  register: install_pexpect
   become: true
