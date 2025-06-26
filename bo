@@ -1,22 +1,5 @@
-- name: permissions .profile VTOM
-  file:
-    path: "{{ item }}"
-    owner: vtom
-    group: vtom
+- name: Install required packages via raw
+  ansible.builtin.raw: sudo yum install -y ksh unzip expect libselinux-python python3-pexpect
+  register: install_packages
+  changed_when: "'Complete' in install_packages.stdout"
   become: true
-  loop:
-    - "{{ vtom_install_dir }}/.profile"
-    - "{{ vtom_install_dir }}/.bashrc"
-    - "{{ vtom_install_dir }}/.kshrc"
-  when: do_install | bool
-  ignore_errors: true  
-
-
-- name: Corriger les permissions de tout /opt/absyss pour vtom
-  file:
-    path: /opt/absyss
-    owner: vtom
-    group: vtom
-    recurse: yes
-  become: true
-  when: do_install | bool
