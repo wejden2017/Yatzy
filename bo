@@ -1,4 +1,6 @@
-- name: Install Python 3 pexpect via yum
-  ansible.builtin.raw: sudo yum install -y python3-pexpect python37-pexpect
-  register: install_pexpect
+- name: Install pexpect via pip3 for Amazon Linux
+  ansible.builtin.raw: |
+    yum install -y python3-pip
+    pip3 install pexpect
   become: true
+  register: pexpect_install
