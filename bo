@@ -1,6 +1,4 @@
-- name: Install pexpect via pip3 for Amazon Linux
-  ansible.builtin.raw: |
-    yum install -y python3-pip
-    pip3 install pexpect
+- name: Force install from pypi.org
   become: true
-  register: pexpect_install
+  ansible.builtin.raw: |
+    pip3 install --index-url https://pypi.org/simple --trusted-host pypi.org pexpect
