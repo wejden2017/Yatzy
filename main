@@ -1,7 +1,6 @@
 Enable-PSRemoting -Force -SkipNetworkProfileCheck
 Set-Item WSMan:\localhost\Service\Auth\Basic $true
 Set-Item WSMan:\localhost\Service\Auth\CredSSP $false
-Set-Item WSMan:\localhost\Service\AllowUnencrypted $true
 Set-Item WSMan:\localhost\Client\TrustedHosts * -Force
 Restart-Service WinRM
 Get-WSManInstance -ResourceURI winrm/config/service
