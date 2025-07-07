@@ -1,27 +1,52 @@
 ---
-- name: "Test connexion WinRM"
-  hosts: all
+- name: "Configuration Active Directory et NetApp FSx"
+  hosts: windows_ad_servers
   gather_facts: no
-  become: no  # IMPORTANT: Pas de sudo sur Windows
   vars:
-    ansible_become: no
-  tasks:
-    - name: "Afficher un message simple"
-      debug:
-        msg: "SI VOUS VOYEZ CE MESSAGE, LE PLAYBOOK FONCTIONNE"
+    fsx_ip: "10.105.57.94"
+    fsx_vserver: "cats-svm"
+    fsx_share: "FSHQ"
+    target_folder: "CATS_LINUX"
     
-    - name: "Test de connectivité Windows"
+  tasks:
+    - name: "Charger le fichier JSON des utilisateurs"
+      include_vars:
+        file: "roles/ad/vars/users.json"
+        name: users_data
+    
+    - name: "DEBUG DIRECT - Test de connexion"
+      debug:
+        msg: "=== TEST DE CONNEXION ==="
+      tags: [test_folder]
+    
+    - name: "DEBUG DIRECT - Variables"
+      debug:
+        msg: |
+          FSX IP: {{ fsx_ip }}
+          Share: {{ fsx_share }}
+          Dossier: {{ target_folder }}
+          Chemin: \\{{ fsx_ip }}\{{ fsx_share }}\{{ target_folder }}
+      tags: [test_folder]
+    
+    - name: "TEST DIRECT - win_ping"
       win_ping:
-      register: ping_result
-      
-    - name: "Résultat du ping"
+      register: ping_test
+      tags: [test_folder]
+    
+    - name: "DEBUG DIRECT - Résultat ping"
       debug:
-        msg: "Ping réussi: {{ ping_result is succeeded }}"
-        
-    - name: "Test PowerShell simple"
-      win_shell: "Get-Date"
-      register: date_result
-      
-    - name: "Afficher la date"
+        var: ping_test
+      tags: [test_folder]
+    
+    - name: "TEST DIRECT - Créer dossier PowerShell"
+      win_shell: |
+        Write-Host "Création du dossier..."
+        New-Item -Path "\\{{ fsx_ip }}\{{ fsx_share }}\{{ target_folder }}" -ItemType Directory -Force
+        Write-Host "Dossier créé avec succès"
+      register: folder_result
+      tags: [test_folder]
+    
+    - name: "DEBUG DIRECT - Résultat dossier"
       debug:
-        var: date_result.stdout
+        var: folder_result
+      tags: [test_folder]
