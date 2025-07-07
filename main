@@ -1,41 +1,66 @@
 ---
 # ===========================================
-# Configuration NetApp FSx (en dur pour l'instant)
+# Création des utilisateurs et ajout aux groupes
+# Variables reçues du main.yml :
+# - user_list : liste des utilisateurs à créer
+# - target_group : nom du groupe AD
+# - access_type : "RW" ou "RO"
+# - default_password : mot de passe par défaut
 # ===========================================
-fsx_ip: "10.105.57.94"
-fsx_vserver: "cats-svm"
-fsx_share: "FSHQ"
-target_folder: "CATS_LINUX"
 
-# ===========================================
-# Configuration Active Directory
-# ===========================================
-ad_domain: "cats.local.ad"
-ad_base_dn: "DC=cats,DC=local,DC=ad"
-ad_users_ou: "CN=Users,DC=cats,DC=local,DC=ad"
+- name: "Afficher les utilisateurs à créer ({{ access_type }})"
+  debug:
+    msg: |
+      Création de {{ user_list | length }} utilisateurs {{ access_type }} :
+      {% for user in user_list %}
+      - {{ user.prenom }} {{ user.nom }} → Login: {{ user.login }}
+      {% endfor %}
+      Groupe cible: {{ target_group }}
 
-# ===========================================
-# Configuration utilisateurs par défaut
-# ===========================================
-default_user_password: "TempPassword123!"
-password_never_expires: true
-change_password_at_logon: false
-user_must_change_password: false
-account_enabled: true
+- name: "Créer les utilisateurs {{ access_type }} dans Active Directory"
+  win_domain_user:
+    name: "{{ item.login }}"
+    firstname: "{{ item.prenom }}"
+    surname: "{{ item.nom }}"
+    email: "{{ item.login }}@{{ ad_domain }}"
+    password: "{{ default_password }}"
+    state: present
+    enabled: yes
+    password_expired: no
+    password_never_expires: "{{ password_never_expires }}"
+    cannot_change_password: no
+    account_locked: no
+    description: "Utilisateur {{ access_type }} - {{ item.prenom }} {{ item.nom }}"
+    organizational_unit: "{{ ad_users_ou }}"
+    user_principal_name: "{{ item.login }}@{{ ad_domain }}"
+  loop: "{{ user_list }}"
+  register: users_creation_result
+  tags: [create_users]
 
-# ===========================================
-# Groupes par défaut
-# ===========================================
-rw_group_name: "CATS_USERS_RW"
-ro_group_name: "CATS_USERS_RO"
+- name: "Ajouter les utilisateurs {{ access_type }} au groupe {{ target_group }}"
+  win_domain_group_membership:
+    name: "{{ target_group }}"
+    members:
+      - "{{ item.login }}"
+    state: present
+  loop: "{{ user_list }}"
+  register: group_membership_result
+  tags: [add_to_group]
 
-# ===========================================
-# Chemins et fichiers
-# ===========================================
-users_json_file: "{{ role_path }}/vars/users.json"
+- name: "Vérifier la création des utilisateurs {{ access_type }}"
+  debug:
+    msg: |
+      ✓ Utilisateur créé : {{ item.item.login }} ({{ item.item.prenom }} {{ item.item.nom }})
+      ✓ Ajouté au groupe : {{ target_group }}
+      ✓ Type d'accès : {{ access_type }}
+  loop: "{{ users_creation_result.results }}"
+  when: item is succeeded
+  tags: [verify_users]
 
-# ===========================================
-# Configuration WinRM/PowerShell
-# ===========================================
-ansible_shell_type: "powershell"
-ansible_winrm_transport: "ntlm"
+- name: "Afficher les erreurs s'il y en a"
+  debug:
+    msg: |
+      ✗ Erreur pour {{ item.item.login }} : {{ item.msg | default('Erreur inconnue') }}
+  loop: "{{ users_creation_result.results }}"
+  when: item is failed
+  tags: [verify_users]
