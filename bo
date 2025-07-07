@@ -25,6 +25,8 @@ vserver cifs share access-control delete -vserver cats-svm -share FSHQ -user-or-
 vserver security file-directory show -vserver cats-svm -path /FSHQ
 
 # Voir les ACL NTFS existantes
-vserver security file-directory ntfs show -vserver cats-svm -path /FSHQ
+vserver security file-directory ntfs show -vserver cats-svm -path /FSHQ KO
+
+vserver security file-directory modify -vserver cats-svm -path /FSHQ -security-style ntfs
 
 
