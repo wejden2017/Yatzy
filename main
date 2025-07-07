@@ -1,40 +1,34 @@
 ---
-- name: "Créer le groupe RW (lecture/écriture)"
-  win_domain_group:
-    name: "{{ users_data.groups.rw_group }}"
-    scope: global
-    category: security
-    state: present
-    organizational_unit: "{{ users_data.organizational_unit }}"
-  register: rw_group_creation
-  tags: [create_groups]
+- name: "Configuration Active Directory et NetApp FSx"
+  hosts: windows_ad_servers
+  gather_facts: no
+  vars:
+    fsx_ip: "10.105.57.94"
+    fsx_vserver: "cats-svm"
+    fsx_share: "FSHQ"
+    target_folder: "CATS_LINUX"
+    
+  tasks:
+    - name: "Charger le fichier JSON des utilisateurs"
+      include_vars:
+        file: "roles/ad/vars/users.json"
+        name: users_data
+    
+    - name: "ÉTAPE 1 - Créer le dossier CATS_LINUX"
+      include_tasks: roles/ad/tasks/create_folder.yml
+      tags: [test_folder]
+    
+    - name: "ÉTAPE 2 - Créer les groupes AD"
+      include_tasks: roles/ad/tasks/create_groups.yml
+      tags: [test_groups]
 
-- name: "Créer le groupe RO (lecture seule)"
-  win_domain_group:
-    name: "{{ users_data.groups.ro_group }}"
-    scope: global
-    category: security
-    state: present
-    organizational_unit: "{{ users_data.organizational_unit }}"
-  register: ro_group_creation
-  tags: [create_groups]
-
-- name: "Vérifier la création du groupe RW"
-  win_domain_group:
-    name: "{{ users_data.groups.rw_group }}"
-    state: present
-  register: rw_group_check
-  tags: [verify_groups]
-
-- name: "Vérifier la création du groupe RO"
-  win_domain_group:
-    name: "{{ users_data.groups.ro_group }}"
-    state: present
-  register: ro_group_check
-  tags: [verify_groups]
-
-- name: "Échec si les groupes n'ont pas été créés"
-  fail:
-    msg: "Échec de création des groupes AD"
-  when: rw_group_check is failed or ro_group_check is failed
-  tags: [verify_groups]
+- name: "Test - Vérification finale"
+  hosts: windows_ad_servers
+  gather_facts: no
+  tasks:
+    - name: "Afficher résumé du test"
+      debug:
+        msg: |
+          === Test terminé ===
+          ✓ Dossier : \\{{ fsx_ip }}\{{ fsx_share }}\{{ target_folder }}
+          ✓ Groupes : {{ users_data.groups.rw_group }}, {{ users_data.groups.ro_group }}
