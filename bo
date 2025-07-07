@@ -1,13 +1,3 @@
-Import-Module ActiveDirectory
+vserver name-mapping create -vserver cats-svm -direction win-unix -position 1 -pattern "CATS\\zouertani" -replacement "zouertani"
 
-New-ADUser -Name "zouertani" `
-           -GivenName "Zied" `
-           -Surname "Ouertani" `
-           -SamAccountName "zouertani" `
-           -UserPrincipalName "zouertani@cats.local.ad" `
-           -Path "CN=Users,DC=cats,DC=local,DC=ad" `
-           -AccountPassword (ConvertTo-SecureString "Plustion01+Pluson02+mar2Kill@" -AsPlainText -Force) `
-           -Enabled $true `
-           -PasswordNeverExpires $true `
-           -ChangePasswordAtLogon $false
 
