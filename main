@@ -1,66 +1,31 @@
 ---
-# ===========================================
-# Création des utilisateurs et ajout aux groupes
-# Variables reçues du main.yml :
-# - user_list : liste des utilisateurs à créer
-# - target_group : nom du groupe AD
-# - access_type : "RW" ou "RO"
-# - default_password : mot de passe par défaut
-# ===========================================
+- name: "Vérifier la connectivité au partage FSx"
+  win_stat:
+    path: "\\\\{{ fsx_ip }}\\{{ fsx_share }}"
+  register: fsx_share_check
+  tags: [check_fsx]
 
-- name: "Afficher les utilisateurs à créer ({{ access_type }})"
-  debug:
-    msg: |
-      Création de {{ user_list | length }} utilisateurs {{ access_type }} :
-      {% for user in user_list %}
-      - {{ user.prenom }} {{ user.nom }} → Login: {{ user.login }}
-      {% endfor %}
-      Groupe cible: {{ target_group }}
+- name: "Échec si le partage FSx n'est pas accessible"
+  fail:
+    msg: "Impossible d'accéder au partage FSx : \\\\{{ fsx_ip }}\\{{ fsx_share }}"
+  when: not fsx_share_check.stat.exists
+  tags: [check_fsx]
 
-- name: "Créer les utilisateurs {{ access_type }} dans Active Directory"
-  win_domain_user:
-    name: "{{ item.login }}"
-    firstname: "{{ item.prenom }}"
-    surname: "{{ item.nom }}"
-    email: "{{ item.login }}@{{ ad_domain }}"
-    password: "{{ default_password }}"
-    state: present
-    enabled: yes
-    password_expired: no
-    password_never_expires: "{{ password_never_expires }}"
-    cannot_change_password: no
-    account_locked: no
-    description: "Utilisateur {{ access_type }} - {{ item.prenom }} {{ item.nom }}"
-    organizational_unit: "{{ ad_users_ou }}"
-    user_principal_name: "{{ item.login }}@{{ ad_domain }}"
-  loop: "{{ user_list }}"
-  register: users_creation_result
-  tags: [create_users]
+- name: "Créer le dossier {{ target_folder }} sur le partage FSx"
+  win_file:
+    path: "\\\\{{ fsx_ip }}\\{{ fsx_share }}\\{{ target_folder }}"
+    state: directory
+  register: folder_creation
+  tags: [create_folder]
 
-- name: "Ajouter les utilisateurs {{ access_type }} au groupe {{ target_group }}"
-  win_domain_group_membership:
-    name: "{{ target_group }}"
-    members:
-      - "{{ item.login }}"
-    state: present
-  loop: "{{ user_list }}"
-  register: group_membership_result
-  tags: [add_to_group]
+- name: "Vérifier que le dossier a été créé"
+  win_stat:
+    path: "\\\\{{ fsx_ip }}\\{{ fsx_share }}\\{{ target_folder }}"
+  register: folder_check
+  tags: [verify_folder]
 
-- name: "Vérifier la création des utilisateurs {{ access_type }}"
-  debug:
-    msg: |
-      ✓ Utilisateur créé : {{ item.item.login }} ({{ item.item.prenom }} {{ item.item.nom }})
-      ✓ Ajouté au groupe : {{ target_group }}
-      ✓ Type d'accès : {{ access_type }}
-  loop: "{{ users_creation_result.results }}"
-  when: item is succeeded
-  tags: [verify_users]
-
-- name: "Afficher les erreurs s'il y en a"
-  debug:
-    msg: |
-      ✗ Erreur pour {{ item.item.login }} : {{ item.msg | default('Erreur inconnue') }}
-  loop: "{{ users_creation_result.results }}"
-  when: item is failed
-  tags: [verify_users]
+- name: "Échec de création du dossier"
+  fail:
+    msg: "Échec de création du dossier {{ target_folder }}"
+  when: not folder_check.stat.exists
+  tags: [verify_folder]
