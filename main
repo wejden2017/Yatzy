@@ -1,18 +1,7 @@
----
-- name: "Test connexion WinRM"
-  hosts: windows_ad_servers
-  gather_facts: no
-  tasks:
-    - name: "Afficher un message simple"
-      debug:
-        msg: "SI VOUS VOYEZ CE MESSAGE, LE PLAYBOOK FONCTIONNE"
-    
-    - name: "Test de connectivité Windows"
-      win_ping:
-      register: ping_result
-      ignore_errors: yes
-      
-    - name: "Résultat du ping"
-      debug:
-        msg: "Ping réussi: {{ ping_result is succeeded }}"
-      when: ping_result is defined
+Enable-PSRemoting -Force -SkipNetworkProfileCheck
+Set-Item WSMan:\localhost\Service\Auth\Basic $true
+Set-Item WSMan:\localhost\Service\Auth\CredSSP $false
+Set-Item WSMan:\localhost\Service\AllowUnencrypted $true
+Set-Item WSMan:\localhost\Client\TrustedHosts * -Force
+Restart-Service WinRM
+Get-WSManInstance -ResourceURI winrm/config/service
