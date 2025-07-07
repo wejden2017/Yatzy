@@ -1,14 +1,50 @@
-# ------------------------
-# Demons tcp Visual TOM
-# ------------------------
-tomDBd     30001/tcp
-bdaemon    30004/tcp
-vtserver   30007/tcp
-svtserver  30017/tcp
-vtnotifier 30008/tcp
-svtnotifier 30018/tcp
-vtsgbd     30009/tcp
-vthttpd    30080/tcp
-svthttpd   30081/tcp
-vtmanager  30000/tcp
-svtmanager 30010/tcp
+{
+  "domain": "cats.local.ad",
+  "groups": {
+    "rw_group": "CATS_USERS_RW",
+    "ro_group": "CATS_USERS_RO"
+  },
+  "users": {
+    "rw_users": [
+      {
+        "prenom": "Zied",
+        "nom": "Ouertani",
+        "login": "zouertani"
+      },
+      {
+        "prenom": "Mohamed",
+        "nom": "Ben Ali",
+        "login": "mbenali"
+      },
+      {
+        "prenom": "Fatma",
+        "nom": "Trabelsi",
+        "login": "ftrabelsi"
+      }
+    ],
+    "ro_users": [
+      {
+        "prenom": "Ahmed",
+        "nom": "Sassi",
+        "login": "asassi"
+      },
+      {
+        "prenom": "Leila",
+        "nom": "Hamdi",
+        "login": "lhamdi"
+      },
+      {
+        "prenom": "Karim",
+        "nom": "Mejri",
+        "login": "kmejri"
+      }
+    ]
+  },
+  "default_password": "TempPassword123!",
+  "password_settings": {
+    "password_never_expires": true,
+    "change_password_at_logon": false,
+    "account_enabled": true
+  },
+  "organizational_unit": "CN=Users,DC=cats,DC=local,DC=ad"
+}
