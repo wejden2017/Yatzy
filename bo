@@ -28,5 +28,18 @@ vserver security file-directory show -vserver cats-svm -path /FSHQ
 vserver security file-directory ntfs show -vserver cats-svm -path /FSHQ KO
 
 vserver security file-directory modify -vserver cats-svm -path /FSHQ -security-style ntfs
+vserver security file-directory show -vserver cats-svm -path /FSHQ
+
+# Créer un security descriptor
+vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd FSHQ_SD
+
+# Ajouter les permissions pour zouertani
+vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd FSHQ_SD -access-type allow -account "CATS\zouertani" -rights full-control
+
+# Ajouter les permissions pour les administrateurs
+vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd FSHQ_SD -access-type allow -account "BUILTIN\Administrators" -rights full-control
+
+# Appliquer les permissions
+vserver security file-directory apply -vserver cats-svm -path /FSHQ -security-descriptor FSHQ_SD
 
 
