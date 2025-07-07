@@ -5,3 +5,6 @@ vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd CATS_LI
 
 verif : 
 vserver security file-directory ntfs dacl show -vserver cats-svm -ntfs-sd CATS_LINUX_SD
+c'est bon :
+
+vserver security file-directory apply -vserver cats-svm -path /FSHQ/CATS_LINUX -security-descriptor CATS_LINUX_SD
