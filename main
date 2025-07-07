@@ -1,6 +1,1 @@
-Enable-PSRemoting -Force -SkipNetworkProfileCheck
-Set-Item WSMan:\localhost\Service\Auth\Basic $true
-Set-Item WSMan:\localhost\Service\Auth\CredSSP $false
-Set-Item WSMan:\localhost\Client\TrustedHosts * -Force
-Restart-Service WinRM
-Get-WSManInstance -ResourceURI winrm/config/service
+ansible-playbook -i "10.105.57.188," test_connection.yml -e "ansible_user=Administrator" -e "ansible_password=HAyfp.dzp.xB)D7FCFr6j)=-uNpipTFG" -e "ansible_connection=winrm" -e "ansible_winrm_transport=ntlm" -e "ansible_port=5986" -e "ansible_winrm_server_cert_validation=ignore" -v
