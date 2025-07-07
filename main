@@ -1,34 +1,13 @@
 ---
-- name: "Configuration Active Directory et NetApp FSx"
-  hosts: windows_ad_servers
-  gather_facts: no
-  vars:
-    fsx_ip: "10.105.57.94"
-    fsx_vserver: "cats-svm"
-    fsx_share: "FSHQ"
-    target_folder: "CATS_LINUX"
-    
-  tasks:
-    - name: "Charger le fichier JSON des utilisateurs"
-      include_vars:
-        file: "roles/ad/vars/users.json"
-        name: users_data
-    
-    - name: "ÉTAPE 1 - Créer le dossier CATS_LINUX"
-      include_tasks: roles/ad/tasks/create_folder.yml
-      tags: [test_folder]
-    
-    - name: "ÉTAPE 2 - Créer les groupes AD"
-      include_tasks: roles/ad/tasks/create_groups.yml
-      tags: [test_groups]
+- name: "Debug - Variables"
+  debug:
+    msg: "Chemin: \\\\{{ fsx_ip }}\\{{ fsx_share }}\\{{ target_folder }}"
 
-- name: "Test - Vérification finale"
-  hosts: windows_ad_servers
-  gather_facts: no
-  tasks:
-    - name: "Afficher résumé du test"
-      debug:
-        msg: |
-          === Test terminé ===
-          ✓ Dossier : \\{{ fsx_ip }}\{{ fsx_share }}\{{ target_folder }}
-          ✓ Groupes : {{ users_data.groups.rw_group }}, {{ users_data.groups.ro_group }}
+- name: "Test simple - Créer dossier"
+  win_shell: |
+    New-Item -Path "\\{{ fsx_ip }}\{{ fsx_share }}\{{ target_folder }}" -ItemType Directory -Force
+  register: powershell_result
+
+- name: "Afficher résultat PowerShell"
+  debug:
+    var: powershell_result
