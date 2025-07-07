@@ -1,13 +1,25 @@
 ---
-- name: "Debug - Variables"
+- name: "Debug - Afficher les variables"
   debug:
-    msg: "Chemin: \\\\{{ fsx_ip }}\\{{ fsx_share }}\\{{ target_folder }}"
+    msg: |
+      FSX IP: {{ fsx_ip }}
+      Share: {{ fsx_share }}
+      Target folder: {{ target_folder }}
+      Chemin complet: \\{{ fsx_ip }}\{{ fsx_share }}\{{ target_folder }}
 
-- name: "Test simple - Créer dossier"
+- name: "Test win_ping"
+  win_ping:
+  register: ping_result
+
+- name: "Debug - Résultat ping"
+  debug:
+    var: ping_result
+
+- name: "Créer le dossier via PowerShell"
   win_shell: |
     New-Item -Path "\\{{ fsx_ip }}\{{ fsx_share }}\{{ target_folder }}" -ItemType Directory -Force
   register: powershell_result
 
-- name: "Afficher résultat PowerShell"
+- name: "Debug - Résultat PowerShell"
   debug:
     var: powershell_result
