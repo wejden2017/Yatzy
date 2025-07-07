@@ -1,31 +1,40 @@
 ---
-- name: "Vérifier la connectivité au partage FSx"
-  win_stat:
-    path: "\\\\{{ fsx_ip }}\\{{ fsx_share }}"
-  register: fsx_share_check
-  tags: [check_fsx]
+- name: "Créer le groupe RW (lecture/écriture)"
+  win_domain_group:
+    name: "{{ users_data.groups.rw_group }}"
+    scope: global
+    category: security
+    state: present
+    organizational_unit: "{{ users_data.organizational_unit }}"
+  register: rw_group_creation
+  tags: [create_groups]
 
-- name: "Échec si le partage FSx n'est pas accessible"
+- name: "Créer le groupe RO (lecture seule)"
+  win_domain_group:
+    name: "{{ users_data.groups.ro_group }}"
+    scope: global
+    category: security
+    state: present
+    organizational_unit: "{{ users_data.organizational_unit }}"
+  register: ro_group_creation
+  tags: [create_groups]
+
+- name: "Vérifier la création du groupe RW"
+  win_domain_group:
+    name: "{{ users_data.groups.rw_group }}"
+    state: present
+  register: rw_group_check
+  tags: [verify_groups]
+
+- name: "Vérifier la création du groupe RO"
+  win_domain_group:
+    name: "{{ users_data.groups.ro_group }}"
+    state: present
+  register: ro_group_check
+  tags: [verify_groups]
+
+- name: "Échec si les groupes n'ont pas été créés"
   fail:
-    msg: "Impossible d'accéder au partage FSx : \\\\{{ fsx_ip }}\\{{ fsx_share }}"
-  when: not fsx_share_check.stat.exists
-  tags: [check_fsx]
-
-- name: "Créer le dossier {{ target_folder }} sur le partage FSx"
-  win_file:
-    path: "\\\\{{ fsx_ip }}\\{{ fsx_share }}\\{{ target_folder }}"
-    state: directory
-  register: folder_creation
-  tags: [create_folder]
-
-- name: "Vérifier que le dossier a été créé"
-  win_stat:
-    path: "\\\\{{ fsx_ip }}\\{{ fsx_share }}\\{{ target_folder }}"
-  register: folder_check
-  tags: [verify_folder]
-
-- name: "Échec de création du dossier"
-  fail:
-    msg: "Échec de création du dossier {{ target_folder }}"
-  when: not folder_check.stat.exists
-  tags: [verify_folder]
+    msg: "Échec de création des groupes AD"
+  when: rw_group_check is failed or ro_group_check is failed
+  tags: [verify_groups]
