@@ -5,5 +5,6 @@ vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-
 vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-group "CATS\zouertani" -permission full_control -user-group-type windows
 vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-group-name "zouertani" -permission full_control -user-group-type windows
 
+vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-group-name "CATS\zouertani" -permission full_control
 
 
