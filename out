@@ -12,4 +12,6 @@ vserver security file-directory apply -vserver cats-svm -path /FSHQ/CATS_LINUX -
 vserver security file-directory policy create -vserver cats-svm -policy-name CATS_LINUX_policy
 vserver security file-directory policy task add -vserver cats-svm -policy-name CATS_LINUX_policy -path /FSHQ/CATS_LINUX -security-type ntfs -ntfs-sd CATS_LINUX_SD -ntfs-mode propagate
 vserver security file-directory apply -vserver cats-svm -policy-name CATS_LINUX_policy
-vserver security file-directory policy create -vserver cats-svm -policy-name CATS_LINUX_policy
+
+vserver security file-directory show -vserver cats-svm -path /FSHQ/CATS_LINUX
+
