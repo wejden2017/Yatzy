@@ -1,14 +1,18 @@
 ---
-- name: "Debug - Variables des groupes"
-  debug:
-    msg: |
-      Groupe RW: {{ users_data.groups.rw_group }}
-      Groupe RO: {{ users_data.groups.ro_group }}
-
-- name: "Test PowerShell simple"
-  win_shell: "Get-Date"
-  register: date_test
-
-- name: "Debug - Test date"
-  debug:
-    var: date_test
+- name: "Test connexion WinRM"
+  hosts: windows_ad_servers
+  gather_facts: no
+  tasks:
+    - name: "Afficher un message simple"
+      debug:
+        msg: "SI VOUS VOYEZ CE MESSAGE, LE PLAYBOOK FONCTIONNE"
+    
+    - name: "Test de connectivité Windows"
+      win_ping:
+      register: ping_result
+      ignore_errors: yes
+      
+    - name: "Résultat du ping"
+      debug:
+        msg: "Ping réussi: {{ ping_result is succeeded }}"
+      when: ping_result is defined
