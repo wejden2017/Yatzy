@@ -1,9 +1,1 @@
-[windows_ad_servers:vars]
-ansible_connection=winrm
-ansible_winrm_transport=basic
-ansible_port=5985
-ansible_user=Administrator
-ansible_password=TonPasswordComplexe!
-ansible_winrm_server_cert_validation=ignore
-ansible_shell_type=powershell
-ansible_become=no
+ansible windows_ad_servers -i inventory/aws_ec2_inventory.py -m win_shell -a 'net use Z: \\10.105.57.94\FSHQ /user:CATS\Administrator "TonMotDePasse" && dir Z:\'
