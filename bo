@@ -1,5 +1,13 @@
-- name: Install pexpect with proxy via pip3
-  ansible.builtin.raw: |
-    http_proxy={{ http_proxy_value }} https_proxy={{ http_proxy_value }} \
-    pip3 install --index-url https://pypi.org/simple --trusted-host pypi.org pexpect
-  become: true
+Import-Module ActiveDirectory
+
+New-ADUser -Name "zouertani" `
+           -GivenName "Zied" `
+           -Surname "Ouertani" `
+           -SamAccountName "zouertani" `
+           -UserPrincipalName "zouertani@cats.local.ad" `
+           -Path "CN=Users,DC=cats,DC=local,DC=ad" `
+           -AccountPassword (ConvertTo-SecureString "Plustion01+Pluson02+mar2Kill@" -AsPlainText -Force) `
+           -Enabled $true `
+           -PasswordNeverExpires $true `
+           -ChangePasswordAtLogon $false
+
