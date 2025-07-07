@@ -1,37 +1,14 @@
----
-- name: "Configuration Active Directory et NetApp FSx"
-  hosts: windows_ad_servers  # Ou le groupe de vos serveurs AD
-  gather_facts: no
-  vars:
-    # Variables globales pour ce playbook
-    fsx_ip: "10.105.57.94"
-    fsx_vserver: "cats-svm"
-    fsx_share: "FSHQ"
-    target_folder: "CATS_LINUX"
-    
-  tasks:
-    - name: "Charger le fichier JSON des utilisateurs"
-      include_vars:
-        file: "roles/ad/vars/users.json"
-        name: users_data
-    
-    - name: "Exécuter le rôle AD"
-      include_role:
-        name: ad
-      vars:
-        # Passer les données utilisateurs au rôle
-        ad_users_data: "{{ users_data }}"
-
-# Optionnel : Tâches post-déploiement
-- name: "Vérification et tests finaux"
-  hosts: windows_ad_servers
-  gather_facts: no
-  tasks:
-    - name: "Afficher résumé de la configuration"
-      debug:
-        msg: |
-          Configuration terminée :
-          - Dossier FSx : \\{{ fsx_ip }}\{{ fsx_share }}\{{ target_folder }}
-          - Groupes créés : {{ users_data.groups.rw_group }}, {{ users_data.groups.ro_group }}
-          - Utilisateurs RW : {{ users_data.users.rw_users | length }}
-          - Utilisateurs RO : {{ users_data.users.ro_users | length }}
+# Correction pour Windows AD servers
+ad_instances = get_ec2_instances('Role', 'ACTIVE-DIRECTORY', region)
+for instance in ad_instances:
+    inventory['windows_ad_servers']['hosts'].append(instance['private_ip'])
+    inventory['_meta']['hostvars'][instance['private_ip']] = {
+        'ansible_user': 'Administrator',  # ← Utilisateur Windows par défaut
+        'ansible_password': '{{ windows_admin_password }}',  # ← À définir dans vault
+        'ansible_connection': 'winrm',    # ← Connexion WinRM pour Windows
+        'ansible_winrm_transport': 'ntlm', # ← Authentification NTLM
+        'ansible_winrm_server_cert_validation': 'ignore',  # ← Pour certificats auto-signés
+        'ansible_port': 5986,             # ← Port WinRM HTTPS (ou 5985 HTTP)
+        # Optionnel : pour forcer PowerShell
+        'ansible_shell_type': 'powershell'
+    }
