@@ -1,4 +1,7 @@
 vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd CATS_LINUX_SD
 vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd CATS_LINUX_SD -access-type allow -account "CATS\CATS_USERS_RW" -rights full-control
 vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd CATS_LINUX_SD -access-type allow -account "CATS\CATS_USERS_RO" -rights read
-vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd CATS_LINUX_SD -access-type allow -account "BUILTIN\Administrators" -rights full-control
+vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd CATS_LINUX_SD -access-type allow -account "BUILTIN\Administrators" -rights full-control KO duplicate netry
+
+verif : 
+vserver security file-directory ntfs dacl show -vserver cats-svm -ntfs-sd CATS_LINUX_SD
