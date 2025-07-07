@@ -1,5 +1,7 @@
 vserver name-mapping create -vserver cats-svm -direction win-unix -position 1 -pattern "CATS\\zouertani" -replacement "zouertani"
 
 vserver cifs share access-control create -vserver cats-svm -share-name FSHQ -user-or-group-name "CATS\zouertani" -permission full_control
+vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-group-name "CATS\zouertani" -permission full_control
+
 
 
