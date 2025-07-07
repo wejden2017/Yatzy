@@ -21,4 +21,10 @@ vserver cifs share access-control delete -vserver cats-svm -share FSHQ -user-or-
 # Supprimer BUILTIN\Users
 vserver cifs share access-control delete -vserver cats-svm -share FSHQ -user-or-group "BUILTIN\Users"
 
+# Voir la structure des permissions
+vserver security file-directory show -vserver cats-svm -path /FSHQ
+
+# Voir les ACL NTFS existantes
+vserver security file-directory ntfs show -vserver cats-svm -path /FSHQ
+
 
