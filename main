@@ -1,1 +1,27 @@
-ansible-playbook -i "10.105.57.188," test_connection.yml -e "ansible_user=Administrator" -e "ansible_password=HAyfp.dzp.xB)D7FCFr6j)=-uNpipTFG" -e "ansible_connection=winrm" -e "ansible_winrm_transport=ntlm" -e "ansible_port=5986" -e "ansible_winrm_server_cert_validation=ignore" -v
+---
+- name: "Test connexion WinRM"
+  hosts: all
+  gather_facts: no
+  become: no  # IMPORTANT: Pas de sudo sur Windows
+  vars:
+    ansible_become: no
+  tasks:
+    - name: "Afficher un message simple"
+      debug:
+        msg: "SI VOUS VOYEZ CE MESSAGE, LE PLAYBOOK FONCTIONNE"
+    
+    - name: "Test de connectivité Windows"
+      win_ping:
+      register: ping_result
+      
+    - name: "Résultat du ping"
+      debug:
+        msg: "Ping réussi: {{ ping_result is succeeded }}"
+        
+    - name: "Test PowerShell simple"
+      win_shell: "Get-Date"
+      register: date_result
+      
+    - name: "Afficher la date"
+      debug:
+        var: date_result.stdout
