@@ -12,4 +12,13 @@ vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-
 vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-group "CATS\zouertani" -permission full_control
 vserver cifs share access-control delete -vserver cats-svm -share FSHQ -user-or-group "BUILTIN\Users"
 
+# Supprimer Everyone
+vserver cifs share access-control delete -vserver cats-svm -share FSHQ -user-or-group "Everyone"
+
+# Supprimer Domain Users
+vserver cifs share access-control delete -vserver cats-svm -share FSHQ -user-or-group "Domain Users"
+
+# Supprimer BUILTIN\Users
+vserver cifs share access-control delete -vserver cats-svm -share FSHQ -user-or-group "BUILTIN\Users"
+
 
