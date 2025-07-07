@@ -1,14 +1,41 @@
-# Correction pour Windows AD servers
-ad_instances = get_ec2_instances('Role', 'ACTIVE-DIRECTORY', region)
-for instance in ad_instances:
-    inventory['windows_ad_servers']['hosts'].append(instance['private_ip'])
-    inventory['_meta']['hostvars'][instance['private_ip']] = {
-        'ansible_user': 'Administrator',  # ← Utilisateur Windows par défaut
-        'ansible_password': '{{ windows_admin_password }}',  # ← À définir dans vault
-        'ansible_connection': 'winrm',    # ← Connexion WinRM pour Windows
-        'ansible_winrm_transport': 'ntlm', # ← Authentification NTLM
-        'ansible_winrm_server_cert_validation': 'ignore',  # ← Pour certificats auto-signés
-        'ansible_port': 5986,             # ← Port WinRM HTTPS (ou 5985 HTTP)
-        # Optionnel : pour forcer PowerShell
-        'ansible_shell_type': 'powershell'
-    }
+---
+# ===========================================
+# Configuration NetApp FSx (en dur pour l'instant)
+# ===========================================
+fsx_ip: "10.105.57.94"
+fsx_vserver: "cats-svm"
+fsx_share: "FSHQ"
+target_folder: "CATS_LINUX"
+
+# ===========================================
+# Configuration Active Directory
+# ===========================================
+ad_domain: "cats.local.ad"
+ad_base_dn: "DC=cats,DC=local,DC=ad"
+ad_users_ou: "CN=Users,DC=cats,DC=local,DC=ad"
+
+# ===========================================
+# Configuration utilisateurs par défaut
+# ===========================================
+default_user_password: "TempPassword123!"
+password_never_expires: true
+change_password_at_logon: false
+user_must_change_password: false
+account_enabled: true
+
+# ===========================================
+# Groupes par défaut
+# ===========================================
+rw_group_name: "CATS_USERS_RW"
+ro_group_name: "CATS_USERS_RO"
+
+# ===========================================
+# Chemins et fichiers
+# ===========================================
+users_json_file: "{{ role_path }}/vars/users.json"
+
+# ===========================================
+# Configuration WinRM/PowerShell
+# ===========================================
+ansible_shell_type: "powershell"
+ansible_winrm_transport: "ntlm"
