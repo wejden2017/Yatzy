@@ -13,7 +13,8 @@
         '
       register: create_sd_result
       ignore_errors: yes
-      tags: [netapp_perms]
+      tags:
+        - netapp_perms
 
     - name: "Afficher la sortie complète du shell"
       debug:
