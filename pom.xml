@@ -1,13 +1,11 @@
-- name: "Ajouter les utilisateurs RW au groupe CATS_RW"
-  win_shell: |
-    Add-ADGroupMember -Identity "{{ users_data.groups.rw_group }}" -Members "{{ user.login }}"
-  loop: "{{ users_data.users.rw_users }}"
-  loop_control:
-    loop_var: user
-
-- name: "Ajouter les utilisateurs RO au groupe CATS_RO"
-  win_shell: |
-    Add-ADGroupMember -Identity "{{ users_data.groups.ro_group }}" -Members "{{ user.login }}"
-  loop: "{{ users_data.users.ro_users }}"
-  loop_control:
-    loop_var: user
+if (-Not (Get-ADUser -Filter { SamAccountName -eq "{{ user.login }}" })) {
+    New-ADUser -Name "{{ user.prenom }} {{ user.nom }}" `
+               -SamAccountName "{{ user.login }}" `
+               -UserPrincipalName "{{ user.login }}@{{ users_data.domain }}" `
+               -AccountPassword (ConvertTo-SecureString "{{ users_data.default_password }}" -AsPlainText -Force) `
+               -Enabled ${{ users_data.password_settings.account_enabled }} `
+               -PasswordNeverExpires ${{ users_data.password_settings.password_never_expires }}
+    Write-Output "User {{ user.login }} created."
+} else {
+    Write-Output "User {{ user.login }} already exists."
+}
