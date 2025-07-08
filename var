@@ -10,13 +10,13 @@
   tags:
     - netapp_perms
 
-- name: "Afficher la sortie complète"
+- name: "Afficher la sortie complète de la commande"
   debug:
     var: create_sd_result
   tags:
     - netapp_perms
 
-- name: "Afficher stdout"
+- name: "Afficher uniquement stdout"
   debug:
     msg: "{{ create_sd_result.stdout_lines }}"
   tags:
