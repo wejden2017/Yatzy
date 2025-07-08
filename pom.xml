@@ -1,17 +1,10 @@
-- name: "Créer les utilisateurs RW"
-  win_shell: |
-    New-ADUser -Name "{{ item.prenom }} {{ item.nom }}" `
-               -SamAccountName "{{ item.login }}" `
-               -UserPrincipalName "{{ item.login }}@{{ users_data.domain }}" `
-               -AccountPassword (ConvertTo-SecureString "{{ users_data.default_password }}" -AsPlainText -Force) `
-               -PasswordNeverExpires {{ users_data.password_settings.password_never_expires }} `
-               -Enabled {{ users_data.password_settings.account_enabled }} `
-               -Path "{{ users_data.organizational_unit }}"
-  loop: "{{ users_data.users.rw_users }}"
-  register: create_rw_users
-  ignore_errors: yes
-
-- debug:
-    var: create_rw_users
+New-ADUser `
+    -Name "{{ user.prenom }} {{ user.nom }}" `
+    -SamAccountName "{{ user.login }}" `
+    -UserPrincipalName "{{ user.login }}@{{ users_data.domain }}" `
+    -AccountPassword (ConvertTo-SecureString "{{ users_data.default_password }}" -AsPlainText -Force) `
+    -Enabled $True `
+    -PasswordNeverExpires $True `
+    -Path "{{ users_data.organizational_unit }}"
 
 
