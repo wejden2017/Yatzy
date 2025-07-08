@@ -1,27 +1,6 @@
-- name: "Créer le groupe RW s'il n'existe pas"
-  win_shell: |
-    if (-Not (Get-ADGroup -Filter { Name -eq '{{ users_data.groups.rw_group }}' })) {
-      New-ADGroup -Name '{{ users_data.groups.rw_group }}' -GroupScope Global -Path '{{ users_data.organizational_unit }}'
-      Write-Output "Created"
-    }
-  register: create_rw_group
-  changed_when: "'Created' in create_rw_group.stdout"
-  ignore_errors: yes
+tasks:
+  - name: "Charger les données utilisateurs depuis le JSON"
+    include_vars:
+      file: "../roles/ad/vars/users.json"
+      name: users_data
 
-- name: "Debug création groupe RW"
-  debug:
-    var: create_rw_group
-
-- name: "Créer le groupe RO s'il n'existe pas"
-  win_shell: |
-    if (-Not (Get-ADGroup -Filter { Name -eq '{{ users_data.groups.ro_group }}' })) {
-      New-ADGroup -Name '{{ users_data.groups.ro_group }}' -GroupScope Global -Path '{{ users_data.organizational_unit }}'
-      Write-Output "Created"
-    }
-  register: create_ro_group
-  changed_when: "'Created' in create_ro_group.stdout"
-  ignore_errors: yes
-
-- name: "Debug création groupe RO"
-  debug:
-    var: create_ro_group
