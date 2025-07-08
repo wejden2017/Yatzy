@@ -4,3 +4,17 @@ vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd ADMIN_S
 vserver security file-directory apply -vserver cats-svm -path /FSHQ -ntfs-sd ADMIN_SD
 
 vserver security file-directory apply -vserver cats-svm -ntfs-sd ADMIN_SD -path /FSHQ
+
+vserver security file-directory policy create -vserver cats-svm -policy-name CATS_LINUX_policy
+vserver security file-directory policy task add -vserver cats-svm \
+  -policy-name CATS_LINUX_policy \
+  -path /FSHQ/CATS_LINUX \
+  -security-type ntfs \
+  -ntfs-sd CATS_LINUX_SD \
+  -ntfs-mode propagate
+
+vserver security file-directory policy apply -vserver cats-svm -policy-name CATS_LINUX_policy
+
+verif: 
+vserver security file-directory show -vserver cats-svm -path /FSHQ/CATS_LINUX -fields ntfs-sd
+
