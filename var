@@ -1,15 +1,6 @@
-- name: Vérifier si la policy est déjà appliquée
-  shell: >
-    sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }}
-    "vserver security file-directory show -vserver {{ fsx_vserver }} -path {{ fsx_path }}"
-  register: check_applied
-  ignore_errors: yes
-  changed_when: false
+vserver security file-directory policy delete -vserver cats-svm -policy-name CATS_LINUX_policy
+vserver security file-directory ntfs delete -vserver cats-svm -ntfs-sd CATS_LINUX_SD
 
-- name: Appliquer la policy seulement si nécessaire
-  shell: >
-    sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }}
-    "vserver security file-directory apply -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
-  when: '"{{ ntfs_sd }}" not in check_applied.stdout'
-  register: apply_policy_result
-  ignore_errors: yes
+
+vserver security file-directory policy show -instance
+vserver security file-directory ntfs show -instance
