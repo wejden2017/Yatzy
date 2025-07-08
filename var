@@ -1,79 +1,75 @@
-#!/usr/bin/expect -f
+---
+- name: "Créer Security Descriptor pour CATS_LINUX"
+  shell: |
+    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
+    "vserver security file-directory ntfs create -vserver {{ fsx_vserver }} -ntfs-sd CATS_LINUX_SD"
+  register: create_sd_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-set timeout 30
-exp_internal 1
-log_user 1
-log_file -a /tmp/install_expect.log
+- name: "Ajouter permissions pour CATS_USERS_RW"
+  shell: |
+    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
+    "vserver security file-directory ntfs dacl add -vserver {{ fsx_vserver }} -ntfs-sd CATS_LINUX_SD -access-type allow -account '{{ users_data.domain }}\{{ users_data.groups.rw_group }}' -rights full-control"
+  register: add_rw_perms_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-# Variables d’environnement passées en paramètre
-set install_dir [lindex $argv 0]
-set tmp_dir     [lindex $argv 1]
-set file1       [lindex $argv 2]
-set file2       [lindex $argv 3]
+- name: "Ajouter permissions pour CATS_USERS_RO"
+  shell: |
+    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
+    "vserver security file-directory ntfs dacl add -vserver {{ fsx_vserver }} -ntfs-sd CATS_LINUX_SD -access-type allow -account '{{ users_data.domain }}\{{ users_data.groups.ro_group }}' -rights read"
+  register: add_ro_perms_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-spawn sudo $tmp_dir/install_vtom $tmp_dir/$file1 $tmp_dir/$file2
+- name: "Ajouter permissions pour Administrators"
+  shell: |
+    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
+    "vserver security file-directory ntfs dacl add -vserver {{ fsx_vserver }} -ntfs-sd CATS_LINUX_SD -access-type allow -account 'BUILTIN\Administrators' -rights full-control"
+  register: add_admin_perms_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-expect {
-    -re "Nom du serveur de backup.*\\[aucun\\]" {
-        send "\r"
-        exp_continue
-    }
+- name: "Créer politique de sécurité"
+  shell: |
+    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
+    "vserver security file-directory policy create -vserver {{ fsx_vserver }} -policy-name CATS_LINUX_policy"
+  register: create_policy_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-    -re "Repertoire de base d'installation.*\\]" {
-        send "$install_dir\r"
-        exp_continue
-    }
+- name: "Ajouter tâche à la politique"
+  shell: |
+    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
+    "vserver security file-directory policy task add -vserver {{ fsx_vserver }} -policy-name CATS_LINUX_policy -path /FSHQ/CATS_LINUX -security-type ntfs -ntfs-sd CATS_LINUX_SD -ntfs-mode propagate"
+  register: add_task_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-    -re "Definissez l'administrateur UNIX.*\\]" {
-        send "vtom\r"
-        exp_continue
-    }
+- name: "Appliquer la politique de sécurité"
+  shell: |
+    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
+    "vserver security file-directory apply -vserver {{ fsx_vserver }} -policy-name CATS_LINUX_policy"
+  register: apply_policy_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-    -re "Repertoire de la base de donnees.*\\]" {
-        send "$install_dir/bases\r"
-        exp_continue
-    }
-
-    -re "Repertoire de backup.*\\]" {
-        send "$install_dir/backup\r"
-        exp_continue
-    }
-
-    -re "Repertoire des traces.*\\]" {
-        send "$install_dir/traces\r"
-        exp_continue
-    }
-
-    -re "Repertoire des fichiers logs.*\\]" {
-        send "$install_dir/logs\r"
-        exp_continue
-    }
-
-    -re "Sauvegarder l'installation existante.*\\]" {
-        send "o\r"
-        exp_continue
-    }
-
-    -re "Confirmez-vous ces parametres.*\\]" {
-        send "o\r"
-        exp_continue
-    }
-
-    -re "sinon appuyez sur la touche Entree.*" {
-        send "\r"
-        exp_continue
-    }
-
-    eof {
-        puts "Script terminé"
-        exit
-    }
-
-    timeout {
-        puts "Timeout atteint"
-        exit 1
-    }
-}
-
-sudo ./install_expect.sh /opt/absyss/vtom /home/ec2-user/tmp/vtom_install_files VT-CS-LINUX_X64.71.Z VT-SDS-LINUX_X64.71.Z
-
+- name: "Debug - Résultats des permissions NetApp"
+  debug:
+    msg: |
+      Security Descriptor: {{ create_sd_result.rc | default('N/A') }}
+      Permissions RW: {{ add_rw_perms_result.rc | default('N/A') }}
+      Permissions RO: {{ add_ro_perms_result.rc | default('N/A') }}
+      Permissions Admin: {{ add_admin_perms_result.rc | default('N/A') }}
+      Politique créée: {{ create_policy_result.rc | default('N/A') }}
+      Tâche ajoutée: {{ add_task_result.rc | default('N/A') }}
+      Politique appliquée: {{ apply_policy_result.rc | default('N/A') }}
+  tags: [netapp_perms]
