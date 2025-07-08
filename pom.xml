@@ -1,10 +1,29 @@
-New-ADUser `
-    -Name "{{ user.prenom }} {{ user.nom }}" `
-    -SamAccountName "{{ user.login }}" `
-    -UserPrincipalName "{{ user.login }}@{{ users_data.domain }}" `
-    -AccountPassword (ConvertTo-SecureString "{{ users_data.default_password }}" -AsPlainText -Force) `
-    -Enabled $True `
-    -PasswordNeverExpires $True `
-    -Path "{{ users_data.organizational_unit }}"
+- name: "Créer les utilisateurs RW"
+  win_template:
+    src: create_user.ps1.j2
+    dest: "C:\\Temp\\create_user_{{ user.login }}.ps1"
+  loop: "{{ users_data.rw_users }}"
+  loop_control:
+    loop_var: user
+
+- name: "Exécuter le script pour RW"
+  win_shell: "powershell.exe -ExecutionPolicy Bypass -File C:\\Temp\\create_user_{{ user.login }}.ps1"
+  loop: "{{ users_data.rw_users }}"
+  loop_control:
+    loop_var: user
+
+- name: "Créer les utilisateurs RO"
+  win_template:
+    src: create_user.ps1.j2
+    dest: "C:\\Temp\\create_user_{{ user.login }}.ps1"
+  loop: "{{ users_data.ro_users }}"
+  loop_control:
+    loop_var: user
+
+- name: "Exécuter le script pour RO"
+  win_shell: "powershell.exe -ExecutionPolicy Bypass -File C:\\Temp\\create_user_{{ user.login }}.ps1"
+  loop: "{{ users_data.ro_users }}"
+  loop_control:
+    loop_var: user
 
 
