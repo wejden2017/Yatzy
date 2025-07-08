@@ -1,40 +1,66 @@
-- name: "Configurer les permissions NTFS sur NetApp FSx ONTAP"
+---
+- name: "Configurer la sécurité NTFS sur NetApp FSX ONTAP idempotent"
   hosts: localhost
-  become: false
   gather_facts: no
   vars:
     fsx_ip: "10.105.57.117"
     fsx_admin_user: "fsxadmin"
     fsx_admin_pass: "n703DkkuCz711WCA"
     fsx_vserver: "cats-svm"
+    policy_name: "CATS_LINUX_policy"
     fsx_path: "/FSHQ/CATS_LINUX"
     ntfs_sd: "CATS_LINUX_SD"
-    policy_name: "CATS_LINUX_policy"
+
   tasks:
-    - name: "Créer la policy"
-      shell: sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} "vserver security file-directory policy create -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
+
+    - name: Vérifier si la policy existe déjà
+      shell: |
+        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
+        "vserver security file-directory policy show -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
+      register: check_policy
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Créer la policy si elle n'existe pas
+      shell: |
+        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
+        "vserver security file-directory policy create -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
+      when: check_policy.rc != 0
       register: create_policy_result
       ignore_errors: yes
-      delegate_to: localhost
-      become: false
 
-    - name: "Ajouter la tâche à la policy"
-      shell: sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} "vserver security file-directory policy task add -vserver {{ fsx_vserver }} -policy-name {{ policy_name }} -path {{ fsx_path }} -security-type ntfs -ntfs-sd {{ ntfs_sd }} -ntfs-mode propagate"
+    - name: Vérifier si la task existe déjà
+      shell: |
+        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
+        "vserver security file-directory policy task show -vserver {{ fsx_vserver }} -policy-name {{ policy_name }} -path {{ fsx_path }}"
+      register: check_task
+      ignore_errors: yes
+      changed_when: false
+
+    - name: Ajouter la task si elle n'existe pas
+      shell: |
+        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
+        "vserver security file-directory policy task add -vserver {{ fsx_vserver }} -policy-name {{ policy_name }} \
+        -path {{ fsx_path }} -security-type ntfs -ntfs-sd {{ ntfs_sd }} -ntfs-mode propagate"
+      when: check_task.rc != 0
       register: add_task_result
       ignore_errors: yes
-      delegate_to: localhost
-      become: false
 
-    - name: "Appliquer la policy"
-      shell: sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} "vserver security file-directory apply -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
+    - name: Appliquer la policy
+      shell: |
+        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
+        "vserver security file-directory apply -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
       register: apply_policy_result
       ignore_errors: yes
-      delegate_to: localhost
-      become: false
 
-    - debug:
+    - name: Debug résultat création policy
+      debug:
         var: create_policy_result
-    - debug:
+
+    - name: Debug résultat ajout task
+      debug:
         var: add_task_result
-    - debug:
+
+    - name: Debug résultat apply
+      debug:
         var: apply_policy_result
