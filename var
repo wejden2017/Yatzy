@@ -1,24 +1,32 @@
-vserver security file-directory policy delete -vserver cats-svm -policy-name CATS_LINUX_policy
-vserver security file-directory ntfs delete -vserver cats-svm -ntfs-sd CATS_LINUX_SD
+- name: Vérifier si le SD existe déjà
+  shell: |
+    sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
+    "vserver security file-directory ntfs show -vserver {{ fsx_vserver }} -ntfs-sd {{ ntfs_sd }}"
+  register: check_sd
+  ignore_errors: yes
+  changed_when: false
 
+- name: Créer le SD s'il n'existe pas
+  shell: |
+    sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
+    "vserver security file-directory ntfs create -vserver {{ fsx_vserver }} -ntfs-sd {{ ntfs_sd }}"
+  when: check_sd.rc != 0
+  register: create_sd_result
+  ignore_errors: yes
 
-vserver security file-directory policy show -instance
-vserver security file-directory ntfs show -instance
+- name: Vérifier si la DACL Administrators existe déjà
+  shell: |
+    sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
+    "vserver security file-directory ntfs dacl show -vserver {{ fsx_vserver }} -ntfs-sd {{ ntfs_sd }} -account BUILTIN\\Administrators"
+  register: check_dacl
+  ignore_errors: yes
+  changed_when: false
 
-
-    - name: Vérifier si le DACL Administrators existe déjà
-      shell: |
-        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
-        "vserver security file-directory ntfs dacl show -vserver {{ fsx_vserver }} -ntfs-sd {{ ntfs_sd }} -account BUILTIN\\Administrators"
-      register: check_dacl
-      ignore_errors: yes
-      changed_when: false
-
-    - name: Ajouter la permission BUILTIN\Administrators s'il manque
-      shell: |
-        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
-        "vserver security file-directory ntfs dacl add -vserver {{ fsx_vserver }} -ntfs-sd {{ ntfs_sd }} \
-         -access-type allow -account 'BUILTIN\\Administrators' -rights full-control"
-      when: check_dacl.rc != 0
-      register: add_admin_result
-      ignore_errors: yes
+- name: Ajouter la permission BUILTIN\Administrators si nécessaire
+  shell: |
+    sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
+    "vserver security file-directory ntfs dacl add -vserver {{ fsx_vserver }} -ntfs-sd {{ ntfs_sd }} \
+     -access-type allow -account 'BUILTIN\\Administrators' -rights full-control"
+  when: check_dacl.rc != 0
+  register: add_admin_result
+  ignore_errors: yes
