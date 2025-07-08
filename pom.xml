@@ -1,11 +1,13 @@
 if (-Not (Get-ADUser -Filter { SamAccountName -eq "{{ user.login }}" })) {
-    New-ADUser -Name "{{ user.prenom }} {{ user.nom }}" `
-               -SamAccountName "{{ user.login }}" `
-               -UserPrincipalName "{{ user.login }}@{{ users_data.domain }}" `
-               -AccountPassword (ConvertTo-SecureString "{{ users_data.default_password }}" -AsPlainText -Force) `
-               -Enabled ${{ users_data.password_settings.account_enabled }} `
-               -PasswordNeverExpires ${{ users_data.password_settings.password_never_expires }}
-    Write-Output "User {{ user.login }} created."
+    New-ADUser `
+        -Name "{{ user.prenom }} {{ user.nom }}" `
+        -SamAccountName "{{ user.login }}" `
+        -UserPrincipalName "{{ user.login }}@{{ users_data.domain }}" `
+        -AccountPassword (ConvertTo-SecureString "{{ users_data.default_password }}" -AsPlainText -Force) `
+        -Enabled ${{ users_data.password_settings.account_enabled }} `
+        -PasswordNeverExpires ${{ users_data.password_settings.password_never_expires }} `
+        -Path "{{ users_data.organizational_unit }}"
+    Write-Output "✅ User {{ user.login }} created."
 } else {
-    Write-Output "User {{ user.login }} already exists."
+    Write-Output "ℹ️ User {{ user.login }} already exists."
 }
