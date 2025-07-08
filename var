@@ -1,5 +1,6 @@
 # Supprimer la DACL
-vserver security file-directory ntfs dacl remove -vserver cats-svm -ntfs-sd CATS_LINUX_SD -account '*'
+vserver security file-directory ntfs dacl remove -vserver cats-svm -ntfs-sd CATS_LINUX_SD -account 'BUILTIN\Administrators' -access-type allow
+
 
 # Supprimer le SD
 vserver security file-directory ntfs delete -vserver cats-svm -ntfs-sd CATS_LINUX_SD
