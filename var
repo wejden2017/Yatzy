@@ -1,53 +1,40 @@
----
-- name: "Configurer la sécurité NTFS sur NetApp FSX ONTAP"
+- name: "Configurer les permissions NTFS sur NetApp FSx ONTAP"
   hosts: localhost
+  become: false
   gather_facts: no
   vars:
     fsx_ip: "10.105.57.117"
     fsx_admin_user: "fsxadmin"
     fsx_admin_pass: "n703DkkuCz711WCA"
     fsx_vserver: "cats-svm"
-    policy_name: "CATS_LINUX_policy"
     fsx_path: "/FSHQ/CATS_LINUX"
     ntfs_sd: "CATS_LINUX_SD"
-
+    policy_name: "CATS_LINUX_policy"
   tasks:
-
     - name: "Créer la policy"
-      shell: >
-        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }}
-        "vserver security file-directory policy create -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
+      shell: sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} "vserver security file-directory policy create -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
       register: create_policy_result
       ignore_errors: yes
       delegate_to: localhost
-      tags: [netapp_perms]
+      become: false
 
     - name: "Ajouter la tâche à la policy"
-      shell: >
-        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }}
-        "vserver security file-directory policy task add -vserver {{ fsx_vserver }} -policy-name {{ policy_name }} -path {{ fsx_path }} -security-type ntfs -ntfs-sd {{ ntfs_sd }} -ntfs-mode propagate"
+      shell: sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} "vserver security file-directory policy task add -vserver {{ fsx_vserver }} -policy-name {{ policy_name }} -path {{ fsx_path }} -security-type ntfs -ntfs-sd {{ ntfs_sd }} -ntfs-mode propagate"
       register: add_task_result
       ignore_errors: yes
       delegate_to: localhost
-      tags: [netapp_perms]
+      become: false
 
     - name: "Appliquer la policy"
-      shell: >
-        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }}
-        "vserver security file-directory apply -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
+      shell: sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} "vserver security file-directory apply -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
       register: apply_policy_result
       ignore_errors: yes
       delegate_to: localhost
-      tags: [netapp_perms]
+      become: false
 
-    - name: "Afficher résultat création policy"
-      debug:
+    - debug:
         var: create_policy_result
-
-    - name: "Afficher résultat ajout tâche"
-      debug:
+    - debug:
         var: add_task_result
-
-    - name: "Afficher résultat apply"
-      debug:
+    - debug:
         var: apply_policy_result
