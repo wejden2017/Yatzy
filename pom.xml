@@ -1,10 +1,24 @@
-- name: "Test simple création d'un groupe AD"
+---
+- name: "Créer le groupe RW s'il n'existe pas"
   win_shell: |
-    if (-Not (Get-ADGroup -Filter { Name -eq 'zied' })) {
-      New-ADGroup -Name 'zied' -GroupScope Global -Path "OU=Groups,DC=cats,DC=local,DC=ad"
+    if (-Not (Get-ADGroup -Filter { Name -eq '{{ users_data.groups.rw_group }}' })) {
+      New-ADGroup -Name '{{ users_data.groups.rw_group }}' -GroupScope Global -Path '{{ users_data.organizational_unit }}'
     }
-  register: create_group_result
+  register: create_rw_group
+  ignore_errors: yes
 
-- name: "Afficher résultat"
+- name: "Debug création groupe RW"
   debug:
-    var: create_group_result
+    var: create_rw_group
+
+- name: "Créer le groupe RO s'il n'existe pas"
+  win_shell: |
+    if (-Not (Get-ADGroup -Filter { Name -eq '{{ users_data.groups.ro_group }}' })) {
+      New-ADGroup -Name '{{ users_data.groups.ro_group }}' -GroupScope Global -Path '{{ users_data.organizational_unit }}'
+    }
+  register: create_ro_group
+  ignore_errors: yes
+
+- name: "Debug création groupe RO"
+  debug:
+    var: create_ro_group
