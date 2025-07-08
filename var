@@ -1,20 +1,25 @@
 ---
-- name: "Configuration Active Directory et NetApp FSx"
-  hosts: windows_ad_servers
-  gather_facts: no
-  vars:
-    fsx_ip: "10.105.57.117"
-    fsx_vserver: "cats-svm"
-    fsx_share: "FSHQ"
-    target_folder: "CATS_LINUX"
-    ansible_shell_type: powershell
-    ansible_winrm_transport: ntlm
-    ansible_become: false
-    fsx_admin_password: "n703DkkuCz711WCA"
-    ad_domain_name: "cats.local.ad"
+- name: "Appliquer les permissions NetApp NTFS en ssh"
+  shell: |
+    sshpass -p "n703DkkuCz711WCA" ssh -o StrictHostKeyChecking=no fsxadmin@10.105.57.117 '
+      vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd ADMIN_SD || true
+      vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd ADMIN_SD -access-type allow -account cats\\Administrator -rights full-control || true
+      vserver security file-directory apply -vserver cats-svm -path /FSHQ -ntfs-sd ADMIN_SD
+    '
+  delegate_to: localhost
+  register: create_sd_result
+  ignore_errors: yes
+  tags:
+    - netapp_perms
 
-  tasks:
-    - name: "ÉTAPE 2 - Configurer permissions NetApp"
-      include_tasks: ../roles/ad/tasks/configure_netapp_permissions.yml
-      tags: [netapp_perms]
- 
+- name: "Afficher la sortie complète du shell"
+  debug:
+    var: create_sd_result
+  tags:
+    - netapp_perms
+
+- name: "Afficher uniquement stdout"
+  debug:
+    msg: "{{ create_sd_result.stdout | default('Pas de stdout') }}"
+  tags:
+    - netapp_perms
