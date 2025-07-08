@@ -1,13 +1,11 @@
-if (-Not (Get-ADUser -Filter { SamAccountName -eq "{{ user.login }}" })) {
-    New-ADUser `
-        -Name "{{ user.prenom }} {{ user.nom }}" `
-        -SamAccountName "{{ user.login }}" `
-        -UserPrincipalName "{{ user.login }}@{{ users_data.domain }}" `
-        -AccountPassword (ConvertTo-SecureString "{{ users_data.default_password }}" -AsPlainText -Force) `
-        -Enabled ${{ users_data.password_settings.account_enabled }} `
-        -PasswordNeverExpires ${{ users_data.password_settings.password_never_expires }} `
-        -Path "{{ users_data.organizational_unit }}"
-    Write-Output "✅ User {{ user.login }} created."
-} else {
-    Write-Output "ℹ️ User {{ user.login }} already exists."
-}
+---
+- name: Configuration complète Active Directory + FSx ONTAP
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: "Étape 1 - Configurer Active Directory et créer les utilisateurs"
+      import_playbook: cats_ad.yml
+
+    - name: "Étape 2 - Configurer FSx ONTAP et les permissions"
+      import_playbook: ontap_fsx.yml
