@@ -2,3 +2,5 @@ vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd ADMIN_SD
 vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd ADMIN_SD \
   -access-type allow -account cats\\Administrator -rights full-control
 vserver security file-directory apply -vserver cats-svm -path /FSHQ -ntfs-sd ADMIN_SD
+
+vserver security file-directory apply -vserver cats-svm -ntfs-sd ADMIN_SD -path /FSHQ
