@@ -1,75 +1,26 @@
----
-- name: "Créer Security Descriptor pour CATS_LINUX"
-  shell: |
-    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
-    "vserver security file-directory ntfs create -vserver {{ fsx_vserver }} -ntfs-sd CATS_LINUX_SD"
-  register: create_sd_result
-  ignore_errors: yes
-  delegate_to: localhost
-  tags: [netapp_perms]
+  tasks:
+    - name: "Charger le fichier JSON des utilisateurs"
+      include_vars:
+        file: "roles/ad/vars/users.json"
+        name: users_data
 
-- name: "Ajouter permissions pour CATS_USERS_RW"
-  shell: |
-    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
-    "vserver security file-directory ntfs dacl add -vserver {{ fsx_vserver }} -ntfs-sd CATS_LINUX_SD -access-type allow -account '{{ users_data.domain }}\{{ users_data.groups.rw_group }}' -rights full-control"
-  register: add_rw_perms_result
-  ignore_errors: yes
-  delegate_to: localhost
-  tags: [netapp_perms]
+    - name: "ÉTAPE 1 - Créer les groupes AD"
+      include_tasks: roles/ad/tasks/create_groups.yml
+      tags: [test_groups]
 
-- name: "Ajouter permissions pour CATS_USERS_RO"
-  shell: |
-    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
-    "vserver security file-directory ntfs dacl add -vserver {{ fsx_vserver }} -ntfs-sd CATS_LINUX_SD -access-type allow -account '{{ users_data.domain }}\{{ users_data.groups.ro_group }}' -rights read"
-  register: add_ro_perms_result
-  ignore_errors: yes
-  delegate_to: localhost
-  tags: [netapp_perms]
+    - name: "ÉTAPE 2 - Configurer permissions NetApp"
+      include_tasks: roles/ad/tasks/configure_netapp_permissions.yml
+      tags: [netapp_perms]
 
-- name: "Ajouter permissions pour Administrators"
-  shell: |
-    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
-    "vserver security file-directory ntfs dacl add -vserver {{ fsx_vserver }} -ntfs-sd CATS_LINUX_SD -access-type allow -account 'BUILTIN\Administrators' -rights full-control"
-  register: add_admin_perms_result
-  ignore_errors: yes
-  delegate_to: localhost
-  tags: [netapp_perms]
+    - name: "ÉTAPE 3 - Créer le dossier CATS_LINUX"
+      include_tasks: roles/ad/tasks/create_folder.yml
+      tags: [test_folder]
 
-- name: "Créer politique de sécurité"
-  shell: |
-    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
-    "vserver security file-directory policy create -vserver {{ fsx_vserver }} -policy-name CATS_LINUX_policy"
-  register: create_policy_result
-  ignore_errors: yes
-  delegate_to: localhost
-  tags: [netapp_perms]
-
-- name: "Ajouter tâche à la politique"
-  shell: |
-    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
-    "vserver security file-directory policy task add -vserver {{ fsx_vserver }} -policy-name CATS_LINUX_policy -path /FSHQ/CATS_LINUX -security-type ntfs -ntfs-sd CATS_LINUX_SD -ntfs-mode propagate"
-  register: add_task_result
-  ignore_errors: yes
-  delegate_to: localhost
-  tags: [netapp_perms]
-
-- name: "Appliquer la politique de sécurité"
-  shell: |
-    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} \
-    "vserver security file-directory apply -vserver {{ fsx_vserver }} -policy-name CATS_LINUX_policy"
-  register: apply_policy_result
-  ignore_errors: yes
-  delegate_to: localhost
-  tags: [netapp_perms]
-
-- name: "Debug - Résultats des permissions NetApp"
-  debug:
-    msg: |
-      Security Descriptor: {{ create_sd_result.rc | default('N/A') }}
-      Permissions RW: {{ add_rw_perms_result.rc | default('N/A') }}
-      Permissions RO: {{ add_ro_perms_result.rc | default('N/A') }}
-      Permissions Admin: {{ add_admin_perms_result.rc | default('N/A') }}
-      Politique créée: {{ create_policy_result.rc | default('N/A') }}
-      Tâche ajoutée: {{ add_task_result.rc | default('N/A') }}
-      Politique appliquée: {{ apply_policy_result.rc | default('N/A') }}
-  tags: [netapp_perms]
+    - name: "DEBUG FINAL - Test complet"
+      debug:
+        msg: |
+          === Configuration terminée ===
+          Groupes AD créés: {{ users_data.groups.rw_group }}, {{ users_data.groups.ro_group }}
+          Permissions NetApp configurées pour: /FSHQ/CATS_LINUX
+          Dossier créé: \\{{ fsx_ip }}\{{ fsx_share }}\{{ target_folder }}
+      tags: [test_folder, test_groups, netapp_perms]
