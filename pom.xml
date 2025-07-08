@@ -1,10 +1,11 @@
----
 - name: "Créer le groupe RW s'il n'existe pas"
   win_shell: |
     if (-Not (Get-ADGroup -Filter { Name -eq '{{ users_data.groups.rw_group }}' })) {
       New-ADGroup -Name '{{ users_data.groups.rw_group }}' -GroupScope Global -Path '{{ users_data.organizational_unit }}'
+      Write-Output "Created"
     }
   register: create_rw_group
+  changed_when: "'Created' in create_rw_group.stdout"
   ignore_errors: yes
 
 - name: "Debug création groupe RW"
@@ -15,8 +16,10 @@
   win_shell: |
     if (-Not (Get-ADGroup -Filter { Name -eq '{{ users_data.groups.ro_group }}' })) {
       New-ADGroup -Name '{{ users_data.groups.ro_group }}' -GroupScope Global -Path '{{ users_data.organizational_unit }}'
+      Write-Output "Created"
     }
   register: create_ro_group
+  changed_when: "'Created' in create_ro_group.stdout"
   ignore_errors: yes
 
 - name: "Debug création groupe RO"
