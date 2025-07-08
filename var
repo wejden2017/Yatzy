@@ -1,28 +1,4 @@
----
-- name: "Configurer les permissions NTFS sur NetApp FSX ONTAP"
-  hosts: localhost
-  gather_facts: no
-  vars:
-    fsx_ip: "10.105.57.117"
-    fsx_admin_user: "fsxadmin"
-    fsx_admin_pass: "n703DkkuCz711WCA"
-    fsx_svm: "cats-svm"
-    fsx_path: "/FSHQ"
-    ntfs_sd: "ADMIN_SD"
-
-  tasks:
-    - name: "Créer Security Descriptor et ACL sur FSX via sshpass"
-      shell: |
-        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} '
-          vserver security file-directory ntfs create -vserver {{ fsx_svm }} -ntfs-sd {{ ntfs_sd }} || true
-          vserver security file-directory ntfs dacl add -vserver {{ fsx_svm }} -ntfs-sd {{ ntfs_sd }} \
-            -access-type allow -account cats\\Administrator -rights full-control || true
-          vserver security file-directory apply -vserver {{ fsx_svm }} -path {{ fsx_path }} -ntfs-sd {{ ntfs_sd }}
-        '
-      register: fsx_result
-      ignore_errors: yes
-
-    - name: "Afficher le résultat complet"
-      debug:
-        var: fsx_result
-
+vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd ADMIN_SD
+vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd ADMIN_SD \
+  -access-type allow -account cats\\Administrator -rights full-control
+vserver security file-directory apply -vserver cats-svm -path /FSHQ -ntfs-sd ADMIN_SD
