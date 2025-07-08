@@ -1,17 +1,12 @@
 ---
 - name: "Configurer Security Descriptor et permissions NTFS pour Administrator"
   shell: |
-    sshpass -p "{{ fsx_admin_password }}" ssh -o StrictHostKeyChecking=no fsxadmin@{{ fsx_ip }} '
-      vserver security file-directory ntfs create -vserver {{ fsx_vserver }} -ntfs-sd ADMIN_SD || true
-      vserver security file-directory ntfs dacl add -vserver {{ fsx_vserver }} -ntfs-sd ADMIN_SD -access-type allow -account {{ ad_domain_name }}\\Administrator -rights full-control || true
-      vserver security file-directory apply -vserver {{ fsx_vserver }} -path /{{ fsx_share }} -ntfs-sd ADMIN_SD
+    sshpass -p "n703DkkuCz711WCA" ssh -o StrictHostKeyChecking=no fsxadmin@10.105.57.117 '
+      vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd ADMIN_SD || true
+      vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd ADMIN_SD -access-type allow -account cats\\Administrator -rights full-control || true
+      vserver security file-directory apply -vserver cats-svm -path /FSHQ -ntfs-sd ADMIN_SD
     '
-  register: netapp_permissions_result
-  ignore_errors: no
+  register: create_sd_result
+  ignore_errors: yes
   delegate_to: localhost
-  tags: [netapp_perms]
-
-- name: "Afficher résultat configuration NetApp"
-  debug:
-    var: netapp_permissions_result
   tags: [netapp_perms]
