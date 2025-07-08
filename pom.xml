@@ -1,29 +1,13 @@
-- name: "Créer les utilisateurs RW"
-  win_template:
-    src: create_user.ps1.j2
-    dest: "C:\\Temp\\create_user_{{ user.login }}.ps1"
-  loop: "{{ users_data.rw_users }}"
+- name: "Ajouter les utilisateurs RW au groupe CATS_RW"
+  win_shell: |
+    Add-ADGroupMember -Identity "{{ users_data.groups.rw_group }}" -Members "{{ user.login }}"
+  loop: "{{ users_data.users.rw_users }}"
   loop_control:
     loop_var: user
 
-- name: "Exécuter le script pour RW"
-  win_shell: "powershell.exe -ExecutionPolicy Bypass -File C:\\Temp\\create_user_{{ user.login }}.ps1"
-  loop: "{{ users_data.rw_users }}"
+- name: "Ajouter les utilisateurs RO au groupe CATS_RO"
+  win_shell: |
+    Add-ADGroupMember -Identity "{{ users_data.groups.ro_group }}" -Members "{{ user.login }}"
+  loop: "{{ users_data.users.ro_users }}"
   loop_control:
     loop_var: user
-
-- name: "Créer les utilisateurs RO"
-  win_template:
-    src: create_user.ps1.j2
-    dest: "C:\\Temp\\create_user_{{ user.login }}.ps1"
-  loop: "{{ users_data.ro_users }}"
-  loop_control:
-    loop_var: user
-
-- name: "Exécuter le script pour RO"
-  win_shell: "powershell.exe -ExecutionPolicy Bypass -File C:\\Temp\\create_user_{{ user.login }}.ps1"
-  loop: "{{ users_data.ro_users }}"
-  loop_control:
-    loop_var: user
-
-
