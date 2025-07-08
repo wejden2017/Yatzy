@@ -17,3 +17,4 @@
     - name: "ÉTAPE 2 - Configurer permissions NetApp"
       include_tasks: ../roles/ad/tasks/configure_netapp_permissions.yml
       tags: [netapp_perms]
+ 
