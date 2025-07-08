@@ -1,32 +1,9 @@
-- name: Vérifier si le SD existe déjà
-  shell: |
-    sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
-    "vserver security file-directory ntfs show -vserver {{ fsx_vserver }} -ntfs-sd {{ ntfs_sd }}"
-  register: check_sd
-  ignore_errors: yes
-  changed_when: false
+# Supprimer la DACL
+vserver security file-directory ntfs dacl remove -vserver cats-svm -ntfs-sd CATS_LINUX_SD -account 'BUILTIN\Administrators'
 
-- name: Créer le SD s'il n'existe pas
-  shell: |
-    sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
-    "vserver security file-directory ntfs create -vserver {{ fsx_vserver }} -ntfs-sd {{ ntfs_sd }}"
-  when: check_sd.rc != 0
-  register: create_sd_result
-  ignore_errors: yes
+# Supprimer le SD
+vserver security file-directory ntfs delete -vserver cats-svm -ntfs-sd CATS_LINUX_SD
 
-- name: Vérifier si la DACL Administrators existe déjà
-  shell: |
-    sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
-    "vserver security file-directory ntfs dacl show -vserver {{ fsx_vserver }} -ntfs-sd {{ ntfs_sd }} -account BUILTIN\\Administrators"
-  register: check_dacl
-  ignore_errors: yes
-  changed_when: false
-
-- name: Ajouter la permission BUILTIN\Administrators si nécessaire
-  shell: |
-    sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }} \
-    "vserver security file-directory ntfs dacl add -vserver {{ fsx_vserver }} -ntfs-sd {{ ntfs_sd }} \
-     -access-type allow -account 'BUILTIN\\Administrators' -rights full-control"
-  when: check_dacl.rc != 0
-  register: add_admin_result
-  ignore_errors: yes
+# Vérifier
+vserver security file-directory ntfs show -vserver cats-svm
+vserver security file-directory ntfs dacl show -vserver cats-svm
