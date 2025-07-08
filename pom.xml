@@ -1,1 +1,24 @@
-vserver security file-directory ntfs dacl modify -vserver cats-svm -ntfs-sd CATS_LINUX_SD -access-type allow -account "BUILTIN\Administrators" -rights no-access
+Créer les NTFS SD :
+
+bash
+Copier
+Modifier
+vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd CATS_RO_SD
+vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd CATS_RW_SD
+Ajouter les permissions DACL :
+
+bash
+Copier
+Modifier
+vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd CATS_RO_SD \
+  -access-type allow -account "cats.local.ad\CATS_RO" -rights read
+
+vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd CATS_RW_SD \
+  -access-type allow -account "cats.local.ad\CATS_RW" -rights full-control
+Vérifier :
+
+bash
+Copier
+Modifier
+vserver security file-directory ntfs dacl show -vserver cats-svm -ntfs-sd CATS_RO_SD
+vserver security file-directory ntfs dacl show -vserver cats-svm -ntfs-sd CATS_RW_SD
