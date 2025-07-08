@@ -1,3 +1,4 @@
+---
 - name: "Appliquer les permissions NetApp NTFS en ssh"
   shell: |
     sshpass -p "n703DkkuCz711WCA" ssh -o StrictHostKeyChecking=no fsxadmin@10.105.57.117 '
@@ -5,12 +6,13 @@
       vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd ADMIN_SD -access-type allow -account cats\\Administrator -rights full-control || true
       vserver security file-directory apply -vserver cats-svm -path /FSHQ -ntfs-sd ADMIN_SD
     '
+  delegate_to: localhost
   register: create_sd_result
   ignore_errors: yes
   tags:
     - netapp_perms
 
-- name: "Afficher la sortie complète de la commande"
+- name: "Afficher la sortie complète"
   debug:
     var: create_sd_result
   tags:
@@ -18,6 +20,6 @@
 
 - name: "Afficher uniquement stdout"
   debug:
-    msg: "{{ create_sd_result.stdout_lines }}"
+    msg: "{{ create_sd_result.stdout | default('stdout non disponible') }}"
   tags:
     - netapp_perms
