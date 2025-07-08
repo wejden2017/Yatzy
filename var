@@ -1,6 +1,8 @@
+---
 - name: "Configurer Security Descriptor et permissions NTFS pour Administrator"
   hosts: localhost
   gather_facts: no
+
   tasks:
     - name: "Appliquer les permissions NetApp NTFS en ssh"
       shell: |
@@ -12,3 +14,11 @@
       register: create_sd_result
       ignore_errors: yes
       tags: [netapp_perms]
+
+    - name: "Afficher la sortie complète du shell"
+      debug:
+        var: create_sd_result
+
+    - name: "Afficher uniquement la sortie stdout"
+      debug:
+        msg: "{{ create_sd_result.stdout_lines }}"
