@@ -24,3 +24,10 @@
           Permissions NetApp configurées pour: /FSHQ/CATS_LINUX
           Dossier créé: \\{{ fsx_ip }}\{{ fsx_share }}\{{ target_folder }}
       tags: [test_folder, test_groups, netapp_perms]
+
+
+
+fsx_admin_password: "n7O3DkkuCz711WCA"
+ad_domain_name: "cats.local.ad"
+fsx_ip: "10.105.57.94"
+fsx_vserver: "cats-svm"
