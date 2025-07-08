@@ -1,20 +1,53 @@
-vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd ADMIN_SD
-vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd ADMIN_SD \
-  -access-type allow -account cats\\Administrator -rights full-control
-vserver security file-directory apply -vserver cats-svm -path /FSHQ -ntfs-sd ADMIN_SD
+---
+- name: "Configurer la sécurité NTFS sur NetApp FSX ONTAP"
+  hosts: localhost
+  gather_facts: no
+  vars:
+    fsx_ip: "10.105.57.117"
+    fsx_admin_user: "fsxadmin"
+    fsx_admin_pass: "n703DkkuCz711WCA"
+    fsx_vserver: "cats-svm"
+    policy_name: "CATS_LINUX_policy"
+    fsx_path: "/FSHQ/CATS_LINUX"
+    ntfs_sd: "CATS_LINUX_SD"
 
-vserver security file-directory apply -vserver cats-svm -ntfs-sd ADMIN_SD -path /FSHQ
+  tasks:
 
-vserver security file-directory policy create -vserver cats-svm -policy-name CATS_LINUX_policy
-vserver security file-directory policy task add -vserver cats-svm \
-  -policy-name CATS_LINUX_policy \
-  -path /FSHQ/CATS_LINUX \
-  -security-type ntfs \
-  -ntfs-sd CATS_LINUX_SD \
-  -ntfs-mode propagate
+    - name: "Créer la policy"
+      shell: >
+        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }}
+        "vserver security file-directory policy create -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
+      register: create_policy_result
+      ignore_errors: yes
+      delegate_to: localhost
+      tags: [netapp_perms]
 
-vserver security file-directory policy apply -vserver cats-svm -policy-name CATS_LINUX_policy
+    - name: "Ajouter la tâche à la policy"
+      shell: >
+        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }}
+        "vserver security file-directory policy task add -vserver {{ fsx_vserver }} -policy-name {{ policy_name }} -path {{ fsx_path }} -security-type ntfs -ntfs-sd {{ ntfs_sd }} -ntfs-mode propagate"
+      register: add_task_result
+      ignore_errors: yes
+      delegate_to: localhost
+      tags: [netapp_perms]
 
-verif: 
-vserver security file-directory show -vserver cats-svm -path /FSHQ/CATS_LINUX -fields ntfs-sd
+    - name: "Appliquer la policy"
+      shell: >
+        sshpass -p "{{ fsx_admin_pass }}" ssh -o StrictHostKeyChecking=no {{ fsx_admin_user }}@{{ fsx_ip }}
+        "vserver security file-directory apply -vserver {{ fsx_vserver }} -policy-name {{ policy_name }}"
+      register: apply_policy_result
+      ignore_errors: yes
+      delegate_to: localhost
+      tags: [netapp_perms]
 
+    - name: "Afficher résultat création policy"
+      debug:
+        var: create_policy_result
+
+    - name: "Afficher résultat ajout tâche"
+      debug:
+        var: add_task_result
+
+    - name: "Afficher résultat apply"
+      debug:
+        var: apply_policy_result
