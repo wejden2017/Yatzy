@@ -1,33 +1,54 @@
-  tasks:
-    - name: "Charger le fichier JSON des utilisateurs"
-      include_vars:
-        file: "roles/ad/vars/users.json"
-        name: users_data
+---
+- name: "Créer Security Descriptor simple pour Administrator"
+  shell: |
+    sshpass -p "n7O3DkkuCz711WCA" ssh -o StrictHostKeyChecking=no fsxadmin@10.105.57.94 \
+    "vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd ADMIN_SD"
+  register: create_sd_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-    - name: "ÉTAPE 1 - Créer les groupes AD"
-      include_tasks: roles/ad/tasks/create_groups.yml
-      tags: [test_groups]
+- name: "Ajouter permissions pour Administrator"
+  shell: |
+    sshpass -p "n7O3DkkuCz711WCA" ssh -o StrictHostKeyChecking=no fsxadmin@10.105.57.94 \
+    "vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd ADMIN_SD -access-type allow -account 'BUILTIN\Administrators' -rights full-control"
+  register: add_admin_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-    - name: "ÉTAPE 2 - Configurer permissions NetApp"
-      include_tasks: roles/ad/tasks/configure_netapp_permissions.yml
-      tags: [netapp_perms]
+- name: "Créer politique simple"
+  shell: |
+    sshpass -p "n7O3DkkuCz711WCA" ssh -o StrictHostKeyChecking=no fsxadmin@10.105.57.94 \
+    "vserver security file-directory policy create -vserver cats-svm -policy-name ADMIN_policy"
+  register: create_policy_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-    - name: "ÉTAPE 3 - Créer le dossier CATS_LINUX"
-      include_tasks: roles/ad/tasks/create_folder.yml
-      tags: [test_folder]
+- name: "Ajouter tâche pour /FSHQ"
+  shell: |
+    sshpass -p "n7O3DkkuCz711WCA" ssh -o StrictHostKeyChecking=no fsxadmin@10.105.57.94 \
+    "vserver security file-directory policy task add -vserver cats-svm -policy-name ADMIN_policy -path /FSHQ -security-type ntfs -ntfs-sd ADMIN_SD -ntfs-mode propagate"
+  register: add_task_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-    - name: "DEBUG FINAL - Test complet"
-      debug:
-        msg: |
-          === Configuration terminée ===
-          Groupes AD créés: {{ users_data.groups.rw_group }}, {{ users_data.groups.ro_group }}
-          Permissions NetApp configurées pour: /FSHQ/CATS_LINUX
-          Dossier créé: \\{{ fsx_ip }}\{{ fsx_share }}\{{ target_folder }}
-      tags: [test_folder, test_groups, netapp_perms]
+- name: "Appliquer les permissions"
+  shell: |
+    sshpass -p "n7O3DkkuCz711WCA" ssh -o StrictHostKeyChecking=no fsxadmin@10.105.57.94 \
+    "vserver security file-directory apply -vserver cats-svm -policy-name ADMIN_policy"
+  register: apply_result
+  ignore_errors: yes
+  delegate_to: localhost
+  tags: [netapp_perms]
 
-
-
-fsx_admin_password: "n7O3DkkuCz711WCA"
-ad_domain_name: "cats.local.ad"
-fsx_ip: "10.105.57.94"
-fsx_vserver: "cats-svm"
+- name: "Debug simple"
+  debug:
+    msg: |
+      SD créé: {{ create_sd_result.rc == 0 }}
+      Admin ajouté: {{ add_admin_result.rc == 0 }}
+      Politique: {{ create_policy_result.rc == 0 }}
+      Appliqué: {{ apply_result.rc == 0 }}
+  tags: [netapp_perms]
