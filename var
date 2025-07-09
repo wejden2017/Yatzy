@@ -1,10 +1,4 @@
-# Supprimer la DACL
-vserver security file-directory ntfs dacl remove -vserver cats-svm -ntfs-sd CATS_LINUX_SD -account 'BUILTIN\Administrators' -access-type allow
-
-
-# Supprimer le SD
-vserver security file-directory ntfs delete -vserver cats-svm -ntfs-sd CATS_LINUX_SD
-
-# Vérifier
-vserver security file-directory ntfs show -vserver cats-svm
-vserver security file-directory ntfs dacl show -vserver cats-svm
+before_script:
+  - cat /etc/os-release
+  - yum install -y sshpass
+  - pip3 install boto3 pywinrm cryptography requests-ntlm
