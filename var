@@ -1,3 +1,11 @@
-docker run -it --entrypoint /bin/bash registry.dx1.lseg.com/app/app-00451/cats-devops/ci-pipelines/cats-ansible2-python36:1.0.0
-docker run -it --entrypoint /bin/sh registry.dx1.lseg.com/app/app-00451/cats-devops/ci-pipelines/cats-ansible2-python36:1.0.0
-docker exec -it <container_id> /bin/bash
+script:
+
+  - echo "deb http://deb.debian.org/debian bullseye main" > /etc/apt/sources.list
+  - echo "deb http://security.debian.org/debian-security bullseye-security main" >> /etc/apt/sources.list
+  - echo "deb http://deb.debian.org/debian bullseye-updates main" >> /etc/apt/sources.list
+  - apt-get clean
+  - rm -rf /var/lib/apt/lists/*
+  - apt-get update
+  - apt-get install -y sshpass openssh-client
+  - which sshpass
+  - sshpass -V
