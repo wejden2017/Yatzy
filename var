@@ -1,4 +1,3 @@
-before_script:
-  - cat /etc/os-release
-  - yum install -y sshpass
-  - pip3 install boto3 pywinrm cryptography requests-ntlm
+docker run -it --entrypoint /bin/bash registry.dx1.lseg.com/app/app-00451/cats-devops/ci-pipelines/cats-ansible2-python36:1.0.0
+docker run -it --entrypoint /bin/sh registry.dx1.lseg.com/app/app-00451/cats-devops/ci-pipelines/cats-ansible2-python36:1.0.0
+docker exec -it <container_id> /bin/bash
