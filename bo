@@ -42,3 +42,6 @@ sudo nano /etc/systemd/system/containerd.service.d/http-proxy.conf
 Environment="HTTP_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
 Environment="HTTPS_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
 
+curl -s https://registry.hub.docker.com/v2/repositories/ibmcom/mq/tags | jq '.results[].name'
+
+
