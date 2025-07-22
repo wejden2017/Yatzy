@@ -14,3 +14,24 @@ Environment="https_proxy=http://proxy-vpc-00b4798e81c8f4ef3:3128"
 Environment="NO_PROXY=.corp.lch.com,.yieldbook.com,.gslb.dnsroot.local,pac.zscloud.net,.privatelink.snowflakecomputing.com,.r53,10.0.0.0/8,172.25.0.0/16,localhost,127.0.0.1"
 Environment="no_proxy=.corp.lch.com,.yieldbook.com,.gslb.dnsroot.local,pac.zscloud.net,.privatelink.snowflakecomputing.com,.r53,10.0.0.0/8,172.25.0.0/16,localhost,127.0.0.1"
 EOF
+
+cat > /root/.docker/config.json <<EOF
+{
+  "credsStore": "ecr-login",
+  "credHelpers": {
+    "902784830519.dkr.ecr.eu-west-2.amazonaws.com": "ecr-login",
+    "926999570045.dkr.ecr.eu-west-2.amazonaws.com": "ecr-login",
+    "873794249397.dkr.ecr.eu-west-2.amazonaws.com": "ecr-login",
+    "261329475796.dkr.ecr.eu-west-2.amazonaws.com": "ecr-login",
+    "106653624073.dkr.ecr.eu-west-2.amazonaws.com": "ecr-login"
+  },
+  "proxies": {
+    "default": {
+      "httpProxy":  "http://proxy-<VRAI_NOM_OU_IP>:3128",
+      "httpsProxy": "http://proxy-<VRAI_NOM_OU_IP>:3128",
+      "noProxy": ".lseg.gslb.dnsroot.local,pac.zscloud.net,.privatelink.snowflakecomputing.com,.r53,10.0.0.0/8,172.25.0.0/16,localhost,127.0.0.1"
+    }
+  }
+}
+EOF
+
