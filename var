@@ -1,13 +1,14 @@
+---
+- name: EC2 Tools Lifecycle
+  hosts: tools
+  become: true
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+    do_install_mq: false
+    do_start_mq: false
+    do_stop_mq: false
+    do_uninstall_mq: false
 
-  - unset http_proxy
-  - unset https_proxy
-  - unset HTTP_PROXY
-  - unset HTTPS_PROXY
-  - echo 'Acquire::http::Proxy "false";' > /etc/apt/apt.conf.d/99no-proxy
-  - echo 'Acquire::https::Proxy "false";' >> /etc/apt/apt.conf.d/99no-proxy
-  - apt-get clean
-  - rm -rf /var/lib/apt/lists/*
-  - echo "deb http://deb.debian.org/debian bullseye main" > /etc/apt/sources.list
-  - echo "deb http://security.debian.org/debian-security bullseye-security main" >> /etc/apt/sources.list
-  - apt-get update
-  - apt-get install -y sshpass openssh-client
+  roles:
+    - role: ibm_mq
+      when: do_install_mq or do_start_mq or do_stop_mq or do_uninstall_mq
