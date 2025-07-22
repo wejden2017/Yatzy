@@ -37,4 +37,8 @@ EOF
 
 
 curl -x http://proxy-vpc-00b4798e81c8f4ef3:3128 https://registry-1.docker.io/v2/
+sudo nano /etc/systemd/system/containerd.service.d/http-proxy.conf
+[Service]
+Environment="HTTP_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
+Environment="HTTPS_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
 
