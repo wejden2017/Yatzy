@@ -1,45 +1,16 @@
-vserver name-mapping create -vserver cats-svm -direction win-unix -position 1 -pattern "CATS\\zouertani" -replacement "zouertani"
+cat > /etc/systemd/system/docker.service.d/http-proxy.conf <<EOF
+[Service]
+Environment="HTTP_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
+Environment="HTTPS_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
+Environment="NO_PROXY=.corp.lch.com,.yieldbook.com,.gslb.dnsroot.local,pac.zscloud.net,.privatelink.snowflakecomputing.com,.r53,10.0.0.0/8,172.25.0.0/16,localhost,127.0.0.1"
+EOF
 
-vserver cifs share access-control create -vserver cats-svm -share-name FSHQ -user-or-group-name "CATS\zouertani" -permission full_control
-vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-group-name "CATS\zouertani" -permission full_control
-vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-group "CATS\zouertani" -permission full_control -user-group-type windows
-vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-group-name "zouertani" -permission full_control -user-group-type windows
-
-vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-group-name "CATS\zouertani" -permission full_control
-
-vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-group-name "BUILTIN\Users" -permission full_control
-vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-group "Everyone" -permission full_control
-vserver cifs share access-control create -vserver cats-svm -share FSHQ -user-or-group "CATS\zouertani" -permission full_control
-vserver cifs share access-control delete -vserver cats-svm -share FSHQ -user-or-group "BUILTIN\Users"
-
-# Supprimer Everyone
-vserver cifs share access-control delete -vserver cats-svm -share FSHQ -user-or-group "Everyone"
-
-# Supprimer Domain Users
-vserver cifs share access-control delete -vserver cats-svm -share FSHQ -user-or-group "Domain Users"
-
-# Supprimer BUILTIN\Users
-vserver cifs share access-control delete -vserver cats-svm -share FSHQ -user-or-group "BUILTIN\Users"
-
-# Voir la structure des permissions
-vserver security file-directory show -vserver cats-svm -path /FSHQ
-
-# Voir les ACL NTFS existantes
-vserver security file-directory ntfs show -vserver cats-svm -path /FSHQ KO
-
-vserver security file-directory modify -vserver cats-svm -path /FSHQ -security-style ntfs
-vserver security file-directory show -vserver cats-svm -path /FSHQ
-
-# Créer un security descriptor
-vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd FSHQ_SD
-
-# Ajouter les permissions pour zouertani
-vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd FSHQ_SD -access-type allow -account "CATS\zouertani" -rights full-control
-
-# Ajouter les permissions pour les administrateurs
-vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd FSHQ_SD -access-type allow -account "BUILTIN\Administrators" -rights full-control
-
-# Appliquer les permissions
-vserver security file-directory apply -vserver cats-svm -path /FSHQ -security-descriptor FSHQ_SD
-
-
+cat > /etc/systemd/system/docker.service.d/override.conf <<EOF
+[Service]
+Environment="HTTP_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
+Environment="http_proxy=http://proxy-vpc-00b4798e81c8f4ef3:3128"
+Environment="HTTPS_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
+Environment="https_proxy=http://proxy-vpc-00b4798e81c8f4ef3:3128"
+Environment="NO_PROXY=.corp.lch.com,.yieldbook.com,.gslb.dnsroot.local,pac.zscloud.net,.privatelink.snowflakecomputing.com,.r53,10.0.0.0/8,172.25.0.0/16,localhost,127.0.0.1"
+Environment="no_proxy=.corp.lch.com,.yieldbook.com,.gslb.dnsroot.local,pac.zscloud.net,.privatelink.snowflakecomputing.com,.r53,10.0.0.0/8,172.25.0.0/16,localhost,127.0.0.1"
+EOF
