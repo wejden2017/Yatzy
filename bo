@@ -35,3 +35,6 @@ cat > /root/.docker/config.json <<EOF
 }
 EOF
 
+
+curl -x http://proxy-vpc-00b4798e81c8f4ef3:3128 https://registry-1.docker.io/v2/
+
