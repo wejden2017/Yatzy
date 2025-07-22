@@ -1,1 +1,71 @@
-ansible windows_ad_servers -i inventory/aws_ec2_inventory.py -m win_shell -a 'net use Z: \\10.105.57.94\FSHQ /user:CATS\Administrator "TonMotDePasse" && dir Z:\'
+---
+
+- name: Ensure Docker is installed
+  package:
+    name: docker
+    state: present
+
+- name: Enable and start Docker service
+  systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Add user to docker group
+  user:
+    name: ec2-user
+    groups: docker
+    append: yes
+
+- name: Create docker.service.d directory
+  file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    mode: 0755
+
+- name: Add Docker proxy config
+  template:
+    src: http-proxy.conf.j2
+    dest: /etc/systemd/system/docker.service.d/http-proxy.conf
+    mode: 0644
+
+- name: Add Docker override config
+  template:
+    src: override.conf.j2
+    dest: /etc/systemd/system/docker.service.d/override.conf
+    mode: 0644
+
+- name: Reload systemd
+  command: systemctl daemon-reexec
+
+- name: Reload systemd services
+  command: systemctl daemon-reload
+
+- name: Restart Docker
+  systemd:
+    name: docker
+    state: restarted
+
+- name: Create local volume directory
+  file:
+    path: /home/ec2-user/mqdata
+    state: directory
+    owner: 1001
+    group: 1001
+    mode: 0755
+
+- name: Run IBM MQ container
+  docker_container:
+    name: ibm-mq
+    image: ibmcom/mq:9.2.4.0-r1-amd64
+    state: started
+    restart_policy: always
+    env:
+      LICENSE: accept
+      MQ_QMGR_NAME: QM1
+      MQ_ADMIN_PASSWORD: admin
+    published_ports:
+      - "1414:1414"
+      - "9443:9443"
+    volumes:
+      - "/home/ec2-user/mqdata:/mnt/mqm"
