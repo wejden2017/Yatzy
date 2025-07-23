@@ -1,22 +1,19 @@
 ---
-- name: Create IBM MQ volume directory
-  file:
-    path: "{{ ibmmq_volume_path }}"
-    state: directory
-    owner: 1001
-    group: 1001
-    mode: '0755'
+- name: EC2 Tools Lifecycle
+  hosts: tools_servers
+  become: true
+  gather_facts: true
 
-- name: Run IBM MQ container
-  docker_container:
-    name: "{{ ibmmq_container_name }}"
-    image: "{{ ibmmq_image }}"
-    state: started
-    restart_policy: always
-    published_ports: "{{ ibmmq_ports }}"
-    volumes:
-      - "{{ ibmmq_volume_path }}:/mnt/mqm"
-    env:
-      LICENSE: accept
-      MQ_QMGR_NAME: "{{ ibmmq_mq_name }}"
-      MQ_ADMIN_PASSWORD: "{{ ibmmq_admin_password }}"
+  vars:
+    ansible_python_interpreter: /usr/bin/python3
+
+    # Flags de contrôle
+    do_install_docker: true
+    do_install_mq: true
+
+  roles:
+    - role: docker_setup
+      when: do_install_docker
+
+    - role: ibmmq
+      when: do_install_mq and (docker_ready | default(false))
