@@ -1,19 +1,5 @@
----
-- name: EC2 Tools Lifecycle
-  hosts: tools_servers
+- name: Install Docker using yum (raw)
+  ansible.builtin.raw: sudo yum install -y docker
+  register: install_docker
+  changed_when: "'Complete!' in install_docker.stdout or 'Already' in install_docker.stdout"
   become: true
-  gather_facts: true
-
-  vars:
-    ansible_python_interpreter: /usr/bin/python3
-
-    # Flags de contrôle
-    do_install_docker: true
-    do_install_mq: true
-
-  roles:
-    - role: docker_setup
-      when: do_install_docker
-
-    - role: ibmmq
-      when: do_install_mq and (docker_ready | default(false))
