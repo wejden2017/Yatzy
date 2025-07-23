@@ -1,51 +1,22 @@
 ---
-
-- name: Ensure Docker is installed
-  package:
-    name: docker
-    state: present
-
-- name: Enable and start Docker service
-  systemd:
-    name: docker
-    enabled: true
-    state: started
-
-- name: Add ec2-user to docker group
-  user:
-    name: ec2-user
-    groups: docker
-    append: yes
-
-- name: Create docker.service.d directory
+- name: Create IBM MQ volume directory
   file:
-    path: /etc/systemd/system/docker.service.d
+    path: "{{ ibmmq_volume_path }}"
     state: directory
+    owner: 1001
+    group: 1001
     mode: '0755'
 
-- name: Add Docker proxy config
-  template:
-    src: http-proxy.conf.j2
-    dest: /etc/systemd/system/docker.service.d/http-proxy.conf
-    mode: '0644'
-
-- name: Add Docker override config
-  template:
-    src: override.conf.j2
-    dest: /etc/systemd/system/docker.service.d/override.conf
-    mode: '0644'
-
-- name: Reload systemd daemon
-  command: systemctl daemon-reexec
-
-- name: Reload systemd services
-  command: systemctl daemon-reload
-
-- name: Restart Docker
-  systemd:
-    name: docker
-    state: restarted
-
-- name: Mark Docker as successfully configured
-  set_fact:
-    docker_ready: true
+- name: Run IBM MQ container
+  docker_container:
+    name: "{{ ibmmq_container_name }}"
+    image: "{{ ibmmq_image }}"
+    state: started
+    restart_policy: always
+    published_ports: "{{ ibmmq_ports }}"
+    volumes:
+      - "{{ ibmmq_volume_path }}:/mnt/mqm"
+    env:
+      LICENSE: accept
+      MQ_QMGR_NAME: "{{ ibmmq_mq_name }}"
+      MQ_ADMIN_PASSWORD: "{{ ibmmq_admin_password }}"
