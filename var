@@ -1,3 +1,4 @@
+---
 - name: EC2 Tools Lifecycle
   hosts: tools_servers
   become: true
@@ -7,18 +8,15 @@
     do_install_mq: true
 
   pre_tasks:
-    - name: Ensure SELinux Python bindings are present
-      ansible.builtin.yum:
-        name: libselinux-python
-        state: present
+    - name: Ensure SELinux Python bindings are present (via raw yum)
+      ansible.builtin.raw: sudo yum install -y libselinux-python
+      register: selinux_install
+      changed_when: "'Complete!' in selinux_install.stdout or 'Nothing to do' not in selinux_install.stdout"
       become: true
-
-    - name: Recollect facts (force reinit of python bindings)
-      ansible.builtin.setup:
 
   roles:
     - role: docker_setup
       when: do_install_docker
 
     - role: ibmmq
-      when: do_install_mq and (docker_ready | default(false))
+      when: do_install_mq and docker_ready | default(false)
