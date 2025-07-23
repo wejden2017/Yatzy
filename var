@@ -1,21 +1,3 @@
-- name: Create IBM MQ local volume directory
-  file:
-    path: "{{ ibmmq_data_dir }}"
-    state: directory
-    owner: 1001
-    group: 1001
-    mode: 0755
-
-- name: Run IBM MQ container
-  docker_container:
-    name: ibm-mq
-    image: "ibmcom/mq:{{ ibmmq_image_version }}"
-    state: started
-    restart_policy: always
-    env:
-      LICENSE: accept
-      MQ_QMGR_NAME: "{{ ibmmq_mq_name }}"
-      MQ_ADMIN_PASSWORD: "{{ ibmmq_admin_password }}"
-    published_ports: "{{ ibmmq_ports }}"
-    volumes:
-      - "{{ ibmmq_mq_volume }}"
+---
+- import_tasks: docker_setup.yml
+- import_tasks: docker_run.yml
