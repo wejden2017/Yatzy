@@ -1,5 +1,6 @@
-- name: Install Docker using yum (raw)
-  ansible.builtin.raw: sudo yum install -y docker
-  register: install_docker
-  changed_when: "'Complete!' in install_docker.stdout or 'Already' in install_docker.stdout"
+- name: Install SELinux Python bindings (libselinux-python)
+  ansible.builtin.raw: sudo yum install -y libselinux-python
+  register: selinux_python
+  changed_when: "'Complete!' in selinux_python.stdout or 'Nothing to do' in selinux_python.stdout"
   become: true
+
