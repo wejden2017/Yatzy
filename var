@@ -1,10 +1,46 @@
-# IBM MQ configuration defaults
+---
+- name: Ensure Docker is installed
+  package:
+    name: docker
+    state: present
 
-ibmmq_image: "ibmcom/mq:9.2.4.0-r1-amd64"
-ibmmq_container_name: "ibm-mq"
-ibmmq_volume_path: "/mnt/mqdata"
-ibmmq_mq_name: "QM1"
-ibmmq_admin_password: "admin"
-ibmmq_ports:
-  - "1414:1414"
-  - "9443:9443"
+- name: Enable and start Docker service
+  systemd:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Add ec2-user to docker group
+  user:
+    name: ec2-user
+    groups: docker
+    append: yes
+
+- name: Create docker.service.d directory
+  file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    mode: 0755
+
+- name: Add Docker proxy config
+  template:
+    src: http-proxy.conf.j2
+    dest: /etc/systemd/system/docker.service.d/http-proxy.conf
+    mode: 0644
+
+- name: Add Docker override config
+  template:
+    src: override.conf.j2
+    dest: /etc/systemd/system/docker.service.d/override.conf
+    mode: 0644
+
+- name: Reload systemd daemon
+  command: systemctl daemon-reexec
+
+- name: Reload systemd services
+  command: systemctl daemon-reload
+
+- name: Restart Docker
+  systemd:
+    name: docker
+    state: restarted
