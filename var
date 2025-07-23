@@ -4,3 +4,7 @@
   changed_when: "'Complete!' in selinux_python.stdout or 'Nothing to do' in selinux_python.stdout"
   become: true
 
+- name: Recollect facts after installing libselinux-python
+  ansible.builtin.setup:
+  become: true
+
