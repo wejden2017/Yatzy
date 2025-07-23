@@ -1,5 +1,49 @@
-- name: Install SELinux Python bindings (libselinux-python)
-  ansible.builtin.package:
-    name: libselinux-python
-    state: present
+- name: Install Docker using yum (raw)
+  ansible.builtin.raw: sudo yum install -y docker
+  become: true
+
+- name: Enable and start Docker service
+  ansible.builtin.service:
+    name: docker
+    enabled: true
+    state: started
+  become: true
+
+- name: Add ec2-user to docker group
+  ansible.builtin.user:
+    name: ec2-user
+    groups: docker
+    append: yes
+  become: true
+
+- name: Create docker.service.d directory
+  ansible.builtin.file:
+    path: /etc/systemd/system/docker.service.d
+    state: directory
+    mode: '0755'
+  become: true
+
+- name: Add Docker proxy config
+  ansible.builtin.template:
+    src: http-proxy.conf.j2
+    dest: /etc/systemd/system/docker.service.d/http-proxy.conf
+    mode: '0644'
+  become: true
+
+- name: Add override config
+  ansible.builtin.template:
+    src: override.conf.j2
+    dest: /etc/systemd/system/docker.service.d/override.conf
+    mode: '0644'
+  become: true
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  become: true
+
+- name: Restart Docker service
+  ansible.builtin.service:
+    name: docker
+    state: restarted
   become: true
