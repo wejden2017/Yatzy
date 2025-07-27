@@ -1,14 +1,1 @@
-- name: Run IBM MQ container
-  ansible.builtin.command: >
-    docker run -d 
-    --name {{ ibmmq_container_name }}
-    -p {{ ibmmq_ports[0] }}
-    -p {{ ibmmq_ports[1] }}
-    -v {{ ibmmq_volume_path }}:/mnt/mqm
-    -e LICENSE=accept
-    -e MQ_QMGR_NAME={{ ibmmq_mq_name }}
-    -e MQ_ADMIN_PASSWORD={{ ibmmq_admin_password }}
-    {{ ibmmq_image }}
-  become: true
-  register: container_result
-  failed_when: container_result.rc != 0 and 'already in use' not in container_result.stderr
+ansible-playbook -i inventory/aws_ec2_inventory.py playbooks/cats_tools.yml --vault-password-file=.vault_pass.txt -e "env=poc do_install_docker=true do_install_mq=true" ansible_ssh_common_args='-o StrictHostKeyChecking=no' ansible_ssh_private_key_file=/home/zied.ouertani/.ssh/poc_ec2_keypair1.pem ansible_python_interpreter=/usr/bin/python
