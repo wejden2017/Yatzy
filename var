@@ -1,4 +1,9 @@
-- name: Install Docker Python library
-  ansible.builtin.raw: sudo yum install -y python2-pip && sudo pip install docker-py
+- name: Install pip for Python 2
+  ansible.builtin.raw: sudo yum install -y python2-pip
+  become: true
+  ignore_errors: yes
+
+- name: Install Docker Python module with pip
+  ansible.builtin.raw: sudo pip install docker
   become: true
   ignore_errors: yes
