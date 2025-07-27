@@ -1,9 +1,14 @@
-- name: Install pip for Python 2
-  ansible.builtin.raw: sudo yum install -y python2-pip
+- name: Run IBM MQ container
+  ansible.builtin.command: >
+    docker run -d 
+    --name {{ ibmmq_container_name }}
+    -p {{ ibmmq_ports[0] }}
+    -p {{ ibmmq_ports[1] }}
+    -v {{ ibmmq_volume_path }}:/mnt/mqm
+    -e LICENSE=accept
+    -e MQ_QMGR_NAME={{ ibmmq_mq_name }}
+    -e MQ_ADMIN_PASSWORD={{ ibmmq_admin_password }}
+    {{ ibmmq_image }}
   become: true
-  ignore_errors: yes
-
-- name: Install Docker Python module with pip
-  ansible.builtin.raw: sudo pip install docker
-  become: true
-  ignore_errors: yes
+  register: container_result
+  failed_when: container_result.rc != 0 and 'already in use' not in container_result.stderr
