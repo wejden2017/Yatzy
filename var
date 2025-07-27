@@ -1,7 +1,21 @@
-- name: Disable SELinux completely for this session
-  ansible.builtin.raw: |
-    sudo setenforce 0
-    sudo setsebool -P httpd_execmem 1
-    sudo getenforce
+- name: Add Docker proxy config via copy
+  ansible.builtin.copy:
+    content: "{{ http_proxy_content }}"
+    dest: /etc/systemd/system/docker.service.d/http-proxy.conf
+    mode: '0644'
+    unsafe_writes: yes
+    seuser: system_u
+    serole: object_r
+    setype: systemd_unit_file_t
   become: true
-  ignore_errors: yes
+
+- name: Add override config via copy
+  ansible.builtin.copy:
+    content: "{{ override_content }}"
+    dest: /etc/systemd/system/docker.service.d/override.conf
+    mode: '0644'
+    unsafe_writes: yes
+    seuser: system_u
+    serole: object_r
+    setype: systemd_unit_file_t
+  become: true
