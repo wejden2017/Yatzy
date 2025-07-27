@@ -1,30 +1,21 @@
-- name: Add Docker proxy config
+- name: Read http-proxy template
+  ansible.builtin.set_fact:
+    http_proxy_content: "{{ lookup('template', 'http-proxy.conf.j2') }}"
+
+- name: Add Docker proxy config via copy
   ansible.builtin.copy:
-    src: http-proxy.conf     # <== doit être dans roles/docker_setup/files/
+    content: "{{ http_proxy_content }}"
     dest: /etc/systemd/system/docker.service.d/http-proxy.conf
     mode: '0644'
   become: true
 
-- name: Add override config
+- name: Read override template  
+  ansible.builtin.set_fact:
+    override_content: "{{ lookup('template', 'override.conf.j2') }}"
+
+- name: Add override config via copy
   ansible.builtin.copy:
-    src: override.conf       # <== doit être dans roles/docker_setup/files/
+    content: "{{ override_content }}"
     dest: /etc/systemd/system/docker.service.d/override.conf
     mode: '0644'
-  become: true
-
-- name: Reload systemd daemon
-  ansible.builtin.systemd:
-    daemon_reload: true
-  become: true
-
-- name: Restart Docker service
-  ansible.builtin.service:
-    name: docker
-    state: restarted
-  become: true
-
-- name: Enable Docker service at boot
-  ansible.builtin.service:
-    name: docker
-    enabled: true
   become: true
