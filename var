@@ -1,21 +1,4 @@
-- name: Add Docker proxy config via copy
-  ansible.builtin.copy:
-    content: "{{ http_proxy_content }}"
-    dest: /etc/systemd/system/docker.service.d/http-proxy.conf
-    mode: '0644'
-    unsafe_writes: yes
-    seuser: system_u
-    serole: object_r
-    setype: systemd_unit_file_t
+- name: Install Docker Python module with yum
+  ansible.builtin.raw: sudo yum install -y python-docker-py
   become: true
-
-- name: Add override config via copy
-  ansible.builtin.copy:
-    content: "{{ override_content }}"
-    dest: /etc/systemd/system/docker.service.d/override.conf
-    mode: '0644'
-    unsafe_writes: yes
-    seuser: system_u
-    serole: object_r
-    setype: systemd_unit_file_t
-  become: true
+  ignore_errors: yes
