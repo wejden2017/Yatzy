@@ -1,21 +1,7 @@
-- name: Read http-proxy template
-  ansible.builtin.set_fact:
-    http_proxy_content: "{{ lookup('template', 'http-proxy.conf.j2') }}"
-
-- name: Add Docker proxy config via copy
-  ansible.builtin.copy:
-    content: "{{ http_proxy_content }}"
-    dest: /etc/systemd/system/docker.service.d/http-proxy.conf
-    mode: '0644'
+- name: Disable SELinux completely for this session
+  ansible.builtin.raw: |
+    sudo setenforce 0
+    sudo setsebool -P httpd_execmem 1
+    sudo getenforce
   become: true
-
-- name: Read override template  
-  ansible.builtin.set_fact:
-    override_content: "{{ lookup('template', 'override.conf.j2') }}"
-
-- name: Add override config via copy
-  ansible.builtin.copy:
-    content: "{{ override_content }}"
-    dest: /etc/systemd/system/docker.service.d/override.conf
-    mode: '0644'
-  become: true
+  ignore_errors: yes
