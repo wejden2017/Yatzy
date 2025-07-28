@@ -15,15 +15,15 @@ def get_ec2_instances(tag_key, tag_value, region):
                 None
             )
 
-            # Forcer récupération VPC ID avec valeur par défaut
-            vpc_id_value = instance.get('VpcId')
-            if not vpc_id_value:
-                vpc_id_value = 'vpc-UNKNOWN'
+            # Récupérer le VPC ID depuis NetworkInterfaces
+            vpc_id_value = None
+            if instance.get('NetworkInterfaces'):
+                vpc_id_value = instance['NetworkInterfaces'][0].get('VpcId')
 
             instances.append({
                 'private_ip': instance.get('PrivateIpAddress', 'N/A'),
                 'instance_id': instance.get('InstanceId', 'N/A'),
                 'PublicDnsName': public_dns_tag,
-                'vpc_id': vpc_id_value
+                'vpc_id': vpc_id_value or 'vpc-UNKNOWN'
             })
     return instances
