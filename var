@@ -1,12 +1,53 @@
-for reservation in response['Reservations']:
-    for instance in reservation['Instances']:
-        print("==== DEBUG KEYS ====")
-        print(instance.keys())  # Pour voir les champs de niveau Instance
-        
-        if 'NetworkInterfaces' in instance:
-            print("==== DEBUG NETWORK INTERFACES ====")
-            for ni in instance['NetworkInterfaces']:
-                print(ni.keys())  # Pour voir les champs d'une interface
-                if 'VpcId' in ni:
-                    print("VPC trouvé dans NI:", ni['VpcId'])
+import boto3
+import json
+import sys
 
+def get_ec2_instances(tag_key, tag_value, region):
+    ec2 = boto3.client('ec2', region_name=region)
+    response = ec2.describe_instances(
+        Filters=[
+            {'Name': f'tag:{tag_key}', 'Values': [tag_value]},
+            {'Name': 'instance-state-name', 'Values': ['running']}
+        ]
+    )
+
+    instances = []
+    for reservation in response['Reservations']:
+        for instance in reservation['Instances']:
+            # 🔍 Debug keys pour voir la structure exacte
+            print("==== DEBUG INSTANCE KEYS ====")
+            print(instance.keys())
+
+            public_dns_tag = next(
+                (tag['Value'] for tag in instance.get('Tags', []) if tag['Key'] == 'PublicDnsName'),
+                None
+            )
+
+            # Chercher VPC ID à plusieurs endroits
+            vpc_id_value = None
+
+            # 1️⃣ Directement dans l'instance
+            if 'VpcId' in instance:
+                vpc_id_value = instance['VpcId']
+
+            # 2️⃣ Dans les NetworkInterfaces
+            if not vpc_id_value and 'NetworkInterfaces' in instance:
+                print("==== DEBUG NETWORK INTERFACES ====")
+                for ni in instance['NetworkInterfaces']:
+                    print(ni.keys())  # Debug des clés de chaque interface
+                    if 'VpcId' in ni:
+                        vpc_id_value = ni['VpcId']
+                        break
+
+            instances.append({
+                'private_ip': instance.get('PrivateIpAddress', 'N/A'),
+                'instance_id': instance.get('InstanceId', 'N/A'),
+                'PublicDnsName': public_dns_tag,
+                'vpc_id': vpc_id_value or 'vpc-UNKNOWN'
+            })
+    return instances
+
+if __name__ == "__main__":
+    # Exécution test pour voir output
+    instances_data = get_ec2_instances("Name", "tools_servers", "eu-west-2")
+    print(json.dumps(instances_data, indent=2))
