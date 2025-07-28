@@ -1,1 +1,20 @@
-ansible-playbook -i inventory/aws_ec2_inventory.py playbooks/cats_tools.yml --vault-password-file=.vault_pass.txt -e "env=poc do_install_docker=true do_install_mq=true" ansible_ssh_common_args='-o StrictHostKeyChecking=no' ansible_ssh_private_key_file=/home/zied.ouertani/.ssh/poc_ec2_keypair1.pem ansible_python_interpreter=/usr/bin/python
+- name: Debug SELinux installation for Python 3
+  block:
+    - name: Check installed SELinux packages
+      ansible.builtin.raw: yum list installed | grep libselinux
+      register: selinux_packages
+      become: true
+
+    - name: Show SELinux packages installed
+      ansible.builtin.debug:
+        var: selinux_packages.stdout
+
+    - name: Test Python 3 SELinux module
+      ansible.builtin.raw: python3 -c "import selinux; print('SELinux Python3 OK')"
+      register: selinux_python3_check
+      ignore_errors: true
+      become: true
+
+    - name: Show Python 3 SELinux import result
+      ansible.builtin.debug:
+        var: selinux_python3_check.stdout
