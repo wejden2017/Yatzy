@@ -1,32 +1,12 @@
-def get_ec2_instances(tag_key, tag_value, region):
-    ec2 = boto3.client('ec2', region_name=region)
-    response = ec2.describe_instances(
-        Filters=[
-            {'Name': f'tag:{tag_key}', 'Values': [tag_value]},
-            {'Name': 'instance-state-name', 'Values': ['running']}
-        ]
-    )
+for reservation in response['Reservations']:
+    for instance in reservation['Instances']:
+        print("==== DEBUG KEYS ====")
+        print(instance.keys())  # Pour voir les champs de niveau Instance
+        
+        if 'NetworkInterfaces' in instance:
+            print("==== DEBUG NETWORK INTERFACES ====")
+            for ni in instance['NetworkInterfaces']:
+                print(ni.keys())  # Pour voir les champs d'une interface
+                if 'VpcId' in ni:
+                    print("VPC trouvé dans NI:", ni['VpcId'])
 
-    instances = []
-    for reservation in response['Reservations']:
-        for instance in reservation['Instances']:
-            public_dns_tag = next(
-                (tag['Value'] for tag in instance.get('Tags', []) if tag['Key'] == 'PublicDnsName'),
-                None
-            )
-
-            # 🔍 Chercher VPC ID à deux endroits possibles
-            vpc_id_value = instance.get('VpcId')
-            if not vpc_id_value and 'NetworkInterfaces' in instance:
-                for ni in instance['NetworkInterfaces']:
-                    if 'VpcId' in ni:
-                        vpc_id_value = ni['VpcId']
-                        break
-
-            instances.append({
-                'private_ip': instance.get('PrivateIpAddress', 'N/A'),
-                'instance_id': instance.get('InstanceId', 'N/A'),
-                'PublicDnsName': public_dns_tag,
-                'vpc_id': vpc_id_value or 'vpc-UNKNOWN'
-            })
-    return instances
