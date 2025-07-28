@@ -15,10 +15,13 @@ def get_ec2_instances(tag_key, tag_value, region):
                 None
             )
 
-            # Récupérer le VPC ID depuis NetworkInterfaces
-            vpc_id_value = None
-            if instance.get('NetworkInterfaces'):
-                vpc_id_value = instance['NetworkInterfaces'][0].get('VpcId')
+            # 🔍 Chercher VPC ID à deux endroits possibles
+            vpc_id_value = instance.get('VpcId')
+            if not vpc_id_value and 'NetworkInterfaces' in instance:
+                for ni in instance['NetworkInterfaces']:
+                    if 'VpcId' in ni:
+                        vpc_id_value = ni['VpcId']
+                        break
 
             instances.append({
                 'private_ip': instance.get('PrivateIpAddress', 'N/A'),
