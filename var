@@ -1,2 +1,8 @@
-Settings → Build, Execution, Deployment → Build Tools → Maven → Runner
--Xms2g -Xmx6g -XX:+UseG1GC -XX:MaxMetaspaceSize=1024m -XX:+HeapDumpOnOutOfMemoryError -XX:HeapDumpPath=/tmp/heapdump.hprof
+<Envelope xmlns="urn:iso:std:iso:20022:tech:xsd:envelope">
+    <AppHdr xmlns="urn:iso:std:iso:20022:tech:xsd:head.001.001.01">
+        ...
+    </AppHdr>
+    <Document xmlns="urn:iso:std:iso:20022:tech:xsd:semt.002.001.10">
+        ...
+    </Document>
+</Envelope>
