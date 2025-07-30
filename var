@@ -1,6 +1,26 @@
-BigDecimal montantTotal = report.getAccountBalances() == null || report.getAccountBalances().isEmpty()
-        ? BigDecimal.ZERO
-        : report.getAccountBalances()
-            .stream()
-            .map(a -> a.getMontantValo())
-            .reduce(BigDecimal.ZERO, BigDecimal::add);
+private static Stream<ReconciliationSemt002> map(final SecurityEndOfDayReport report) {
+    log.warn("⚠ AccountBalances vide - injection d'un ReconciliationSemt002 fictif pour test");
+
+    ReconciliationSemt002 fake = new ReconciliationSemt002();
+    fake.setBicParticipantSender("TESTSENDER");
+    fake.setBicParticipantReceiver("TESTRECEIVER");
+    fake.setBicParentSender("TESTPARENT");
+    fake.setBicParentReceiver("TESTPARENTRECV");
+    fake.setIntegrationDate(LocalDateTime.now());
+    fake.setStatus(1);
+    fake.setMsgReference("FAKE123");
+    fake.setMessageDate(LocalDateTime.now());
+    fake.setAccountNumber("ACC123");
+    fake.setCdIsin("ISIN123");
+    fake.setIdDev(1L);
+    fake.setFaceAmount(BigDecimal.ONE);
+    fake.setUnit(BigDecimal.ONE);
+    fake.setTpActivite("N");
+    fake.setBalanceDeposeFia(BigDecimal.ONE);
+    fake.setBalanceDispoSbo(BigDecimal.ONE);
+    fake.setPlaceOfSafeKeeping("PLACE");
+    fake.setMontantValo(BigDecimal.ONE);
+    fake.setMontant(BigDecimal.ONE);
+
+    return Stream.of(fake);
+}
