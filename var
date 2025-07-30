@@ -12,10 +12,12 @@ L’importer dans le keystore Java utilisé par Maven CLI :
 bash
 Copier
 Modifier
-sudo keytool -importcert -file nexus.crt \
- -keystore $JAVA_HOME/lib/security/cacerts \
+sudo keytool -importcert \
+ -keystore /usr/lib/jvm/jdk-1.8-oracle-x64/jre/lib/security/cacerts \
+ -storepass changeit \
  -alias nexus-lseg \
- -storepass changeit
+ -file nexus.crt
+
 Relancer Maven CLI :
 
 bash
