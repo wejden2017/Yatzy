@@ -1,31 +1,6 @@
-private static Stream<ReconciliationSemt002> map(final SecurityEndOfDayReport report) {
-
-
-    if (report.getAccountBalances() == null || report.getAccountBalances().isEmpty()) {
-        log.warn("AccountBalances is empty for report - injecting test value");
-
-        // Création d'un AccountBalance fictif
-        AccountBalance fakeBalance = new AccountBalance();
-
-        
-        try {
-            fakeBalance.setMontantValo(BigDecimal.ONE); // Valeur test
-        } catch (Exception e) {
-            log.warn("Setter setMontantValo non disponible - adapter selon la classe AccountBalance");
-        }
-
-        // Injection du faux AccountBalance dans le report
-        report.setAccountBalances(Collections.singletonList(fakeBalance));
-    }
-
-   
-    BigDecimal montantTotal = report.getAccountBalances()
-        .stream()
-        .map(a -> a.getMontantValo() != null ? a.getMontantValo() : BigDecimal.ZERO)
-        .reduce(BigDecimal.ZERO, BigDecimal::add);
-
-   
-    return report.getAccountBalances()
-        .stream()
-        .map(balance -> Semt002Dao.map(report, balance, montantTotal));
-}
+BigDecimal montantTotal = report.getAccountBalances() == null || report.getAccountBalances().isEmpty()
+        ? BigDecimal.ZERO
+        : report.getAccountBalances()
+            .stream()
+            .map(a -> a.getMontantValo())
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
