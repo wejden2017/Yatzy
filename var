@@ -1,26 +1,24 @@
-Récupérer le certificat du Nexus :
+private static Stream<ReconciliationSemt002> map(final SecurityEndOfDayReport report) {
 
-bash
-Copier
-Modifier
-openssl s_client -connect nexus.lseg.stockex.local:443 -showcerts </dev/null 2>/dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > nexus.crt
+    // Si la liste est vide, on injecte un AccountBalance fictif
+    if (report.getAccountBalances() == null || report.getAccountBalances().isEmpty()) {
+        log.warn("AccountBalances is empty for report {} - injecting test value", report.getId());
 
-Copier le certificat .crt.
+        AccountBalance fakeBalance = new AccountBalance();
+        fakeBalance.setMontantValo(BigDecimal.ONE); // Valeur test
+      
 
-L’importer dans le keystore Java utilisé par Maven CLI :
+        report.setAccountBalances(Collections.singletonList(fakeBalance));
+    }
 
-bash
-Copier
-Modifier
-sudo keytool -importcert \
- -keystore /usr/lib/jvm/jdk-1.8-oracle-x64/jre/lib/security/cacerts \
- -storepass changeit \
- -alias nexus-lseg \
- -file nexus.crt
 
-Relancer Maven CLI :
+    BigDecimal montantTotal = report.getAccountBalances()
+        .stream()
+        .map(a -> a.getMontantValo() != null ? a.getMontantValo() : BigDecimal.ZERO)
+        .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-bash
-Copier
-Modifier
-mvn clean install -U -DskipTests
+
+    return report.getAccountBalances()
+        .stream()
+        .map(balance -> Semt002Dao.map(report, balance, montantTotal));
+}
