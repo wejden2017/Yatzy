@@ -3,7 +3,8 @@ Récupérer le certificat du Nexus :
 bash
 Copier
 Modifier
-openssl s_client -connect nexus.lseg.stockex.local:443 -showcerts
+openssl s_client -connect nexus.lseg.stockex.local:443 -showcerts </dev/null 2>/dev/null | sed -ne '/-BEGIN CERTIFICATE-/,/-END CERTIFICATE-/p' > nexus.crt
+
 Copier le certificat .crt.
 
 L’importer dans le keystore Java utilisé par Maven CLI :
