@@ -1,26 +1,36 @@
-private static ReconciliationSemt002 buildEntity(final ResultSet res) throws SQLException {
-    final ReconciliationSemt002 semt002 = new ReconciliationSemt002();
-
-    semt002.setId(res.getLong("ID_MSG"));
-    semt002.setMsgReference(trimToMax(res.getString("STAT_ref"), 60));
-    semt002.setBicParticipantSender(trimToMax(res.getString("BIC_PA_S"), 22));
-    semt002.setBicParticipantReceiver(trimToMax(res.getString("BIC_PA_R"), 11));
-    semt002.setBicParentSender(trimToMax(res.getString("BIC_PAR"), 11));
-    semt002.setBicParentReceiver(trimToMax(res.getString("BIC_PA"), 11));
-    semt002.setAccountNumber(trimToMax(res.getString("ACCOUNT"), 60));
-    semt002.setCdIsin(trimToMax(res.getString("CD_ISIN"), 12));
-    semt002.setIdDev(res.getLong("ID_DEV"));
-    semt002.setFaceAmount(res.getBigDecimal("FACE_AMOUNT"));
-    semt002.setUnit(res.getBigDecimal("UNIT"));
-    semt002.setIntegrationDate(res.getObject("DATE_IN", LocalDateTime.class));
-    semt002.setMessageDate(res.getObject("STATEMENT_DATE", LocalDateTime.class));
-    semt002.setStatus(Semt002Status.fromIntValue(res.getInt("STATUS")));
-    semt002.setTarget(Destinations.fromStringValue(res.getString("TARGET")));
-
-    return semt002;
-}
-
-private static String trimToMax(String value, int maxLength) {
+private static String truncate(String value, int maxLength) {
     if (value == null) return null;
     return value.length() > maxLength ? value.substring(0, maxLength) : value;
+}
+
+private static Stream<ReconciliationSemt002> map(final SecurityEndOfDayReport report) {
+    log.warn("AccountBalances vide - injection d'un ReconciliationSemt002 fictif pour test");
+
+    ReconciliationSemt002 fake = new ReconciliationSemt002();
+
+    // Tronquer selon la longueur max des colonnes DB
+    fake.setBicParentSender(truncate("PARENT-SENDER", 11));        // BIC_PARENT_SENDER
+    fake.setBicParticipantSender(truncate("PARTICIPANT-SENDER", 22)); // BIC_PARTICIPANT_SENDER
+    fake.setBicParentReceiver(truncate("PARENT-RECEIVER", 11));    // BIC_PARENT_RECEIVER
+    fake.setBicParticipantReceiver(truncate("PARTICIPANT-RECEIVER", 11)); // BIC_PARTICIPANT_RECEIVER
+
+    fake.setMessageDate(LocalDateTime.now());
+    fake.setMsgReference(truncate("FAKE-MSG-123", 60));            // STATEMENT_REFERENCE
+    fake.setStatus(null);                                          // Ou un statut valide si dispo
+    fake.setAccountNumber(truncate("ACC-123", 60));                 // ACCOUNT_NUMBER
+    fake.setCdIsin(truncate("ISIN-123", 12));                       // CD_ISIN
+    fake.setIdDev(1L);
+
+    fake.setFaceAmount(BigDecimal.ONE);
+    fake.setUnit(BigDecimal.ONE);
+    fake.setIntegrationDate(LocalDateTime.now());
+    fake.setTarget(Destinations.T2S);
+    fake.setTpActivite(truncate("N", 3));                           // tpActivite si String courte
+    fake.setBalanceDeposeFia(BigDecimal.ONE);
+    fake.setBalanceDispoSb(BigDecimal.ONE);
+    fake.setPlaceOfSafeKeeping(truncate("SAFE-PLACE", 60));         // PLACE_OF_SAFEKEEPING
+    fake.setMontantValo(BigDecimal.ONE);
+    fake.setMontantTotal(BigDecimal.TEN);
+
+    return Stream.of(fake);
 }
