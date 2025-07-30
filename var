@@ -1,8 +1,23 @@
-<Envelope xmlns="urn:iso:std:iso:20022:tech:xsd:envelope">
-    <AppHdr xmlns="urn:iso:std:iso:20022:tech:xsd:head.001.001.01">
-        ...
-    </AppHdr>
-    <Document xmlns="urn:iso:std:iso:20022:tech:xsd:semt.002.001.10">
-        ...
-    </Document>
-</Envelope>
+Récupérer le certificat du Nexus :
+
+bash
+Copier
+Modifier
+openssl s_client -connect nexus.lseg.stockex.local:443 -showcerts
+Copier le certificat .crt.
+
+L’importer dans le keystore Java utilisé par Maven CLI :
+
+bash
+Copier
+Modifier
+sudo keytool -importcert -file nexus.crt \
+ -keystore $JAVA_HOME/lib/security/cacerts \
+ -alias nexus-lseg \
+ -storepass changeit
+Relancer Maven CLI :
+
+bash
+Copier
+Modifier
+mvn clean install -U -DskipTests
