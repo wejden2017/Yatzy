@@ -1,27 +1,7 @@
-private static Stream<ReconciliationSemt002> map(final SecurityEndOfDayReport report) {
-    log.warn("⚠ AccountBalances vide - injection d'un ReconciliationSemt002 fictif pour test");
-
-    ReconciliationSemt002 fake = new ReconciliationSemt002();
-    fake.setBicParentSender("PARENT-SENDER");
-    fake.setBicParticipantSender("PARTICIPANT-SENDER");
-    fake.setBicParentReceiver("PARENT-RECEIVER");
-    fake.setBicParticipantReceiver("PARTICIPANT-RECEIVER");
-    fake.setMessageDate(LocalDateTime.now());
-    fake.setMsgReference("FAKE-MSG-123");
-    fake.setStatus(null); // si besoin d'un vrai status, mets un Semt002Status valide
-    fake.setAccountNumber("ACC-123");
-    fake.setCdIsin("ISIN-123");
-    fake.setIdDev(1L);
-    fake.setFaceAmount(BigDecimal.ONE);
-    fake.setUnit(BigDecimal.ONE);
-    fake.setIntegrationDate(LocalDateTime.now());
-    fake.setTarget(Destinations.T2S);
-    fake.setTpActivite("N");
-    fake.setBalanceDeposeFia(BigDecimal.ONE);
-    fake.setBalanceDispoSb(BigDecimal.ONE);
-    fake.setPlaceOfSafeKeeping("SAFE-PLACE");
-    fake.setMontantValo(BigDecimal.ONE);
-    fake.setMontantTotal(BigDecimal.TEN);
-
-    return Stream.of(fake);
+if (camt004.getStatus() != null) {
+    log.info("Setting param 6 {}", camt004.getStatus().getValue());
+    StatementHelper.setNullableInteger(statement, 6, camt004.getStatus().getValue());
+} else {
+    log.info("Setting param 6 is NULL");
+    StatementHelper.setNullableInteger(statement, 6, null);
 }
