@@ -1,7 +1,26 @@
-if (camt004.getStatus() != null) {
-    log.info("Setting param 6 {}", camt004.getStatus().getValue());
-    StatementHelper.setNullableInteger(statement, 6, camt004.getStatus().getValue());
-} else {
-    log.info("Setting param 6 is NULL");
-    StatementHelper.setNullableInteger(statement, 6, null);
+private static ReconciliationSemt002 buildEntity(final ResultSet res) throws SQLException {
+    final ReconciliationSemt002 semt002 = new ReconciliationSemt002();
+
+    semt002.setId(res.getLong("ID_MSG"));
+    semt002.setMsgReference(trimToMax(res.getString("STAT_ref"), 60));
+    semt002.setBicParticipantSender(trimToMax(res.getString("BIC_PA_S"), 22));
+    semt002.setBicParticipantReceiver(trimToMax(res.getString("BIC_PA_R"), 11));
+    semt002.setBicParentSender(trimToMax(res.getString("BIC_PAR"), 11));
+    semt002.setBicParentReceiver(trimToMax(res.getString("BIC_PA"), 11));
+    semt002.setAccountNumber(trimToMax(res.getString("ACCOUNT"), 60));
+    semt002.setCdIsin(trimToMax(res.getString("CD_ISIN"), 12));
+    semt002.setIdDev(res.getLong("ID_DEV"));
+    semt002.setFaceAmount(res.getBigDecimal("FACE_AMOUNT"));
+    semt002.setUnit(res.getBigDecimal("UNIT"));
+    semt002.setIntegrationDate(res.getObject("DATE_IN", LocalDateTime.class));
+    semt002.setMessageDate(res.getObject("STATEMENT_DATE", LocalDateTime.class));
+    semt002.setStatus(Semt002Status.fromIntValue(res.getInt("STATUS")));
+    semt002.setTarget(Destinations.fromStringValue(res.getString("TARGET")));
+
+    return semt002;
+}
+
+private static String trimToMax(String value, int maxLength) {
+    if (value == null) return null;
+    return value.length() > maxLength ? value.substring(0, maxLength) : value;
 }
