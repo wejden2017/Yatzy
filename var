@@ -1,1 +1,2 @@
 log.info("Ajout AccountBalance pour msgRef={} avec accountNumber={}", semt002.getMsgReference(), semt002.getAccountNumber());
+log.info("Group size pour msgRef={} : {}", first.getMsgReference(), group.size());
