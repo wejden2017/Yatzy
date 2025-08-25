@@ -1,26 +1,27 @@
-    @Test
-    void testMapWithNullBalancesAndValues() {
-        // GIVEN
-        SecurityEndOfDayReport report = Mockito.mock(SecurityEndOfDayReport.class);
+@Test
+    void map_filters_nulls_and_computes_total() throws Exception {
+        SecurityEndOfDayReport report = mock(SecurityEndOfDayReport.class);
 
-        AccountBalance balance1 = Mockito.mock(AccountBalance.class);
-        when(balance1.getMontantValeur()).thenReturn(new BigDecimal("100.50"));
+        AccountBalance b1 = mock(AccountBalance.class);
+        when(b1.getMontantValeur()).thenReturn(new BigDecimal("100"));
 
-        AccountBalance balance2 = Mockito.mock(AccountBalance.class);
-        when(balance2.getMontantValeur()).thenReturn(null); // valeur nulle
+        AccountBalance b2 = mock(AccountBalance.class);
+        when(b2.getMontantValeur()).thenReturn(null);
 
-        AccountBalance balance3 = null; // balance nulle
+        AccountBalance b3 = null;
 
-        List<AccountBalance> balances = Arrays.asList(balance1, balance2, balance3);
+        when(report.getAccountBalances()).thenReturn(Arrays.asList(b1, b2, b3));
 
-        when(report.getAccountBalances()).thenReturn(balances);
+        Method m = Semt002Dao.class.getDeclaredMethod("map", SecurityEndOfDayReport.class);
+        m.setAccessible(true);
+        Stream<?> stream = (Stream<?>) m.invoke(null, report);
 
-        // WHEN
-        Stream<ReconciliationSemt002> resultStream = ReconciliationMapper.map(report);
+        List<?> list = stream.collect(Collectors.toList());
+        assertEquals(1, list.size());
 
-        // THEN
-        List<ReconciliationSemt002> resultList = resultStream.toList();
-        // On vérifie que le total a bien pris en compte uniquement balance1
-        assertEquals(1, resultList.size());
-        assertEquals(new BigDecimal("100.50"), resultList.get(0).getMontantTotal());
+        Object rec = list.get(0);
+        Field f = rec.getClass().getDeclaredField("montantTotal");
+        f.setAccessible(true);
+        BigDecimal total = (BigDecimal) f.get(rec);
+        assertEquals(new BigDecimal("100"), total);
     }
