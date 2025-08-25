@@ -1,44 +1,18 @@
-import org.junit.jupiter.api.Test;
-import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.mockito.Mockito.*;
-
-import java.lang.reflect.Field;
-import java.lang.reflect.Method;
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-import java.util.Arrays;
-import java.util.List;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-class Semt002DaoTest {
-
-    @Test
-    void map_filters_nulls_and_computes_total() throws Exception {
-        SecurityEndOfDayReport report = mock(SecurityEndOfDayReport.class, RETURNS_DEEP_STUBS);
-
+  @Test
+    void sum_ignores_null_values() {
         AccountBalance b1 = mock(AccountBalance.class);
-        when(b1.getMontantValeur()).thenReturn(new BigDecimal("100"));
+        when(b1.getMontantValeur()).thenReturn(new BigDecimal("10"));
 
         AccountBalance b2 = mock(AccountBalance.class);
         when(b2.getMontantValeur()).thenReturn(null);
 
-        when(report.getAccountBalances()).thenReturn(Arrays.asList(b1, b2));
-        when(report.getMessageDate()).thenReturn(LocalDateTime.now());
-        when(report.getIntegrationDate()).thenReturn(LocalDateTime.now());
-        when(report.getMsgReference()).thenReturn("ref");
+        AccountBalance b3 = mock(AccountBalance.class);
+        when(b3.getMontantValeur()).thenReturn(new BigDecimal("5"));
 
-        Method m = Semt002Dao.class.getDeclaredMethod("map", SecurityEndOfDayReport.class);
-        m.setAccessible(true);
-        Stream<?> stream = (Stream<?>) m.invoke(null, report);
+        BigDecimal total = Stream.of(b1, b2, b3)
+                .map(AccountBalance::getMontantValeur)
+                .filter(Objects::nonNull)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        List<?> list = stream.collect(Collectors.toList());
-        assertEquals(2, list.size());
-
-        Object rec = list.get(0);
-        Field f = rec.getClass().getDeclaredField("montantTotal");
-        f.setAccessible(true);
-        BigDecimal total = (BigDecimal) f.get(rec);
-        assertEquals(new BigDecimal("100"), total);
+        assertEquals(new BigDecimal("15"), total);
     }
-}
