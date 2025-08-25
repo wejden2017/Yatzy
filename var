@@ -1,18 +1,16 @@
-  @Test
-    void sum_ignores_null_values() {
+@Test
+    void calculateMontantTotal_shouldIgnoreNulls() {
+        SecurityEndOfDayReport report = mock(SecurityEndOfDayReport.class);
+
         AccountBalance b1 = mock(AccountBalance.class);
-        when(b1.getMontantValeur()).thenReturn(new BigDecimal("10"));
+        when(b1.getMontantValeur()).thenReturn(new BigDecimal("100"));
 
         AccountBalance b2 = mock(AccountBalance.class);
         when(b2.getMontantValeur()).thenReturn(null);
 
-        AccountBalance b3 = mock(AccountBalance.class);
-        when(b3.getMontantValeur()).thenReturn(new BigDecimal("5"));
+        when(report.getAccountBalances()).thenReturn(Arrays.asList(b1, b2, null));
 
-        BigDecimal total = Stream.of(b1, b2, b3)
-                .map(AccountBalance::getMontantValeur)
-                .filter(Objects::nonNull)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal total = Semt002Dao.calculateMontantTotal(report);
 
-        assertEquals(new BigDecimal("15"), total);
+        assertEquals(new BigDecimal("100"), total);
     }
