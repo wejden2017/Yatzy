@@ -1,2 +1,26 @@
-log.info("Ajout AccountBalance pour msgRef={} avec accountNumber={}", semt002.getMsgReference(), semt002.getAccountNumber());
-log.info("Group size pour msgRef={} : {}", first.getMsgReference(), group.size());
+    @Test
+    void testMapWithNullBalancesAndValues() {
+        // GIVEN
+        SecurityEndOfDayReport report = Mockito.mock(SecurityEndOfDayReport.class);
+
+        AccountBalance balance1 = Mockito.mock(AccountBalance.class);
+        when(balance1.getMontantValeur()).thenReturn(new BigDecimal("100.50"));
+
+        AccountBalance balance2 = Mockito.mock(AccountBalance.class);
+        when(balance2.getMontantValeur()).thenReturn(null); // valeur nulle
+
+        AccountBalance balance3 = null; // balance nulle
+
+        List<AccountBalance> balances = Arrays.asList(balance1, balance2, balance3);
+
+        when(report.getAccountBalances()).thenReturn(balances);
+
+        // WHEN
+        Stream<ReconciliationSemt002> resultStream = ReconciliationMapper.map(report);
+
+        // THEN
+        List<ReconciliationSemt002> resultList = resultStream.toList();
+        // On vérifie que le total a bien pris en compte uniquement balance1
+        assertEquals(1, resultList.size());
+        assertEquals(new BigDecimal("100.50"), resultList.get(0).getMontantTotal());
+    }
