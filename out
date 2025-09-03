@@ -1,57 +1,67 @@
 #!/bin/ksh
 # ============================================================================
-# Vérifie la présence des fichiers CAL_TO_CAT_*.CSV/.csv et appelle
-# le script d’intégration pour chacun. Pas de gestion d’échec.
+# Vérifie la présence des fichiers CAL_TO_CAT_*.CSV et appelle
+# le script d’intégration pour chacun.
+# Logs et fonctions standards CATS.
 # ============================================================================
 
-DATA_DIR="/cats/oper/data/apf"
-SCRIPT_SHARED="/cats/oper/exe/SharedApps/CALYPSO_integration_csv.ksh"
-LOG_FILE="/cats/oper/logs/traitement_CALYPSO_integration_csv.log"
+. ${HOME}/env/env.ksh
+. ${CATS_OPER}/common_functions.sh
 
-# Création dossier logs
-mkdir -p "$(dirname "$LOG_FILE")"
+LOG_SCRIPT=${CATS_LOG}/`basename $0 ".ksh"`.log
+nom_script=`basename $0 "@@"`
+exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
 
-# Redirige tout vers le log
-exec 1>>"$LOG_FILE" 2>&1
+LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
+LOGSTART "${nom_script}"
 
-echo "=== Début traitement $(date '+%Y-%m-%d %H:%M:%S') ==="
+DATA_DIR="${CATS_OPER}/data/apf"
+SCRIPT_SHARED="${CATS_OPER}/exe/SharedApps/CALYPSO_integration_csv.ksh"
 
 found=0
-for file in "${DATA_DIR}"/CAL_TO_CAT_*.[cC][sS][vV]
+for file in ${DATA_DIR}/CAL_TO_CAT_*.[cC][sS][vV]
 do
   [ -e "$file" ] || continue
   found=1
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - Détection fichier : $file"
-  "$SCRIPT_SHARED" "$file"
+  LOGINFO "${nom_script}" "Détection fichier : $file"
+  $SCRIPT_SHARED "$file"
 done
 
 if [ $found -eq 0 ]; then
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - Aucun fichier trouvé dans $DATA_DIR"
+  LOGERR "${nom_script}" "Aucun fichier trouvé dans $DATA_DIR"
 fi
 
-echo "=== Fin traitement $(date '+%Y-%m-%d %H:%M:%S') ==="
+LOGEND "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
 exit 0
-
-
+///////////////
 #!/bin/ksh
 # ============================================================================
-# Traite un fichier puis le renomme en <fichier>_traite
+# Traite un fichier CSV CALYPSO et le renomme en <fichier>_traite
+# Logs et fonctions standards CATS.
 # ============================================================================
-LOG_FILE="/cats/oper/logs/CALYPSO_integration_csv.log"
 
-exec 1>>"$LOG_FILE" 2>&1
+. ${HOME}/env/env.ksh
+. ${CATS_OPER}/common_functions.sh
+
+LOG_SCRIPT=${CATS_LOG}/`basename $0 ".ksh"`.log
+nom_script=`basename $0 "@@"`
+exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
+
+LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
+LOGSTART "${nom_script}"
 
 file="$1"
 
 if [ -z "$file" ]; then
-  echo "$(date '+%Y-%m-%d %H:%M:%S') - Usage: $0 <fichier>"
-  exit 1
+  LOGERR "${nom_script}" "Usage: $0 <fichier>"
+  CHECK_RETURN_CODE_CATS "${nom_script}" 1 "Paramètre manquant"
 fi
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') - Début traitement du fichier : $file"
+LOGINFO "${nom_script}" "Début traitement du fichier : $file"
 
 mv "$file" "${file}_traite"
 
-echo "$(date '+%Y-%m-%d %H:%M:%S') - Succès : $file renommé en ${file}_traite"
-exit 0
+LOGINFO "${nom_script}" "Succès : $file renommé en ${file}_traite"
 
+LOGEND "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
+exit 0
