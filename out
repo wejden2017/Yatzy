@@ -1,81 +1,65 @@
-Script orchestrateur : /cats/oper/exe/traitement_CALYPSO_integration_csv.ksh
-
 #!/bin/ksh
 # ============================================================================
-# Script : traitement_CALYPSO_integration_csv.ksh
-# Objet  : Vérifie la présence des fichiers CAL_TO_CAT_*.CSV et appelle
-#          le script d'intégration pour chaque fichier trouvé.
+# Vérifie la présence des fichiers CAL_TO_CAT_*.CSV/.csv et appelle
+# le script d’intégration pour chacun. Pas de gestion d’échec.
 # ============================================================================
 
 DATA_DIR="/cats/oper/data/apf"
 SCRIPT_SHARED="/cats/oper/exe/SharedApps/CALYPSO_integration_csv.ksh"
 LOG_FILE="/cats/oper/logs/traitement_CALYPSO_integration_csv.log"
 
-# Création du répertoire de logs si inexistant
-mkdir -p $(dirname $LOG_FILE)
+# Création dossier logs
+mkdir -p "$(dirname "$LOG_FILE")"
 
-echo "=== Début traitement $(date '+%Y-%m-%d %H:%M:%S') ===" >> $LOG_FILE
+# Redirige tout vers le log
+exec 1>>"$LOG_FILE" 2>&1
 
-# Recherche des fichiers CSV
-FILES=$(ls ${DATA_DIR}/CAL_TO_CAT_*.CSV 2>/dev/null)
+echo "=== Début traitement $(date '+%Y-%m-%d %H:%M:%S') ==="
 
-if [ -z "$FILES" ]; then
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Aucun fichier trouvé dans $DATA_DIR" >> $LOG_FILE
-    exit 0
-fi
-
-# Boucle sur chaque fichier
-for file in $FILES
+found=0
+for file in "${DATA_DIR}"/CAL_TO_CAT_*.[cC][sS][vV]
 do
-    echo "$(date '+%Y-%m-%d %H:%M:%S') - Détection fichier : $file" >> $LOG_FILE
-    $SCRIPT_SHARED "$file" >> $LOG_FILE 2>&1
+  [ -e "$file" ] || continue
+  found=1
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - Détection fichier : $file"
+  "$SCRIPT_SHARED" "$file"
 done
 
-echo "=== Fin traitement $(date '+%Y-%m-%d %H:%M:%S') ===" >> $LOG_FILE
+if [ $found -eq 0 ]; then
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - Aucun fichier trouvé dans $DATA_DIR"
+fi
+
+echo "=== Fin traitement $(date '+%Y-%m-%d %H:%M:%S') ==="
 exit 0
 
 
----
-
-2️⃣ Script d’intégration : /cats/oper/exe/SharedApps/CALYPSO_integration_csv.ksh
-
 #!/bin/ksh
 # ============================================================================
-# Script : CALYPSO_integration_csv.ksh
-# Objet  : Traite un fichier CSV CALYPSO passé en paramètre et le renomme
-#          en <fichier>_traite si succès, ou <fichier>_error si échec.
+# Traite un fichier puis le renomme en <fichier>_traite. Pas de gestion d’échec.
 # ============================================================================
+
+LOG_FILE="/cats/oper/logs/CALYPSO_integration_csv.log"
+
+# Création dossier logs
+mkdir -p "$(dirname "$LOG_FILE")"
+
+# Redirige tout vers le log
+exec 1>>"$LOG_FILE" 2>&1
 
 file="$1"
 
 if [ -z "$file" ]; then
-    echo "Usage: $0 <fichier>"
-    exit 1
+  echo "$(date '+%Y-%m-%d %H:%M:%S') - Usage: $0 <fichier>"
+  exit 1
 fi
 
-echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Début traitement du fichier : $file"
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Début traitement du fichier : $file"
 
-# >>> Ici tu mets la vraie logique de traitement métier <<<
-# Pour l'exemple on simule un traitement OK :
-RET=0
+# ICI : ton vrai traitement métier (actuellement rien)
+# ...
 
-if [ $RET -eq 0 ]; then
-    mv "$file" "${file}_traite"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Succès : $file renommé en ${file}_traite"
-    exit 0
-else
-    mv "$file" "${file}_error"
-    echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Erreur : $file renommé en ${file}_error"
-    exit 1
-fi
+# Renommage systématique en _traite
+mv "$file" "${file}_traite"
 
-
----
-
-🔎 Résumé :
-
-Tu exécutes seulement traitement_CALYPSO_integration_csv.ksh → il cherche les fichiers et appelle le script SharedApps pour chacun.
-
-Le script SharedApps traite et renomme le fichier.
-
-Les logs détaillés vont dans /cats/oper/logs/traitement_CALYPSO_integration_csv.log.
+echo "$(date '+%Y-%m-%d %H:%M:%S') - Succès : $file renommé en ${file}_traite"
+exit 0
