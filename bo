@@ -1,47 +1,35 @@
-cat > /etc/systemd/system/docker.service.d/http-proxy.conf <<EOF
-[Service]
-Environment="HTTP_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
-Environment="HTTPS_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
-Environment="NO_PROXY=.corp.lch.com,.yieldbook.com,.gslb.dnsroot.local,pac.zscloud.net,.privatelink.snowflakecomputing.com,.r53,10.0.0.0/8,172.25.0.0/16,localhost,127.0.0.1"
-EOF
+#!/bin/ksh
 
-cat > /etc/systemd/system/docker.service.d/override.conf <<EOF
-[Service]
-Environment="HTTP_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
-Environment="http_proxy=http://proxy-vpc-00b4798e81c8f4ef3:3128"
-Environment="HTTPS_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
-Environment="https_proxy=http://proxy-vpc-00b4798e81c8f4ef3:3128"
-Environment="NO_PROXY=.corp.lch.com,.yieldbook.com,.gslb.dnsroot.local,pac.zscloud.net,.privatelink.snowflakecomputing.com,.r53,10.0.0.0/8,172.25.0.0/16,localhost,127.0.0.1"
-Environment="no_proxy=.corp.lch.com,.yieldbook.com,.gslb.dnsroot.local,pac.zscloud.net,.privatelink.snowflakecomputing.com,.r53,10.0.0.0/8,172.25.0.0/16,localhost,127.0.0.1"
-EOF
+. ${HOME}/env/env.ksh
+. ${CATS_OPER}/common_functions.sh
 
-cat > /root/.docker/config.json <<EOF
-{
-  "credsStore": "ecr-login",
-  "credHelpers": {
-    "902784830519.dkr.ecr.eu-west-2.amazonaws.com": "ecr-login",
-    "926999570045.dkr.ecr.eu-west-2.amazonaws.com": "ecr-login",
-    "873794249397.dkr.ecr.eu-west-2.amazonaws.com": "ecr-login",
-    "261329475796.dkr.ecr.eu-west-2.amazonaws.com": "ecr-login",
-    "106653624073.dkr.ecr.eu-west-2.amazonaws.com": "ecr-login"
-  },
-  "proxies": {
-    "default": {
-      "httpProxy":  "http://proxy-<VRAI_NOM_OU_IP>:3128",
-      "httpsProxy": "http://proxy-<VRAI_NOM_OU_IP>:3128",
-      "noProxy": ".lseg.gslb.dnsroot.local,pac.zscloud.net,.privatelink.snowflakecomputing.com,.r53,10.0.0.0/8,172.25.0.0/16,localhost,127.0.0.1"
-    }
-  }
-}
-EOF
+LOG_SCRIPT=${CATS_LOG}/`basename $0 ".ksh"`.log
+nom_script=`basename $0 "@@"`
+exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
 
+LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
+LOGSTART "${nom_script}"
 
-curl -x http://proxy-vpc-00b4798e81c8f4ef3:3128 https://registry-1.docker.io/v2/
-sudo nano /etc/systemd/system/containerd.service.d/http-proxy.conf
-[Service]
-Environment="HTTP_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
-Environment="HTTPS_PROXY=http://proxy-vpc-00b4798e81c8f4ef3:3128"
+# Etape 1
+# TODO
 
-curl -s https://registry.hub.docker.com/v2/repositories/ibmcom/mq/tags | jq '.results[].name'
+# Etape 2
+# TODO
 
+# Etape 3
+# TODO
 
+# Etape 4
+# TODO
+
+# Etape 5
+# TODO
+
+# Etape 6
+# TODO
+
+# Etape 7
+# TODO
+
+LOGEND "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
+exit 0
