@@ -26,8 +26,7 @@ case "$PARAMETRE1" in
   CDS) FICHIER_PREAVI="${DATA_APF}/preavi_cds.csv" ;;
   DCL) FICHIER_PREAVI="${DATA_APF}/preavi_dcl.csv" ;;
   *)   LOGERR "${nom_script}" "Paramètre invalide: $PARAMETRE1"
-       CHECK_RETURN_CODE_CATS "${nom_script}" 2 "Paramètre invalide"
-       ;;
+       CHECK_RETURN_CODE_CATS "${nom_script}" 2 "Paramètre invalide" ;;
 esac
 
 # Etape 4
@@ -48,7 +47,6 @@ LOGINFO "${nom_script}" "FICHIER=$FICHIER (param=${PARAMETRE_MINUSCULE})"
 # Etape 7
 "${SHELL_REP}/CARS_chargement_preavis.ksh" "$PARAMETRE1"
 rc=$?
-
 if [ $rc -ne 0 ]; then
   LOGERR "${nom_script}" "CARS_chargement_preavis.ksh KO (rc=$rc)"
   CHECK_RETURN_CODE_CATS "${nom_script}" $rc "Chargement préavis échoué"
