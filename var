@@ -10,29 +10,50 @@ exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
 LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
 LOGSTART "${nom_script}"
 
-SCRIPT_CALYPSO="${SHELL_REP}/CALYPSO_integration_csv.ksh"
-LOGINFO "${nom_script}" "DATA_APF=${DATA_APF}"
-LOGINFO "${nom_script}" "SCRIPT_CALYPSO=${SCRIPT_CALYPSO}"
+# Etape 1
+if [ $# -ne 1 ]; then
+  LOGERR "${nom_script}" "Usage: $0 <OTC|CDS|DCL>"
+  CHECK_RETURN_CODE_CATS "${nom_script}" 1 "Paramètre manquant"
+fi
 
-found=0
-for file in "${DATA_APF}"/CAL_TO_CAT_*.[cC][sS][vV]
-do
-  [ -e "$file" ] || continue
-  found=1
-  LOGINFO "${nom_script}" "Détection fichier : $file"
-  fname="$(basename "$file")"
-  "${SCRIPT_CALYPSO}" "$fname"
-  rc=$?
-  if [ $rc -eq 0 ]; then
-    mv "$file" "${file}_traite"
-    LOGINFO "${nom_script}" "Succès traitement (rc=$rc) : renommé en ${file}_traite"
-  else
-    LOGERR "${nom_script}" "Traitement KO (rc=$rc) pour $file → pas de renommage"
-  fi
-done
+# Etape 2
+PARAMETRE1="$1"
+PARAMETRE_MINUSCULE=$(echo "$PARAMETRE1" | tr '[:upper:]' '[:lower:]')
 
-if [ $found -eq 0 ]; then
-  LOGERR "${nom_script}" "Aucun fichier trouvé dans ${DATA_APF} avec le pattern CAL_TO_CAT_*.[cC][sS][vV]"
+# Etape 3
+case "$PARAMETRE1" in
+  OTC) FICHIER_PREAVI="${DATA_APF}/preavi_otc.csv" ;;
+  CDS) FICHIER_PREAVI="${DATA_APF}/preavi_cds.csv" ;;
+  DCL) FICHIER_PREAVI="${DATA_APF}/preavi_dcl.csv" ;;
+  *)   LOGERR "${nom_script}" "Paramètre invalide: $PARAMETRE1"
+       CHECK_RETURN_CODE_CATS "${nom_script}" 2 "Paramètre invalide"
+       ;;
+esac
+
+# Etape 4
+if [ -f "$FICHIER_PREAVI" ]; then
+  base="${FICHIER_PREAVI%.*}"
+  ext="${FICHIER_PREAVI##*.}"
+  archive="${base}_$(date '+%Y%m%d').${ext}"
+  mv "$FICHIER_PREAVI" "$archive"
+  LOGINFO "${nom_script}" "Ancien fichier renommé: $(basename "$archive")"
+fi
+
+# Etape 5
+FICHIER="$FICHIER_PREAVI"
+LOGINFO "${nom_script}" "FICHIER=$FICHIER (param=${PARAMETRE_MINUSCULE})"
+
+# Etape 6 ne pas faire
+
+# Etape 7
+"${SHELL_REP}/CARS_chargement_preavis.ksh" "$PARAMETRE1"
+rc=$?
+
+if [ $rc -ne 0 ]; then
+  LOGERR "${nom_script}" "CARS_chargement_preavis.ksh KO (rc=$rc)"
+  CHECK_RETURN_CODE_CATS "${nom_script}" $rc "Chargement préavis échoué"
+else
+  LOGINFO "${nom_script}" "CARS_chargement_preavis.ksh OK (rc=$rc)"
 fi
 
 LOGEND "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
