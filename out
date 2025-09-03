@@ -35,15 +35,10 @@ exit 0
 
 #!/bin/ksh
 # ============================================================================
-# Traite un fichier puis le renomme en <fichier>_traite. Pas de gestion d’échec.
+# Traite un fichier puis le renomme en <fichier>_traite
 # ============================================================================
-
 LOG_FILE="/cats/oper/logs/CALYPSO_integration_csv.log"
 
-# Création dossier logs
-mkdir -p "$(dirname "$LOG_FILE")"
-
-# Redirige tout vers le log
 exec 1>>"$LOG_FILE" 2>&1
 
 file="$1"
@@ -55,11 +50,8 @@ fi
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Début traitement du fichier : $file"
 
-# ICI : ton vrai traitement métier (actuellement rien)
-# ...
-
-# Renommage systématique en _traite
 mv "$file" "${file}_traite"
 
 echo "$(date '+%Y-%m-%d %H:%M:%S') - Succès : $file renommé en ${file}_traite"
 exit 0
+
