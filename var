@@ -1,122 +1,39 @@
 #!/bin/ksh
-# ======================================================================
-# workaround_fichier.ksh
-# Génère des fichiers vides (HEADER + FOOTER) à partir d'un CSV de conf
-#
-# Fichier de conf (CSV ';' / lignes '#' ignorées) :
-#   Nom_fichier;Nom_Table;DT_TRAIT;DT_DER_COMPENS;CD_SOC;ID_FILE
-#
-# Sortie (format fixe, sans séparateurs) :
-#   HEADER = 1 + APP(5) + TS(14) + DT_TRAIT(8) + DT_TRESO(8) + ID(2)
-#   FOOTER = 9 + APP(5) + TS(14) + ID(2) + NBRE(6="000002")
-#
-# DATE_J  = sysdate en 'YYYYMMDD'
-# DATE_J1 = Oracle: LUCA6.PACK_GESTION_CALENDRIER.CAL_DATE_AVEC_SAMDIM( LANGUE, SYSDATE, CAL_CODE, 3 )
-#
-# Usage:
-#   ./workaround_fichier.ksh <fichier_conf.cf> [out_dir]
-#     - out_dir par défaut = ${DATA_APF}
-# ======================================================================
 
-# --- Socle env & fonctions communes -----------------------------------
 . ${HOME}/env/env.ksh
 . ${CATS_OPER}/common_functions.sh
 
-# --- Logs standards ----------------------------------------------------
 LOG_SCRIPT=${CATS_LOG}/`basename $0 ".ksh"`.log
-nom_script="`basename $0` $@"
+nom_script=`basename $0 "@@"`
 exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
-LOGINFO "${nom_script}" "Debut" | tee -a "$LOG_GENERAL"
+
+LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
 LOGSTART "${nom_script}"
 
-# --- Paramètres --------------------------------------------------------
-CONF_FILE="$1"                 # ex: /cats/oper/cf/MAJ_TAO_Fichier.cf
-OUT_DIR="${2:-${DATA_APF}}"    # défaut: /opt/cats/data/apf
+SCRIPT_CALYPSO="${SHELL_REP}/CALYPSO_integration_csv.ksh"
+LOGINFO "${nom_script}" "DATA_APF=${DATA_APF}"
+LOGINFO "${nom_script}" "SCRIPT_CALYPSO=${SCRIPT_CALYPSO}"
 
-if [ -z "$CONF_FILE" ]; then
-  LOGERR "${nom_script}" "Usage: $0 <fichier_conf.cf> [out_dir]"
-  CHECK_RETURN_CODE "${nom_script}" "1" "Parametres manquants"
-fi
-
-[ -r "$CONF_FILE" ] || { LOGERR "${nom_script}" "Conf introuvable: $CONF_FILE"; CHECK_RETURN_CODE "${nom_script}" "1" "Conf manquante"; }
-[ -d "$OUT_DIR" ]   || { mkdir -p "$OUT_DIR" || { LOGERR "${nom_script}" "Creation OUT_DIR impossible: $OUT_DIR"; CHECK_RETURN_CODE "${nom_script}" "1" "OUT_DIR KO"; }; }
-
-# --- Defaults si non définis dans l'env --------------------------------
-: ${CAL_CODE:=070}
-: ${LANGUE:=fr}
-# ${CNX_CATS} vient de ton env (ex: "sqlplus -s USER/PASS@SRV")
-
-# --- Helpers -----------------------------------------------------------
-rpad()   { printf "%-${2}s" "$1" | cut -c1-"$2"; }   # pad à droite (char)
-lpad0()  { printf "%0${2}d" "${1:-0}"; }            # pad à gauche (num)
-now_ts() { date +"%Y%m%d%H%M%S"; }                  # 14
-sys_dt() { date +"%Y%m%d"; }                        # 8
-
-resolve_date() {  # $1 = DATE_J | DATE_J1 | AAAAMMJJ
-  case "$1" in
-    DATE_J)
-      sys_dt
-      ;;
-    DATE_J1)
-      res=$(sqlplus -s "$CNX_CATS" <<SQL
-set pages 0 feedback off verify off heading off echo off trimspool on
-SELECT to_char(
-  LUCA6.PACK_GESTION_CALENDRIER.CAL_DATE_AVEC_SAMDIM(
-    upper('${LANGUE}'), SYSDATE, '${CAL_CODE}', 3
-  ), 'YYYYMMDD')
-FROM dual;
-exit
-SQL
-)
-      dt=$(echo "$res" | tr -d '[:space:]')
-      if [ -n "$dt" ]; then
-        echo "$dt"
-      else
-        LOGERR "${nom_script}" "Echec DATE_J1 via Oracle (fallback J+1)"
-        if date -d "+1 day" +"%Y%m%d" >/dev/null 2>&1; then
-          date -d "+1 day" +"%Y%m%d"
-        else
-          perl -MPOSIX -e 'print strftime("%Y%m%d",localtime(time+86400))'
-        fi
-      fi
-      ;;
-    *)
-      # Si c'est déjà AAAAMMJJ on renvoie tel quel
-      echo "$1"
-      ;;
-  esac
-}
-
-# --- Traitement --------------------------------------------------------
-LOGINFO "${nom_script}" "Lecture conf: $CONF_FILE"
-LOGINFO "${nom_script}" "Dossier sortie: $OUT_DIR"
-
-# Ignore commentaires et lignes vides
-grep -v '^[[:space:]]*#' "$CONF_FILE" | grep -v '^[[:space:]]*$' |
-while IFS=';' read -r NOM_FICHIER NOM_TABLE DT_TRAIT DT_DER_COMPENS CD_SOC ID_FILE
+found=0
+for file in "${DATA_APF}"/CAL_TO_CAT_*.[cC][sS][vV]
 do
-  [ -n "$NOM_FICHIER" ] || continue
-
-  APP=$(rpad "$NOM_TABLE" 5)   # 5 chars (tronqué/paddé)
-  TS=$(now_ts)                 # 14 chars
-  ID2=$(lpad0 "$ID_FILE" 2)    # 2 chars
-  NBRE=$(lpad0 2 6)            # "000002"
-
-  DT_T1=$(resolve_date "$DT_TRAIT")        # 8 chars
-  DT_T2=$(resolve_date "$DT_DER_COMPENS")  # 8 chars
-
-  # Format fixe, sans séparateurs ; ID en dernier du HEADER
-  HEADER="1${APP}${TS}${DT_T1}${DT_T2}${ID2}"
-  FOOTER="9${APP}${TS}${ID2}${NBRE}"
-
-  OUT_PATH="${OUT_DIR%/}/${NOM_FICHIER}"
-  echo "$HEADER" >  "$OUT_PATH" || { LOGERR "${nom_script}" "Ecriture KO: $OUT_PATH (header)"; CHECK_RETURN_CODE "${nom_script}" "1" "Write header KO"; }
-  echo "$FOOTER" >> "$OUT_PATH" || { LOGERR "${nom_script}" "Ecriture KO: $OUT_PATH (footer)"; CHECK_RETURN_CODE "${nom_script}" "1" "Write footer KO"; }
-
-  LOGINFO "${nom_script}" "Genere: $OUT_PATH"
+  [ -e "$file" ] || continue
+  found=1
+  LOGINFO "${nom_script}" "Détection fichier : $file"
+  fname="$(basename "$file")"
+  "${SCRIPT_CALYPSO}" "$fname"
+  rc=$?
+  if [ $rc -eq 0 ]; then
+    mv "$file" "${file}_traite"
+    LOGINFO "${nom_script}" "Succès traitement (rc=$rc) : renommé en ${file}_traite"
+  else
+    LOGERR "${nom_script}" "Traitement KO (rc=$rc) pour $file → pas de renommage"
+  fi
 done
 
-# --- Fin ----------------------------------------------------------------
-LOGEND  "${nom_script}"
-LOGINFO "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
+if [ $found -eq 0 ]; then
+  LOGERR "${nom_script}" "Aucun fichier trouvé dans ${DATA_APF} avec le pattern CAL_TO_CAT_*.[cC][sS][vV]"
+fi
+
+LOGEND "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
 exit 0
