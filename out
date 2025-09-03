@@ -1,17 +1,81 @@
-vserver security file-directory ntfs create -vserver cats-svm -ntfs-sd CATS_LINUX_SD
-vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd CATS_LINUX_SD -access-type allow -account "CATS\CATS_USERS_RW" -rights full-control
-vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd CATS_LINUX_SD -access-type allow -account "CATS\CATS_USERS_RO" -rights read
-vserver security file-directory ntfs dacl add -vserver cats-svm -ntfs-sd CATS_LINUX_SD -access-type allow -account "BUILTIN\Administrators" -rights full-control KO duplicate netry
+Script orchestrateur : /cats/oper/exe/traitement_CALYPSO_integration_csv.ksh
 
-verif : 
-vserver security file-directory ntfs dacl show -vserver cats-svm -ntfs-sd CATS_LINUX_SD
-c'est bon :
+#!/bin/ksh
+# ============================================================================
+# Script : traitement_CALYPSO_integration_csv.ksh
+# Objet  : Vérifie la présence des fichiers CAL_TO_CAT_*.CSV et appelle
+#          le script d'intégration pour chaque fichier trouvé.
+# ============================================================================
 
-vserver security file-directory apply -vserver cats-svm -path /FSHQ/CATS_LINUX -security-descriptor CATS_LINUX_SD KO
+DATA_DIR="/cats/oper/data/apf"
+SCRIPT_SHARED="/cats/oper/exe/SharedApps/CALYPSO_integration_csv.ksh"
+LOG_FILE="/cats/oper/logs/traitement_CALYPSO_integration_csv.log"
 
-vserver security file-directory policy create -vserver cats-svm -policy-name CATS_LINUX_policy
-vserver security file-directory policy task add -vserver cats-svm -policy-name CATS_LINUX_policy -path /FSHQ/CATS_LINUX -security-type ntfs -ntfs-sd CATS_LINUX_SD -ntfs-mode propagate
-vserver security file-directory apply -vserver cats-svm -policy-name CATS_LINUX_policy
+# Création du répertoire de logs si inexistant
+mkdir -p $(dirname $LOG_FILE)
 
-vserver security file-directory show -vserver cats-svm -path /FSHQ/CATS_LINUX
+echo "=== Début traitement $(date '+%Y-%m-%d %H:%M:%S') ===" >> $LOG_FILE
 
+# Recherche des fichiers CSV
+FILES=$(ls ${DATA_DIR}/CAL_TO_CAT_*.CSV 2>/dev/null)
+
+if [ -z "$FILES" ]; then
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Aucun fichier trouvé dans $DATA_DIR" >> $LOG_FILE
+    exit 0
+fi
+
+# Boucle sur chaque fichier
+for file in $FILES
+do
+    echo "$(date '+%Y-%m-%d %H:%M:%S') - Détection fichier : $file" >> $LOG_FILE
+    $SCRIPT_SHARED "$file" >> $LOG_FILE 2>&1
+done
+
+echo "=== Fin traitement $(date '+%Y-%m-%d %H:%M:%S') ===" >> $LOG_FILE
+exit 0
+
+
+---
+
+2️⃣ Script d’intégration : /cats/oper/exe/SharedApps/CALYPSO_integration_csv.ksh
+
+#!/bin/ksh
+# ============================================================================
+# Script : CALYPSO_integration_csv.ksh
+# Objet  : Traite un fichier CSV CALYPSO passé en paramètre et le renomme
+#          en <fichier>_traite si succès, ou <fichier>_error si échec.
+# ============================================================================
+
+file="$1"
+
+if [ -z "$file" ]; then
+    echo "Usage: $0 <fichier>"
+    exit 1
+fi
+
+echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Début traitement du fichier : $file"
+
+# >>> Ici tu mets la vraie logique de traitement métier <<<
+# Pour l'exemple on simule un traitement OK :
+RET=0
+
+if [ $RET -eq 0 ]; then
+    mv "$file" "${file}_traite"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Succès : $file renommé en ${file}_traite"
+    exit 0
+else
+    mv "$file" "${file}_error"
+    echo "[$(date '+%Y-%m-%d %H:%M:%S')] - Erreur : $file renommé en ${file}_error"
+    exit 1
+fi
+
+
+---
+
+🔎 Résumé :
+
+Tu exécutes seulement traitement_CALYPSO_integration_csv.ksh → il cherche les fichiers et appelle le script SharedApps pour chacun.
+
+Le script SharedApps traite et renomme le fichier.
+
+Les logs détaillés vont dans /cats/oper/logs/traitement_CALYPSO_integration_csv.log.
