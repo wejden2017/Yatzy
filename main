@@ -10,29 +10,27 @@ exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
 LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
 LOGSTART "${nom_script}"
 
-SWIFT_DIR="${DATA_SWIFT}"
-SWIFT_ERR_DIR="${RACINE_CATS}/data/swift_erreur"
+SWIFT_DIR="${DATA_SWIFT_DISPATCHER_OUT}"
+SWIFT_ERR_DIR="${DATA_SWIFT_ERROR}"
 APF_DIR="${DATA_APF}"
 SCRIPT_T2="${SHELL_REP}/T2_integration_messages_swift.ksh"
 SCRIPT_CALYPSO_TYPE="${SHELL_REP}/CALYPSO_generer_msg_type.ksh"
 
 mkdir -p "${SWIFT_ERR_DIR}"
 
-# Etape 1
 found=0
-for src in "${SWIFT_DIR}"/MTFINR*; do
+for src in "${SWIFT_DIR}"/MTFINR*
+do
   [ -e "$src" ] || continue
   found=1
   fname="$(basename "$src")"
   LOGINFO "${nom_script}" "Fichier détecté : $fname"
 
-  # Etape 2
   mv "$src" "${APF_DIR}/$fname"
   rc=$?
   CHECK_RETURN_CODE_CATS "${nom_script}" $rc "mv ${src} -> ${APF_DIR}/$fname"
   [ $rc -ne 0 ] && continue
 
-  # Etape 3
   "${SCRIPT_T2}" "$fname"
   rc=$?
   if [ $rc -ne 0 ]; then
@@ -42,7 +40,6 @@ for src in "${SWIFT_DIR}"/MTFINR*; do
     continue
   fi
 
-  # Etape 4
   "${SCRIPT_CALYPSO_TYPE}" "DEPO"
   rc=$?
   if [ $rc -ne 0 ]; then
@@ -52,7 +49,6 @@ for src in "${SWIFT_DIR}"/MTFINR*; do
     continue
   fi
 
-  # Etape 5
   "${SCRIPT_CALYPSO_TYPE}" "MRGN"
   rc=$?
   if [ $rc -ne 0 ]; then
@@ -61,7 +57,6 @@ for src in "${SWIFT_DIR}"/MTFINR*; do
     CHECK_RETURN_CODE_CATS "${nom_script}" $rc "CALYPSO_generer_msg_type.ksh MRGN KO"
     continue
   fi
-
 done
 
 [ $found -eq 0 ] && LOGERR "${nom_script}" "Aucun fichier MTFINR* trouvé dans ${SWIFT_DIR}"
