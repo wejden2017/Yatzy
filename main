@@ -1,71 +1,70 @@
----
+#!/bin/ksh
 
-- name: Ensure Docker is installed
-  package:
-    name: docker
-    state: present
+. ${HOME}/env/env.ksh
+. ${CATS_OPER}/common_functions.sh
 
-- name: Enable and start Docker service
-  systemd:
-    name: docker
-    enabled: true
-    state: started
+LOG_SCRIPT=${CATS_LOG}/`basename $0 ".ksh"`.log
+nom_script=`basename $0 "@@"`
+exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
 
-- name: Add user to docker group
-  user:
-    name: ec2-user
-    groups: docker
-    append: yes
+LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
+LOGSTART "${nom_script}"
 
-- name: Create docker.service.d directory
-  file:
-    path: /etc/systemd/system/docker.service.d
-    state: directory
-    mode: 0755
+SWIFT_DIR="${DATA_SWIFT}"
+SWIFT_ERR_DIR="${RACINE_CATS}/data/swift_erreur"
+APF_DIR="${DATA_APF}"
+SCRIPT_T2="${SHELL_REP}/T2_integration_messages_swift.ksh"
+SCRIPT_CALYPSO_TYPE="${SHELL_REP}/CALYPSO_generer_msg_type.ksh"
 
-- name: Add Docker proxy config
-  template:
-    src: http-proxy.conf.j2
-    dest: /etc/systemd/system/docker.service.d/http-proxy.conf
-    mode: 0644
+mkdir -p "${SWIFT_ERR_DIR}"
 
-- name: Add Docker override config
-  template:
-    src: override.conf.j2
-    dest: /etc/systemd/system/docker.service.d/override.conf
-    mode: 0644
+# Etape 1
+found=0
+for src in "${SWIFT_DIR}"/MTFINR*; do
+  [ -e "$src" ] || continue
+  found=1
+  fname="$(basename "$src")"
+  LOGINFO "${nom_script}" "Fichier détecté : $fname"
 
-- name: Reload systemd
-  command: systemctl daemon-reexec
+  # Etape 2
+  mv "$src" "${APF_DIR}/$fname"
+  rc=$?
+  CHECK_RETURN_CODE_CATS "${nom_script}" $rc "mv ${src} -> ${APF_DIR}/$fname"
+  [ $rc -ne 0 ] && continue
 
-- name: Reload systemd services
-  command: systemctl daemon-reload
+  # Etape 3
+  "${SCRIPT_T2}" "$fname"
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    LOGERR "${nom_script}" "Etape 3 KO (rc=$rc) pour $fname"
+    cp "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/"
+    CHECK_RETURN_CODE_CATS "${nom_script}" $rc "T2_integration_messages_swift.ksh KO"
+    continue
+  fi
 
-- name: Restart Docker
-  systemd:
-    name: docker
-    state: restarted
+  # Etape 4
+  "${SCRIPT_CALYPSO_TYPE}" "DEPO"
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    LOGERR "${nom_script}" "Etape 4 KO (rc=$rc) pour $fname"
+    cp "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/"
+    CHECK_RETURN_CODE_CATS "${nom_script}" $rc "CALYPSO_generer_msg_type.ksh DEPO KO"
+    continue
+  fi
 
-- name: Create local volume directory
-  file:
-    path: /home/ec2-user/mqdata
-    state: directory
-    owner: 1001
-    group: 1001
-    mode: 0755
+  # Etape 5
+  "${SCRIPT_CALYPSO_TYPE}" "MRGN"
+  rc=$?
+  if [ $rc -ne 0 ]; then
+    LOGERR "${nom_script}" "Etape 5 KO (rc=$rc) pour $fname"
+    cp "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/"
+    CHECK_RETURN_CODE_CATS "${nom_script}" $rc "CALYPSO_generer_msg_type.ksh MRGN KO"
+    continue
+  fi
 
-- name: Run IBM MQ container
-  docker_container:
-    name: ibm-mq
-    image: ibmcom/mq:9.2.4.0-r1-amd64
-    state: started
-    restart_policy: always
-    env:
-      LICENSE: accept
-      MQ_QMGR_NAME: QM1
-      MQ_ADMIN_PASSWORD: admin
-    published_ports:
-      - "1414:1414"
-      - "9443:9443"
-    volumes:
-      - "/home/ec2-user/mqdata:/mnt/mqm"
+done
+
+[ $found -eq 0 ] && LOGERR "${nom_script}" "Aucun fichier MTFINR* trouvé dans ${SWIFT_DIR}"
+
+LOGEND "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
+exit 0
