@@ -13,10 +13,8 @@ LOGSTART "${nom_script}"
 SWIFT_DIR="${DATA_SWIFT_DISPATCHER_OUT}"
 SWIFT_ERR_DIR="${DATA_SWIFT_ERROR}"
 APF_DIR="${DATA_APF}"
-SCRIPT_T2="${SHELL_REP}/T2_integration_messages_swift.ksh"
+SCRIPT_T2="${SHELL_REP}/T2_integration_message_swift.ksh"
 SCRIPT_CALYPSO_TYPE="${SHELL_REP}/CALYPSO_generer_msg_type.ksh"
-
-mkdir -p "${SWIFT_ERR_DIR}"
 
 found=0
 for src in "${SWIFT_DIR}"/MTFINR*
@@ -26,35 +24,26 @@ do
   fname="$(basename "$src")"
   LOGINFO "${nom_script}" "Fichier détecté : $fname"
 
-  mv "$src" "${APF_DIR}/$fname"
-  rc=$?
-  CHECK_RETURN_CODE_CATS "${nom_script}" $rc "mv ${src} -> ${APF_DIR}/$fname"
-  [ $rc -ne 0 ] && continue
-
-  "${SCRIPT_T2}" "$fname"
-  rc=$?
-  if [ $rc -ne 0 ]; then
-    LOGERR "${nom_script}" "Etape 3 KO (rc=$rc) pour $fname"
-    cp "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/"
-    CHECK_RETURN_CODE_CATS "${nom_script}" $rc "T2_integration_messages_swift.ksh KO"
+  if ! mv "$src" "${APF_DIR}/$fname"; then
+    LOGERR "${nom_script}" "mv KO: ${src} -> ${APF_DIR}/$fname"
     continue
   fi
 
-  "${SCRIPT_CALYPSO_TYPE}" "DEPO"
-  rc=$?
-  if [ $rc -ne 0 ]; then
-    LOGERR "${nom_script}" "Etape 4 KO (rc=$rc) pour $fname"
-    cp "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/"
-    CHECK_RETURN_CODE_CATS "${nom_script}" $rc "CALYPSO_generer_msg_type.ksh DEPO KO"
+  if ! "${SCRIPT_T2}" "$fname"; then
+    LOGERR "${nom_script}" "T2_integration_messages_swift orchestrateur KO pour $fname"
+    cp -p "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
     continue
   fi
 
-  "${SCRIPT_CALYPSO_TYPE}" "MRGN"
-  rc=$?
-  if [ $rc -ne 0 ]; then
-    LOGERR "${nom_script}" "Etape 5 KO (rc=$rc) pour $fname"
-    cp "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/"
-    CHECK_RETURN_CODE_CATS "${nom_script}" $rc "CALYPSO_generer_msg_type.ksh MRGN KO"
+  if ! "${SCRIPT_CALYPSO_TYPE}" "DEPO"; then
+    LOGERR "${nom_script}" "CALYPSO_generer_msg_type KO (DEPO) pour $fname"
+    cp -p "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
+    continue
+  fi
+
+  if ! "${SCRIPT_CALYPSO_TYPE}" "MRGN"; then
+    LOGERR "${nom_script}" "CALYPSO_generer_msg_type KO (MRGN) pour $fname"
+    cp -p "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
     continue
   fi
 done
