@@ -1,22 +1,4 @@
 #!/bin/ksh
-# ================================================================
-# workaround_fichier.ksh
-# Génère des fichiers vides (HEADER + FOOTER) à partir d’un CSV de conf
-#
-# Fichier de conf (CSV ‘;’ / lignes ‘#’ ignorées) :
-# Nom_fichier;Nom_Table;DT_TRAIT;DT_DER_COMPENS;CD_SOC;ID_FILE
-#
-# Sortie (format fixe, sans séparateurs) :
-# HEADER = 1 + APP(5) + TS(14) + DT_TRAIT(8) + DT_TRESO(8) + ID(2)
-# FOOTER = 9 + APP(5) + TS(14) + ID(2) + NBRE(6=‘000002’)
-#
-# DATE_J  = sysdate en ‘YYYYMMDD’
-# DATE_J1 = Oracle: LUCA6.PACK_GESTION_CALENDRIER.CAL_DATE_AVEC_SAMDIM( LANGUE, SYSDATE, CAL_CODE, 3 )
-#
-# usage:
-# workaround_fichier.ksh <fichier_conf.cf> [out_dir]
-# out_dir par défaut = ${DATA_APF}
-# ================================================================
 
 . ${HOME}/env/env.ksh
 . ${CATS_OPER}/common_functions.sh
