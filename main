@@ -10,45 +10,30 @@ exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
 LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
 LOGSTART "${nom_script}"
 
-SWIFT_DIR="${DATA_SWIFT_DISPATCHER_OUT}"
-SWIFT_ERR_DIR="${DATA_SWIFT_ERROR}"
-APF_DIR="${DATA_APF}"
-SCRIPT_T2="${SHELL_REP}/T2_integration_message_swift.ksh"
-SCRIPT_CALYPSO_TYPE="${SHELL_REP}/CALYPSO_generer_msg_type.ksh"
+SCRIPT_CALYPSO="${SHELL_REP}/CALYPSO_integration_csv.ksh"
+LOGINFO "${nom_script}" "DATA_APF=${DATA_APF}"
+LOGINFO "${nom_script}" "SCRIPT_CALYPSO=${SCRIPT_CALYPSO}"
 
 found=0
-for src in "${SWIFT_DIR}"/MTFINR*
+for file in "${DATA_APF}"/CAL_TO_CAT_*.[cC][sS][vV]
 do
-  [ -e "$src" ] || continue
+  [ -e "$file" ] || continue
   found=1
-  fname="$(basename "$src")"
-  LOGINFO "${nom_script}" "Fichier détecté : $fname"
+  LOGINFO "${nom_script}" "Détection fichier : $file"
+  fname="$(basename "$file")"
 
-  if ! mv "$src" "${APF_DIR}/$fname"; then
-    LOGERR "${nom_script}" "mv KO: ${src} -> ${APF_DIR}/$fname"
-    continue
-  fi
+  "${SCRIPT_CALYPSO}" "$fname"
+  rc=$?
 
-  if ! "${SCRIPT_T2}" "$fname"; then
-    LOGERR "${nom_script}" "T2_integration_messages_swift orchestrateur KO pour $fname"
-    cp -p "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
-    continue
-  fi
-
-  if ! "${SCRIPT_CALYPSO_TYPE}" "DEPO"; then
-    LOGERR "${nom_script}" "CALYPSO_generer_msg_type KO (DEPO) pour $fname"
-    cp -p "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
-    continue
-  fi
-
-  if ! "${SCRIPT_CALYPSO_TYPE}" "MRGN"; then
-    LOGERR "${nom_script}" "CALYPSO_generer_msg_type KO (MRGN) pour $fname"
-    cp -p "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
-    continue
+  if [ $rc -eq 0 ]; then
+    mv "$file" "${file}_traite"
+    LOGINFO "${nom_script}" "Succès (rc=$rc) → renommé en ${file}_traite"
+  else
+    LOGERR  "${nom_script}" "KO (rc=$rc) pour $file → pas de renommage"
   fi
 done
 
-[ $found -eq 0 ] && LOGERR "${nom_script}" "Aucun fichier MTFINR* trouvé dans ${SWIFT_DIR}"
+[ $found -eq 0 ] && LOGERR "${nom_script}" "Aucun fichier trouvé dans ${DATA_APF} avec CAL_TO_CAT_*.[cC][sS][vV]"
 
 LOGEND "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
 exit 0
