@@ -1,65 +1,79 @@
-#!/bin/sh
+#!/bin/ksh
 
-# charge l'env CATS (CNX_CATS, LANGUE, CAL_CODE, LOG_*)
-. "${HOME}/env/env.ksh"
-. "${CATS_OPER}/common_functions.sh"
+. ${HOME}/env/env.ksh
+. ${CATS_OPER}/common_functions.sh
 
-# logs standard
-base_name=`basename "$0" ".sh"`
-LOG_SCRIPT="${CATS_LOG}/${base_name}.log"
-nom_script=`basename "$0"`
+LOG_SCRIPT=${CATS_LOG}/`basename $0 ".ksh"`.log
+nom_script=`basename $0 "@@"`
 exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
 
 LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
 LOGSTART "${nom_script}"
 
-# -------- paramètres ----------
-DATE_IN="$1"
-if [ -z "$DATE_IN" ]; then
-  LOGERR "${nom_script}" "Usage: $0 <YYYYMMDD>"
-  CHECK_RETURN_CODE_CATS "${nom_script}" 1 "Paramètre manquant"
-fi
+SWIFT_DIR="${DATA_SWIFT_DISPATCHER_OUT}"
+SWIFT_ERR_DIR="${DATA_SWIFT_ERROR}"
+APF_DIR="${DATA_APF}"
 
-case "$DATE_IN" in
-  [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]) : ;;
-  *) LOGERR "${nom_script}" "Format invalide: $DATE_IN (attendu YYYYMMDD)"
-     CHECK_RETURN_CODE_CATS "${nom_script}" 2 "Format date KO" ;;
-esac
+SCRIPT_MT900_910="${SHELL_REP}/APF_integration_MT900_910.ksh"
+SCRIPT_CALYPSO_TYPE="${SHELL_REP}/CALYPSO_generer_msg_type.ksh"
+SCRIPT_PRE_DEV="${SHELL_REP}/APF_pre_reglement_devises.ksh"
+SCRIPT_DEV="${SHELL_REP}/APF_reglement_devises.ksh"
+SCRIPT_ACK="${SHELL_REP}/APF_gen_ack_payment.ksh"
 
-# valeurs par défaut si non définies
-LANGUE=${LANGUE:-fr}
-CAL_CODE=${CAL_CODE:-070}
-CNX_CATS=${CNX_CATS:-"sqlplus -s USER/PASS@SRV"}
+# Etape 1
+found=0
+for src in "${SWIFT_DIR}"/MT9XXBONYR?_APF*
+do
+  [ -e "$src" ] || continue
+  found=1
+  fname="$(basename "$src")"
+  LOGINFO "${nom_script}" "Fichier détecté : $fname"
 
-# -------- appel Oracle ----------
-res=$(${CNX_CATS} <<SQL
-set pages 0 feedback off verify off heading off echo off trimspool on
-var v_out varchar2(8);
-begin
-  :v_out :=
-    to_char(
-      LUCA6.PACK_GESTION_CALENDRIER.CAL_DATE_AVEC_SAMDIM(
-        '${LANGUE}', to_date('${DATE_IN}','YYYYMMDD'), '${CAL_CODE}', 1
-      ),
-      'YYYYMMDD'
-    );
-end;
-/
-print :v_out
-exit
-SQL
-)
+  # Etape 2
+  if ! mv "$src" "${APF_DIR}/$fname"; then
+    LOGERR "${nom_script}" "mv KO: ${src} -> ${APF_DIR}/$fname"
+    continue
+  fi
 
-OUT=`echo "$res" | tr -d '[:space:]'`
+  # Etape 3
+  if ! "${SCRIPT_MT900_910}" "$fname"; then
+    LOGERR "${nom_script}" "APF_integration_MT900_910.ksh KO pour $fname"
+    mv -f "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
+    continue
+  fi
 
-if [ -z "$OUT" ]; then
-  LOGERR "${nom_script}" "Procédure n'a rien renvoyé pour $DATE_IN"
-  CHECK_RETURN_CODE_CATS "${nom_script}" 3 "Procédure Oracle KO"
-fi
+  # Etape 4
+  if ! "${SCRIPT_CALYPSO_TYPE}" "MRGN"; then
+    LOGERR "${nom_script}" "CALYPSO_generer_msg_type.ksh MRGN KO pour $fname"
+    mv -f "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
+    continue
+  fi
 
-# affiche le résultat (stdout) + log
-echo "$OUT"
-LOGINFO "${nom_script}" "CAL_DATE_AVEC_SAMDIM($DATE_IN) -> $OUT"
+  # Etape 5
+  if ! "${SCRIPT_PRE_DEV}"; then
+    LOGERR "${nom_script}" "APF_pre_reglement_devises.ksh KO pour $fname"
+    mv -f "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
+    continue
+  fi
+
+  # Etape 6
+  if ! "${SCRIPT_DEV}"; then
+    LOGERR "${nom_script}" "APF_reglement_devises.ksh KO pour $fname"
+    mv -f "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
+    continue
+  fi
+
+  # Etape 7
+  if ! "${SCRIPT_ACK}" "CDS" "1"; then
+    LOGERR "${nom_script}" "APF_gen_ack_payment.ksh CDS 1 KO pour $fname"
+    mv -f "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
+    continue
+  fi
+
+  LOGINFO "${nom_script}" "Traitement OK pour $fname"
+done
+
+[ $found -eq 0 ] && LOGERR "${nom_script}" "Aucun fichier MT9XXBONYR?_APF* trouvé dans ${SWIFT_DIR}"
 
 LOGEND "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
 exit 0
