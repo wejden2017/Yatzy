@@ -1,58 +1,29 @@
-#!/bin/ksh
+/* 1) Créer l’utilisateur */
+CREATE USER ASARIH IDENTIFIED BY "MotDePasseFort#2025"
+  DEFAULT TABLESPACE USERS
+  TEMPORARY TABLESPACE TEMP;
 
-. ${HOME}/env/env.ksh
-. ${CATS_OPER}/common_functions.sh
+/* 2) Donner le rôle DEV_SUPPORT_ROLE */
+GRANT DEV_SUPPORT_ROLE TO ASARIH;
 
-LOG_SCRIPT=${CATS_LOG}/`basename $0 ".ksh"`.log
-nom_script=`basename $0 "@@"`
-exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
+/* 3) Donner CREATE SESSION directement (même si déjà dans le rôle, c’est propre) */
+GRANT CREATE SESSION TO ASARIH;
 
-LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
-LOGSTART "${nom_script}"
+/* 4) Activer tous ses rôles par défaut */
+ALTER USER ASARIH DEFAULT ROLE ALL;
 
-# Etape 1
-if [ $# -ne 1 ]; then
-  LOGERR "${nom_script}" "Usage: $0 <OTC|CDS|DCL>"
-  CHECK_RETURN_CODE_CATS "${nom_script}" 1 "Paramètre manquant"
-fi
+/* 5) Attribuer des quotas sur les TBS applicatifs uniquement */
+ALTER USER ASARIH QUOTA UNLIMITED ON BATCH;
+ALTER USER ASARIH QUOTA UNLIMITED ON CATS_DATA;
+ALTER USER ASARIH QUOTA UNLIMITED ON CATS_IDX;
+ALTER USER ASARIH QUOTA UNLIMITED ON IAM_DATA;
+ALTER USER ASARIH QUOTA UNLIMITED ON IAM_IDX;
+ALTER USER ASARIH QUOTA UNLIMITED ON TBS_DATA_ARCH;
+ALTER USER ASARIH QUOTA UNLIMITED ON TBS_DATA_JOUR;
+ALTER USER ASARIH QUOTA UNLIMITED ON TBS_DATA_REF;
+ALTER USER ASARIH QUOTA UNLIMITED ON TBS_IDX_ARCH;
+ALTER USER ASARIH QUOTA UNLIMITED ON TBS_IDX_JOUR;
+ALTER USER ASARIH QUOTA UNLIMITED ON TBS_IDX_REF;
+ALTER USER ASARIH QUOTA UNLIMITED ON USERS;
 
-# Etape 2
-PARAMETRE1="$1"
-PARAMETRE_MINUSCULE=$(echo "$PARAMETRE1" | tr '[:upper:]' '[:lower:]')
-
-# Etape 3
-case "$PARAMETRE1" in
-  OTC) FICHIER_PREAVI="${DATA_APF}/preavi_otc.csv" ;;
-  CDS) FICHIER_PREAVI="${DATA_APF}/preavi_cds.csv" ;;
-  DCL) FICHIER_PREAVI="${DATA_APF}/preavi_dcl.csv" ;;
-  *)   LOGERR "${nom_script}" "Paramètre invalide: $PARAMETRE1"
-       CHECK_RETURN_CODE_CATS "${nom_script}" 2 "Paramètre invalide" ;;
-esac
-
-# Etape 4
-if [ -f "$FICHIER_PREAVI" ]; then
-  base="${FICHIER_PREAVI%.*}"
-  ext="${FICHIER_PREAVI##*.}"
-  archive="${base}_$(date '+%Y%m%d').${ext}"
-  mv "$FICHIER_PREAVI" "$archive"
-  LOGINFO "${nom_script}" "Ancien fichier renommé: $(basename "$archive")"
-fi
-
-# Etape 5
-FICHIER="$FICHIER_PREAVI"
-LOGINFO "${nom_script}" "FICHIER=$FICHIER (param=${PARAMETRE_MINUSCULE})"
-
-# Etape 6 ne pas faire
-
-# Etape 7
-"${SHELL_REP}/CARS_chargement_preavis.ksh" "$PARAMETRE1"
-rc=$?
-if [ $rc -ne 0 ]; then
-  LOGERR "${nom_script}" "CARS_chargement_preavis.ksh KO (rc=$rc)"
-  CHECK_RETURN_CODE_CATS "${nom_script}" $rc "Chargement préavis échoué"
-else
-  LOGINFO "${nom_script}" "CARS_chargement_preavis.ksh OK (rc=$rc)"
-fi
-
-LOGEND "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
-exit 0
+/* ❌ Pas de quotas sur SYSTEM, SYSAUX, UNDO, TEMP, DBA_TOOLS */
