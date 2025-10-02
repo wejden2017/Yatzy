@@ -1,26 +1,24 @@
-before_script:
-  # Configurer le proxy pour Maven
-  - export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"
-  - export https_proxy="http://${PROXY_HOST}:${PROXY_PORT}"
-  - export HTTP_PROXY="http://${PROXY_HOST}:${PROXY_PORT}"
-  - export HTTPS_PROXY="http://${PROXY_HOST}:${PROXY_PORT}"
-  - export no_proxy="localhost,127.0.0.1,169.254.169.254"
-  - export NO_PROXY="localhost,127.0.0.1,169.254.169.254"
-  
-  # Test de connectivité via proxy
-  - echo "=== Testing Nexus via proxy ==="
-  - curl -x http://${PROXY_HOST}:${PROXY_PORT} -I https://nexus.lseg.stockex.local/repository/maven-central/ || echo "Curl failed"
+# 1. Test de connectivité réseau brute
+telnet 10.210.140.2 443
+# ou si telnet n'est pas installé :
+nc -zv 10.210.140.2 443
+timeout 5 bash -c "</dev/tcp/10.210.140.2/443" && echo "Port 443 accessible" || echo "Port 443 bloqué"
 
-#debug
-# - echo "ENV http_proxy=$http_proxy"
-# - echo "ENV https_proxy=$https_proxy"
-# - mvn -s settings.xml -X help:effective-settings > effective-settings.txt || true
-# - grep -Ao "<proxies>" effective-settings.txt || true
-# - grep -n "settings.xml" effective-settings.txt | head -5 || true
+# 2. Test DNS
+nslookup nexus.lseg.stockex.local
+dig nexus.lseg.stockex.local
 
-variables:
-  PROXY_HOST: "proxy_vpc-06cf75bab03aab3d5"
-  PROXY_PORT: "3128"
+# 3. Test de route
+traceroute -n 10.210.140.2
+# ou
+tracepath 10.210.140.2
 
-MAVEN_OPTS: "-Dhttp.proxyHost=proxy_vpc-06cf75bab03aab3d5 -Dhttp.proxyPort=3128 -Dhttps.proxyHost=proxy_vpc-06cf75bab03aab3d5 -Dhttps.proxyPort=3128 -Dhttp.nonProxyHosts=localhost|127.0.0.1"
--Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true
+# 4. Vérifier les règles iptables locales
+iptables -L -n -v
+iptables -t nat -L -n -v
+
+# 5. Test curl SANS proxy
+curl -v --connect-timeout 5 https://10.210.140.2/repository/maven-central/
+
+# 6. Comparer avec environnement qui fonctionne
+# Quelle est la différence réseau entre cet environnement et celui qui fonctionne ?
