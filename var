@@ -1,42 +1,86 @@
-# 3) Build Maven (sans vault-service ici)
-build_project:
-  stage: build
-  needs: [ "generate_config_file" ]
-  extends: [ ".default-runner", ".maven-build" ]
-  # on neutralise le before_script du .default-runner
-  before_script:
-    # Debug: afficher les proxys hérités
-    - echo "=== Proxies AVANT reset ==="; env | grep -i proxy || true
-    - git config --global --get http.proxy  || true
-    - git config --global --get https.proxy || true
+<?xml version="1.0" encoding="UTF-8"?>
+<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0" 
+          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
+          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
+  
+  <pluginGroups>
+    <pluginGroup>org.sonarsource.scanner.maven</pluginGroup>
+  </pluginGroups>
+  
+  <proxies>
+    <proxy>
+      <active>true</active>
+      <protocol>http</protocol>
+      <host>isapr</host>
+      <port>80</port>
+      <!-- CORRECTION CRITIQUE: Ajouter Nexus dans nonProxyHosts -->
+      <nonProxyHosts>172.28.43.91|lsesonar.prod.sddc.stockex.local|nexus.lseg.stockex.local|*.lseg.stockex.local|10.*|localhost|127.0.0.1</nonProxyHosts>
+    </proxy>
+  </proxies>
+  
+  <localRepository>/lch/jenkins/.m2/localRepository</localRepository>
+  
+  <mirrors>
+    <mirror>
+      <id>central</id>
+      <name>central</name>
+      <url>https://nexus.lseg.stockex.local/repository/maven-central/</url>
+      <mirrorOf>*,!cats-release,!cats-snapshot,!libs-release,!libs-snapshot</mirrorOf>
+    </mirror>
+  </mirrors>
 
-    # Purge des proxys hérités (le mauvais proxy_vpc-XXXX)
-    - git config --global --unset http.proxy  || true
-    - git config --global --unset https.proxy || true
-    - unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy NO_PROXY
-
-    # Définition du bon proxy pour CE VPC
-    - export PROXY_HOST="proxy_vpc-06cf75bab03aab3d5"   # ou l’IP privée du proxy si le DNS ne résout pas
-    - export PROXY_PORT="3128"
-    - export HTTP_PROXY="http://${PROXY_HOST}:${PROXY_PORT}"
-    - export HTTPS_PROXY="$HTTP_PROXY"
-    - export NO_PROXY="localhost,127.0.0.1,169.254.169.254,metadata"
-
-    # Forcer Maven & Git à utiliser ce proxy
-    - git config --global http.proxy  "$HTTP_PROXY"
-    - git config --global https.proxy "$HTTPS_PROXY"
-    - export MAVEN_OPTS="-Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT} -Dhttp.nonProxyHosts=localhost|127.0.0.1|169.254.169.254 ${MAVEN_OPTS}"
-
-    # Vérification rapide
-    - echo "=== Proxies APRÈS reset ==="; env | grep -i proxy || true
-    - curl -vkI -x "$HTTP_PROXY" https://nexus.lseg.stockex.local/repository/maven-central/ || true
-  variables:
-    VS_FUNCTION: ""     # neutralise vault-service sur ce job
-  script:
-    - 'test -s src/main/resources/configuration.properties || { echo "configuration.properties missing or empty"; exit 1; }'
-    - echo "Building project for $DEPLOY_ENVIRONMENT…"
-    - mvn $MAVEN_CLI_OPTS clean install
-  artifacts:
-    when: always
-    paths: [ "target/" ]
-  environment: { name: "$DEPLOY_ENVIRONMENT" }
+  <profiles>
+    <profile>
+      <id>central</id>
+      <repositories>
+        <!-- CATS Repositories -->
+        <repository>
+          <id>cats-release</id>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+          <name>CATS-Release</name>
+          <url>https://nexus.lseg.stockex.local/repository/CATS-Release/</url>
+        </repository>
+        
+        <repository>
+          <id>cats-snapshot</id>
+          <snapshots>
+            <enabled>true</enabled>
+            <updatePolicy>never</updatePolicy>
+          </snapshots>
+          <name>CATS-Snapshot</name>
+          <url>https://nexus.lseg.stockex.local/repository/CATS-Snapshot/</url>
+        </repository>
+        
+        <!-- Libs Repositories -->
+        <repository>
+          <id>libs-release</id>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+          <name>Libs-Release</name>
+          <url>https://nexus.lseg.stockex.local/repository/libs-releases/</url>
+        </repository>
+        
+        <repository>
+          <id>libs-snapshot</id>
+          <snapshots>
+            <enabled>true</enabled>
+            <updatePolicy>never</updatePolicy>
+          </snapshots>
+          <name>Libs-Snapshot</name>
+          <url>https://nexus.lseg.stockex.local/repository/libs-releases/</url>
+        </repository>
+      </repositories>
+      
+      <properties>
+        <sonar.host.url>http://lsesonar.prod.sddc.stockex.local:9000/sonar/</sonar.host.url>
+      </properties>
+    </profile>
+  </profiles>
+  
+  <activeProfiles>
+    <activeProfile>central</activeProfile>
+  </activeProfiles>
+</settings>
