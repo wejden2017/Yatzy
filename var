@@ -1,64 +1,42 @@
-SELECT
-  SYS_CONTEXT('USERENV','SESSION_USER')   AS session_user,
-  SYS_CONTEXT('USERENV','CURRENT_USER')   AS current_user,
-  SYS_CONTEXT('USERENV','PROXY_USER')     AS proxy_user;
+# 3) Build Maven (sans vault-service ici)
+build_project:
+  stage: build
+  needs: [ "generate_config_file" ]
+  extends: [ ".default-runner", ".maven-build" ]
+  # on neutralise le before_script du .default-runner
+  before_script:
+    # Debug: afficher les proxys hérités
+    - echo "=== Proxies AVANT reset ==="; env | grep -i proxy || true
+    - git config --global --get http.proxy  || true
+    - git config --global --get https.proxy || true
 
-SELECT username, account_status, default_tablespace, temporary_tablespace
-FROM dba_users
-ORDER BY username;
+    # Purge des proxys hérités (le mauvais proxy_vpc-XXXX)
+    - git config --global --unset http.proxy  || true
+    - git config --global --unset https.proxy || true
+    - unset http_proxy https_proxy HTTP_PROXY HTTPS_PROXY no_proxy NO_PROXY
 
+    # Définition du bon proxy pour CE VPC
+    - export PROXY_HOST="proxy_vpc-06cf75bab03aab3d5"   # ou l’IP privée du proxy si le DNS ne résout pas
+    - export PROXY_PORT="3128"
+    - export HTTP_PROXY="http://${PROXY_HOST}:${PROXY_PORT}"
+    - export HTTPS_PROXY="$HTTP_PROXY"
+    - export NO_PROXY="localhost,127.0.0.1,169.254.169.254,metadata"
 
--- a) permettre à LUCA1..LUCA6 de se connecter (utile pour le proxy)
-GRANT CREATE SESSION TO LUCA1;
-GRANT CREATE SESSION TO LUCA2;
-GRANT CREATE SESSION TO LUCA3;
-GRANT CREATE SESSION TO LUCA4;
-GRANT CREATE SESSION TO LUCA5;
-GRANT CREATE SESSION TO LUCA6;
+    # Forcer Maven & Git à utiliser ce proxy
+    - git config --global http.proxy  "$HTTP_PROXY"
+    - git config --global https.proxy "$HTTPS_PROXY"
+    - export MAVEN_OPTS="-Dhttp.proxyHost=${PROXY_HOST} -Dhttp.proxyPort=${PROXY_PORT} -Dhttps.proxyHost=${PROXY_HOST} -Dhttps.proxyPort=${PROXY_PORT} -Dhttp.nonProxyHosts=localhost|127.0.0.1|169.254.169.254 ${MAVEN_OPTS}"
 
--- b) droits de création dans LEUR schéma
-GRANT CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE PROCEDURE TO LUCA1;
-GRANT CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE PROCEDURE TO LUCA2;
-GRANT CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE PROCEDURE TO LUCA3;
-GRANT CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE PROCEDURE TO LUCA4;
-GRANT CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE PROCEDURE TO LUCA5;
-GRANT CREATE TABLE, CREATE VIEW, CREATE SEQUENCE, CREATE PROCEDURE TO LUCA6;
-
--- c) quotas sur les TBS applicatifs (pas SYSTEM/SYSAUX/UNDO/TEMP/DBA_TOOLS)
-ALTER USER LUCA6 QUOTA UNLIMITED ON BATCH;
-ALTER USER LUCA6 QUOTA UNLIMITED ON CATS_DATA;
-ALTER USER LUCA6 QUOTA UNLIMITED ON CATS_IDX;
-ALTER USER LUCA6 QUOTA UNLIMITED ON IAM_DATA;
-ALTER USER LUCA6 QUOTA UNLIMITED ON IAM_IDX;
-ALTER USER LUCA6 QUOTA UNLIMITED ON TBS_DATA_ARCH;
-ALTER USER LUCA6 QUOTA UNLIMITED ON TBS_DATA_JOUR;
-ALTER USER LUCA6 QUOTA UNLIMITED ON TBS_DATA_REF;
-ALTER USER LUCA6 QUOTA UNLIMITED ON TBS_IDX_ARCH;
-ALTER USER LUCA6 QUOTA UNLIMITED ON TBS_IDX_JOUR;
-ALTER USER LUCA6 QUOTA UNLIMITED ON TBS_IDX_REF;
-ALTER USER LUCA6 QUOTA UNLIMITED ON USERS;
-
-
-
-test :
-
-
-
--- doit créer sans erreur (sinon quota manquant → ORA-01536)
-CREATE TABLE T_OK (id NUMBER) TABLESPACE CATS_DATA;
-
-CREATE OR REPLACE VIEW V_OK AS SELECT 1 AS x FROM dual;
-
--- (optionnel) un petit package
-CREATE OR REPLACE PACKAGE P_OK AS
-  PROCEDURE hello;
-END P_OK;
-/
-CREATE OR REPLACE PACKAGE BODY P_OK AS
-  PROCEDURE hello IS BEGIN NULL; END;
-END P_OK;
-/
-
-SELECT COUNT(*) FROM user_tables;       -- > 0
-SELECT COUNT(*) FROM user_views;        -- > 0
-SELECT COUNT(*) FROM user_objects;      -- > 0
+    # Vérification rapide
+    - echo "=== Proxies APRÈS reset ==="; env | grep -i proxy || true
+    - curl -vkI -x "$HTTP_PROXY" https://nexus.lseg.stockex.local/repository/maven-central/ || true
+  variables:
+    VS_FUNCTION: ""     # neutralise vault-service sur ce job
+  script:
+    - 'test -s src/main/resources/configuration.properties || { echo "configuration.properties missing or empty"; exit 1; }'
+    - echo "Building project for $DEPLOY_ENVIRONMENT…"
+    - mvn $MAVEN_CLI_OPTS clean install
+  artifacts:
+    when: always
+    paths: [ "target/" ]
+  environment: { name: "$DEPLOY_ENVIRONMENT" }
