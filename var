@@ -22,3 +22,22 @@ curl -v --connect-timeout 5 https://10.210.140.2/repository/maven-central/
 
 # 6. Comparer avec environnement qui fonctionne
 # Quelle est la différence réseau entre cet environnement et celui qui fonctionne ?
+
+# 1. Vérifier si un firewall local bloque
+iptables -L OUTPUT -n -v
+iptables -t nat -L -n -v
+
+# 2. Tester avec différents ports pour comprendre le blocage
+timeout 3 bash -c "echo > /dev/tcp/8.8.8.8/443" && echo "Google:443 OK" || echo "Google:443 bloqué"
+timeout 3 bash -c "echo > /dev/tcp/10.210.140.2/80" && echo "Nexus:80 OK" || echo "Nexus:80 bloqué"
+timeout 3 bash -c "echo > /dev/tcp/10.210.140.2/8081" && echo "Nexus:8081 OK" || echo "Nexus:8081 bloqué"
+
+# 3. Vérifier la route exacte
+ip route get 10.210.140.2
+
+# 4. Essayer un traceroute
+traceroute -n -m 10 10.210.140.2
+
+# 5. Comparer avec un environnement qui fonctionne
+# Quelle est l'adresse IP du runner dans l'environnement qui fonctionne ?
+# Pouvez-vous vous y connecter et exécuter : ip route show
