@@ -23,3 +23,4 @@ variables:
   PROXY_PORT: "3128"
 
 MAVEN_OPTS: "-Dhttp.proxyHost=proxy_vpc-06cf75bab03aab3d5 -Dhttp.proxyPort=3128 -Dhttps.proxyHost=proxy_vpc-06cf75bab03aab3d5 -Dhttps.proxyPort=3128 -Dhttp.nonProxyHosts=localhost|127.0.0.1"
+-Dmaven.wagon.http.ssl.insecure=true -Dmaven.wagon.http.ssl.allowall=true
