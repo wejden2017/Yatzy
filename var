@@ -1,86 +1,23 @@
-<?xml version="1.0" encoding="UTF-8"?>
-<settings xmlns="http://maven.apache.org/SETTINGS/1.0.0" 
-          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" 
-          xsi:schemaLocation="http://maven.apache.org/SETTINGS/1.0.0 http://maven.apache.org/xsd/settings-1.0.0.xsd">
-  
-  <pluginGroups>
-    <pluginGroup>org.sonarsource.scanner.maven</pluginGroup>
-  </pluginGroups>
-  
-  <proxies>
-    <proxy>
-      <active>true</active>
-      <protocol>http</protocol>
-      <host>isapr</host>
-      <port>80</port>
-      <!-- CORRECTION CRITIQUE: Ajouter Nexus dans nonProxyHosts -->
-      <nonProxyHosts>172.28.43.91|lsesonar.prod.sddc.stockex.local|nexus.lseg.stockex.local|*.lseg.stockex.local|10.*|localhost|127.0.0.1</nonProxyHosts>
-    </proxy>
-  </proxies>
-  
-  <localRepository>/lch/jenkins/.m2/localRepository</localRepository>
-  
-  <mirrors>
-    <mirror>
-      <id>central</id>
-      <name>central</name>
-      <url>https://nexus.lseg.stockex.local/repository/maven-central/</url>
-      <mirrorOf>*,!cats-release,!cats-snapshot,!libs-release,!libs-snapshot</mirrorOf>
-    </mirror>
-  </mirrors>
+variables:
+  PROXY_HOST: "proxy_vpc-06cf75bab03aab3d5"
+  PROXY_PORT: "3128"
 
-  <profiles>
-    <profile>
-      <id>central</id>
-      <repositories>
-        <!-- CATS Repositories -->
-        <repository>
-          <id>cats-release</id>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-          <name>CATS-Release</name>
-          <url>https://nexus.lseg.stockex.local/repository/CATS-Release/</url>
-        </repository>
-        
-        <repository>
-          <id>cats-snapshot</id>
-          <snapshots>
-            <enabled>true</enabled>
-            <updatePolicy>never</updatePolicy>
-          </snapshots>
-          <name>CATS-Snapshot</name>
-          <url>https://nexus.lseg.stockex.local/repository/CATS-Snapshot/</url>
-        </repository>
-        
-        <!-- Libs Repositories -->
-        <repository>
-          <id>libs-release</id>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-          <name>Libs-Release</name>
-          <url>https://nexus.lseg.stockex.local/repository/libs-releases/</url>
-        </repository>
-        
-        <repository>
-          <id>libs-snapshot</id>
-          <snapshots>
-            <enabled>true</enabled>
-            <updatePolicy>never</updatePolicy>
-          </snapshots>
-          <name>Libs-Snapshot</name>
-          <url>https://nexus.lseg.stockex.local/repository/libs-releases/</url>
-        </repository>
-      </repositories>
-      
-      <properties>
-        <sonar.host.url>http://lsesonar.prod.sddc.stockex.local:9000/sonar/</sonar.host.url>
-      </properties>
-    </profile>
-  </profiles>
+before_script:
+  # AJOUT: Forcer Nexus dans /etc/hosts pour bypass DNS/proxy
+  - echo "10.210.140.2 nexus.lseg.stockex.local" | sudo tee -a /etc/hosts
+  - cat /etc/hosts | grep nexus
   
-  <activeProfiles>
-    <activeProfile>central</activeProfile>
-  </activeProfiles>
-</settings>
+  # Test de connectivité
+  - echo "=== Testing Nexus connectivity ==="
+  - ping -c 3 nexus.lseg.stockex.local || echo "Ping failed"
+  - curl -I https://nexus.lseg.stockex.local/repository/maven-central/ || echo "Curl failed"
+  
+  # Les proxies (commentés actuellement)
+  # - export http_proxy="http://${PROXY_HOST}:${PROXY_PORT}"
+  # - export https_proxy="http://${PROXY_HOST}:${PROXY_PORT}"
+  # - export no_proxy="localhost,127.0.0.1,169.254.169.254,.r53"
+
+build:
+  stage: build
+  script:
+    - mvn clean install
