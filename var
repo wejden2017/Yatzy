@@ -41,3 +41,23 @@ traceroute -n -m 10 10.210.140.2
 # 5. Comparer avec un environnement qui fonctionne
 # Quelle est l'adresse IP du runner dans l'environnement qui fonctionne ?
 # Pouvez-vous vous y connecter et exécuter : ip route show
+
+# test simple avec auth Basic
+curl -I -x "http://USER:PASS@proxy_vpc-06cf75bab03aab3d5:3128" https://nexus.lseg.stockex.local/repository/maven-central/ | head -n1
+export HTTP_PROXY="http://proxy_vpc-06cf75bab03aab3d5:3128"
+export HTTPS_PROXY="$HTTP_PROXY"         # oui, http:// aussi ici
+export NO_PROXY="localhost,127.0.0.1,169.254.169.254,metadata"
+
+<proxies>
+  <proxy>
+    <id>corp-proxy</id>
+    <active>true</active>
+    <protocol>http</protocol>
+    <host>${env.HTTP_PROXY_HOST}</host>
+    <port>${env.HTTP_PROXY_PORT}</port>
+    <username>${env.HTTP_PROXY_USER}</username>     <!-- si le proxy exige une auth -->
+    <password>${env.HTTP_PROXY_PASS}</password>
+    <nonProxyHosts>localhost|127.0.0.1|169.254.169.254</nonProxyHosts>
+  </proxy>
+</proxies>
+
