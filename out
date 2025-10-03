@@ -1,4 +1,4 @@
-Inventory the hard-coded IP addresses in CATS Full. All communication between the front and the services
-Audit and list all hard-coded IP addresses in the CATS Full
-Replace hard-coded IPs in CATS Full with configurable endpoints (ATOS / AWS / OVH).
-review and update the front-end banner for each environnement (ATOS / AWS / OVH).
+curl -vk \
+  --proxy "http://proxy_vpc-06cf75bab03aab3d5:3128" \
+  --proxy-user 'zied.ouertani:mar2Kill@pluton01+' \
+  https://nexus.lseg.stockex.local/repository/maven-central/
