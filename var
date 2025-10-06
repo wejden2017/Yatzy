@@ -1,63 +1,9 @@
-# 1. Test de connectivité réseau brute
-telnet 10.210.140.2 443
-# ou si telnet n'est pas installé :
-nc -zv 10.210.140.2 443
-timeout 5 bash -c "</dev/tcp/10.210.140.2/443" && echo "Port 443 accessible" || echo "Port 443 bloqué"
+# Détails sur le conteneur : code de sortie, date de démarrage/arrêt, politique de redémarrage
+docker inspect -f 'Exit={{.State.ExitCode}}  Started={{.State.StartedAt}}  Finished={{.State.FinishedAt}}  Restarts={{.RestartCount}}  Policy={{.HostConfig.RestartPolicy.Name}}' ibm-mq
 
-# 2. Test DNS
-nslookup nexus.lseg.stockex.local
-dig nexus.lseg.stockex.local
+# Voir les logs IBM MQ
+docker logs --tail=200 ibm-mq
 
-# 3. Test de route
-traceroute -n 10.210.140.2
-# ou
-tracepath 10.210.140.2
-
-# 4. Vérifier les règles iptables locales
-iptables -L -n -v
-iptables -t nat -L -n -v
-
-# 5. Test curl SANS proxy
-curl -v --connect-timeout 5 https://10.210.140.2/repository/maven-central/
-
-# 6. Comparer avec environnement qui fonctionne
-# Quelle est la différence réseau entre cet environnement et celui qui fonctionne ?
-
-# 1. Vérifier si un firewall local bloque
-iptables -L OUTPUT -n -v
-iptables -t nat -L -n -v
-
-# 2. Tester avec différents ports pour comprendre le blocage
-timeout 3 bash -c "echo > /dev/tcp/8.8.8.8/443" && echo "Google:443 OK" || echo "Google:443 bloqué"
-timeout 3 bash -c "echo > /dev/tcp/10.210.140.2/80" && echo "Nexus:80 OK" || echo "Nexus:80 bloqué"
-timeout 3 bash -c "echo > /dev/tcp/10.210.140.2/8081" && echo "Nexus:8081 OK" || echo "Nexus:8081 bloqué"
-
-# 3. Vérifier la route exacte
-ip route get 10.210.140.2
-
-# 4. Essayer un traceroute
-traceroute -n -m 10 10.210.140.2
-
-# 5. Comparer avec un environnement qui fonctionne
-# Quelle est l'adresse IP du runner dans l'environnement qui fonctionne ?
-# Pouvez-vous vous y connecter et exécuter : ip route show
-
-# test simple avec auth Basic
-curl -I -x "http://USER:PASS@proxy_vpc-06cf75bab03aab3d5:3128" https://nexus.lseg.stockex.local/repository/maven-central/ | head -n1
-export HTTP_PROXY="http://proxy_vpc-06cf75bab03aab3d5:3128"
-export HTTPS_PROXY="$HTTP_PROXY"         # oui, http:// aussi ici
-export NO_PROXY="localhost,127.0.0.1,169.254.169.254,metadata"
-
-<proxies>
-  <proxy>
-    <id>corp-proxy</id>
-    <active>true</active>
-    <protocol>http</protocol>
-    <host>${env.HTTP_PROXY_HOST}</host>
-    <port>${env.HTTP_PROXY_PORT}</port>
-    <username>${env.HTTP_PROXY_USER}</username>     <!-- si le proxy exige une auth -->
-    <password>${env.HTTP_PROXY_PASS}</password>
-    <nonProxyHosts>localhost|127.0.0.1|169.254.169.254</nonProxyHosts>
-  </proxy>
-</proxies>
-
+# Vérifier si le système a tué le process (manque de mémoire)
+sudo journalctl -u docker --since "5 weeks ago" | grep -i -E 'oom|killed|ibm-mq' || true
+dmesg | grep -i -E 'out of memory|killed process' || true
