@@ -1,89 +1,15 @@
-# ---------------------------------------------------------------------
-# Étape 3 : vérifier si le conteneur existe déjà
-# ---------------------------------------------------------------------
-- name: Check if IBM MQ container exists
-  ansible.builtin.command: docker ps -a --filter "name={{ ibmmq_container_name }}" --format "{{'{{.Status}}'}}"
-  register: mq_exist
-  changed_when: false
-  failed_when: false
-
-# ---------------------------------------------------------------------
-# Étape 4 : appliquer la restart policy et redémarrer si besoin
-# ---------------------------------------------------------------------
-- name: Start existing IBM MQ container if stopped
-  ansible.builtin.command: docker start {{ ibmmq_container_name }}
-  when: mq_exist.stdout is search("Exited")
-  changed_when: true
-
-- name: Ensure restart policy is applied on existing container
-  ansible.builtin.command: docker update --restart unless-stopped {{ ibmmq_container_name }}
-  when: mq_exist.rc == 0 and mq_exist.stdout != ""
-  changed_when: true
-
-# ---------------------------------------------------------------------
-# Étape 5 : créer le conteneur s’il n’existe pas
-# ---------------------------------------------------------------------
-- name: Run IBM MQ container
+- name: Wait until MQ container is running
   ansible.builtin.command: >
-    docker run -d
-    --name {{ ibmmq_container_name }}
-    --restart unless-stopped
-    -p {{ ibmmq_ports[0] }}
-    -p {{ ibmmq_ports[1] }}
-    -v {{ ibmmq_volume_path }}:/mnt/mqm
-    -e LICENSE=accept
-    -e MQ_QMGR_NAME={{ ibmmq_mq_name }}
-    -e MQ_ADMIN_PASSWORD={{ ibmmq_admin_password }}
-    {{ ibmmq_image }}
-  become: true
-  when: mq_exist.stdout == ""
-  register: container_result
-  failed_when: container_result.rc != 0
-  changed_when: true
+    docker inspect -f '{{"{{.State.Running}}"}}' {{ ibmmq_container_name }}
+  register: mq_running
+  retries: 10
+  delay: 5
+  until: mq_running.stdout is defined and mq_running.stdout.strip() == "true"
+  changed_when: false
 
-# ---------------------------------------------------------------------
-# Étape 6 : vérification que le conteneur tourne bien
-# ---------------------------------------------------------------------
-- block:
-    - name: Wait until MQ container is running
-      ansible.builtin.command: docker inspect -f '{{ .State.Running }}' {{ ibmmq_container_name }}
-      register: mq_running
-      retries: 10
-      delay: 5
-      until: mq_running.stdout is defined and mq_running.stdout.strip() == "true"
-      changed_when: false
-
-    - name: Check port 1414 (TCP MQ)
-      ansible.builtin.wait_for:
-        host: 127.0.0.1
-        port: 1414
-        timeout: 30
-      changed_when: false
-
-    - name: Check port 9443 (MQ Web Console)
-      ansible.builtin.wait_for:
-        host: 127.0.0.1
-        port: 9443
-        timeout: 30
-      changed_when: false
-
-  rescue:
-    - name: Get container state for debug
-      ansible.builtin.command: docker inspect --format '{{ json .State }}' {{ ibmmq_container_name }}
-      register: mq_state
-      ignore_errors: true
-      changed_when: false
-
-    - name: Get last 200 lines of MQ logs
-      ansible.builtin.command: docker logs --tail=200 {{ ibmmq_container_name }}
-      register: mq_logs
-      ignore_errors: true
-      changed_when: false
-
-    - name: Fail if MQ not running
-      ansible.builtin.fail:
-        msg: |
-          ❌ IBM MQ n'est pas démarré correctement.
-          État : {{ mq_state.stdout | default('indisponible') }}
-          ---- Derniers logs ----
-          {{ mq_logs.stdout | default('aucun log disponible') }}
+- name: Get container state for debug
+  ansible.builtin.command: >
+    docker inspect --format '{{"{{json .State}}"}}' {{ ibmmq_container_name }}
+  register: mq_state
+  ignore_errors: true
+  changed_when: false
