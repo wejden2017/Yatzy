@@ -1,15 +1,1 @@
-- name: Wait until MQ container is running
-  ansible.builtin.command: >
-    docker inspect -f '{{"{{.State.Running}}"}}' {{ ibmmq_container_name }}
-  register: mq_running
-  retries: 10
-  delay: 5
-  until: mq_running.stdout is defined and mq_running.stdout.strip() == "true"
-  changed_when: false
 
-- name: Get container state for debug
-  ansible.builtin.command: >
-    docker inspect --format '{{"{{json .State}}"}}' {{ ibmmq_container_name }}
-  register: mq_state
-  ignore_errors: true
-  changed_when: false
