@@ -1,39 +1,147 @@
-#!/bin/ksh
+---
+- name: Load environment users file
+  include_vars:
+    file: "{{ users_file }}"
+    name: env_cfg
 
-. ${HOME}/env/env.ksh
-. ${CATS_OPER}/common_functions.sh
+- name: Merge env config into facts
+  set_fact:
+    _users: "{{ env_cfg.users | default([]) }}"
+    _default_password: "{{ env_cfg.default_password | default(default_password) }}"
 
-LOG_SCRIPT=${CATS_LOG}/`basename $0 ".ksh"`.log
-nom_script=`basename $0 "@@"`
-exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
+- name: Build sqlplus command and docker exec prefix
+  set_fact:
+    _ora_sqlplus: >-
+      {{ (oracle_connect.use_sysdba | default(false))
+         | ternary('sqlplus -s / as sysdba',
+                   'sqlplus -s ' ~ oracle_connect.username ~ '/' ~ oracle_connect.password ~
+                   '@//' ~ oracle_connect.host ~ ':' ~ oracle_connect.port ~ '/' ~ oracle_connect.service) }}
+    _ora_exec_prefix: >-
+      {{ (oracle_container.enabled | default(false))
+         | ternary('docker exec -i ' ~ oracle_container.name ~ ' bash -lc', '') }}
 
-LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
-LOGSTART "${nom_script}"
 
-SCRIPT_CALYPSO="${SHELL_REP}/CALYPSO_integration_csv.ksh"
-LOGINFO "${nom_script}" "DATA_APF=${DATA_APF}"
-LOGINFO "${nom_script}" "SCRIPT_CALYPSO=${SCRIPT_CALYPSO}"
+- name: Render SQL for non-delete actions
+  when: item.action | lower != 'delete'
+  template:
+    src: user_present.sql.j2
+    dest: "/tmp/user_{{ item.login }}.sql"
+    mode: "0644"
+  loop: "{{ _users }}"
+  loop_control: { label: "{{ item.login }}" }
 
-found=0
-for file in "${DATA_APF}"/CAL_TO_CAT_*.[cC][sS][vV]
-do
-  [ -e "$file" ] || continue
-  found=1
-  LOGINFO "${nom_script}" "Détection fichier : $file"
-  fname="$(basename "$file")"
+- name: Copy per-user SQL into container
+  when:
+    - oracle_container.enabled | default(false)
+    - item.action | lower != 'delete'
+  shell: |
+    docker cp /tmp/user_{{ item.login }}.sql {{ oracle_container.name }}:/tmp/user_{{ item.login }}.sql
+  args: { executable: /bin/bash }
+  loop: "{{ _users }}"
+  loop_control: { label: "{{ item.login }}" }
 
-  "${SCRIPT_CALYPSO}" "$fname"
-  rc=$?
+# 6) Exécuter
+- name: Apply SQL for non-delete actions
+  when: item.action | lower != 'delete'
+  shell: |
+    {% set sqlfile = '/tmp/user_' ~ item.login ~ '.sql' %}
+    {% if oracle_container.enabled | default(false) -%}
+    {{ _ora_exec_prefix }} "sqlplus -L -s /nolog <<'SQL'
+    WHENEVER OSERROR EXIT 1
+    WHENEVER SQLERROR EXIT 1
+    CONNECT {{ oracle_connect.username }}/\"{{ oracle_connect.password }}\"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
+    SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+    SPOOL /tmp/ansible_user_{{ item.login }}.log
+    @{{ sqlfile }}
+    SPOOL OFF
+    EXIT
+    SQL"
+    {% else -%}
+    sqlplus -L -s /nolog <<'SQL'
+    WHENEVER OSERROR EXIT 1
+    WHENEVER SQLERROR EXIT 1
+    CONNECT {{ oracle_connect.username }}/\"{{ oracle_connect.password }}\"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
+    SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+    SPOOL /tmp/ansible_user_{{ item.login }}.log
+    @{{ sqlfile }}
+    SPOOL OFF
+    EXIT
+    SQL
+    {%- endif %}
+  args: { executable: /bin/bash }
+  register: apply_user
+  failed_when: apply_user.rc != 0 or ('ORA-' in (apply_user.stdout | default('')) )
+  changed_when: true
+  loop: "{{ _users }}"
+  loop_control: { label: "{{ item.login }}" }
 
-  if [ $rc -eq 0 ]; then
-    mv "$file" "${file}_traite"
-    LOGINFO "${nom_script}" "Succès (rc=$rc) → renommé en ${file}_traite"
-  else
-    LOGERR  "${nom_script}" "KO (rc=$rc) pour $file → pas de renommage"
-  fi
-done
 
-[ $found -eq 0 ] && LOGERR "${nom_script}" "Aucun fichier trouvé dans ${DATA_APF} avec CAL_TO_CAT_*.[cC][sS][vV]"
+# ====== DELETE ======
 
-LOGEND "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
-exit 0
+# 7) Générer le SQL de drop
+- name: Render SQL for delete
+  when: item.action | lower == 'delete'
+  template:
+    src: drop_user.sql.j2
+    dest: "/tmp/drop_{{ item.login }}.sql"
+    mode: "0644"
+  loop: "{{ _users }}"
+  loop_control: { label: "{{ item.login }}" }
+
+# 8) Copier dans le conteneur (drop)
+- name: Copy drop SQL into container
+  when:
+    - oracle_container.enabled | default(false)
+    - item.action | lower == 'delete'
+  shell: |
+    docker cp /tmp/drop_{{ item.login }}.sql {{ oracle_container.name }}:/tmp/drop_{{ item.login }}.sql
+  args: { executable: /bin/bash }
+  loop: "{{ _users }}"
+  loop_control: { label: "{{ item.login }}" }
+
+# 9) Exécuter le drop
+- name: Apply SQL for delete
+  when: (item.action | default('') | lower) == 'delete'
+  shell: |
+    {% set sqlfile = '/tmp/drop_' ~ item.login ~ '.sql' %}
+    {% if oracle_container.enabled | default(false) -%}
+    {{ _ora_exec_prefix }} "sqlplus -L -s /nolog <<'SQL'
+    WHENEVER OSERROR EXIT 1
+    WHENEVER SQLERROR EXIT 1
+    CONNECT {{ oracle_connect.username }}/\"{{ oracle_connect.password }}\"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
+    SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+    SPOOL /tmp/ansible_drop_{{ item.login }}.log
+    @{{ sqlfile }}
+    SPOOL OFF
+    EXIT
+    SQL"
+    {% else -%}
+    sqlplus -L -s /nolog <<'SQL'
+    WHENEVER OSERROR EXIT 1
+    WHENEVER SQLERROR EXIT 1
+    CONNECT {{ oracle_connect.username }}/\"{{ oracle_connect.password }}\"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
+    SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+    SPOOL /tmp/ansible_drop_{{ item.login }}.log
+    @{{ sqlfile }}
+    SPOOL OFF
+    EXIT
+    SQL
+    {%- endif %}
+  args:
+    executable: /bin/bash
+  register: drop_user
+  failed_when: drop_user.rc != 0 or ('ORA-' in (drop_user.stdout | default('')) ) or ('ORA-' in (drop_user.stderr | default('')) )
+  changed_when: true
+  loop: "{{ _users }}"
+  loop_control:
+    label: "{{ item.login }}"
+
+- name: Show drop SQL log on failure
+  when: drop_user is failed and (item.action | default('') | lower) == 'delete'
+  shell: docker exec -it {{ oracle_container.name }} bash -lc "sed -n '1,200p' /tmp/ansible_drop_{{ item.login }}.log || true"
+  args:
+    executable: /bin/bash
+  loop: "{{ _users }}"
+  loop_control:
+    label: "{{ item.login }}"
+
