@@ -18,7 +18,7 @@ ELSE
 END IF;
 END;
 /
-
+user_present.sql.j2
 PROMPT
 PROMPT ============================================
 PROMPT User {{ item.login }} - DROP completed
