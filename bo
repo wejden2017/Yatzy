@@ -1,79 +1,25 @@
-#!/bin/ksh
+default_password: "ChangeMe1234!"
 
-. ${HOME}/env/env.ksh
-. ${CATS_OPER}/common_functions.sh
+# action: create | delete | lock | unlock | reset-password
+users:
+  - login: "zouertani"
+    roles: ["DEV_ROLE"]
+    action: "create"
+    schemas: ["LUCA","LUCA3"]
 
-LOG_SCRIPT=${CATS_LOG}/`basename $0 ".ksh"`.log
-nom_script=`basename $0 "@@"`
-exec 1>>"$LOG_SCRIPT" 2>>"$LOG_SCRIPT"
+  #- login: "ba_user"
+  #  roles: ["BA_ROLE"]
+  #  action: "create"
 
-LOGINFO "${nom_script}" "Début" | tee -a "$LOG_GENERAL"
-LOGSTART "${nom_script}"
+  #- login: "helper_dba"
+  #  roles: ["DBA_ROLE"]
+  #  action: "lock"
 
-SWIFT_DIR="${DATA_SWIFT_DISPATCHER_OUT}"
-SWIFT_ERR_DIR="${DATA_SWIFT_ERROR}"
-APF_DIR="${DATA_APF}"
+  - login: "toto"
+    action: "delete"
 
-SCRIPT_MT900_910="${SHELL_REP}/APF_integration_MT900_910.ksh"
-SCRIPT_CALYPSO_TYPE="${SHELL_REP}/CALYPSO_generer_msg_type.ksh"
-SCRIPT_PRE_DEV="${SHELL_REP}/APF_pre_reglement_devises.ksh"
-SCRIPT_DEV="${SHELL_REP}/APF_reglement_devises.ksh"
-SCRIPT_ACK="${SHELL_REP}/APF_gen_ack_payment.ksh"
+  #- login: "reset_me"
+  #  roles: ["DEV_ROLE"]
+  #  action: "reset-password"
 
-# Etape 1
-found=0
-for src in "${SWIFT_DIR}"/MT9XXBONYR?_APF*
-do
-  [ -e "$src" ] || continue
-  found=1
-  fname="$(basename "$src")"
-  LOGINFO "${nom_script}" "Fichier détecté : $fname"
 
-  # Etape 2
-  if ! mv "$src" "${APF_DIR}/$fname"; then
-    LOGERR "${nom_script}" "mv KO: ${src} -> ${APF_DIR}/$fname"
-    continue
-  fi
-
-  # Etape 3
-  if ! "${SCRIPT_MT900_910}" "$fname"; then
-    LOGERR "${nom_script}" "APF_integration_MT900_910.ksh KO pour $fname"
-    mv -f "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
-    continue
-  fi
-
-  # Etape 4
-  if ! "${SCRIPT_CALYPSO_TYPE}" "MRGN"; then
-    LOGERR "${nom_script}" "CALYPSO_generer_msg_type.ksh MRGN KO pour $fname"
-    mv -f "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
-    continue
-  fi
-
-  # Etape 5
-  if ! "${SCRIPT_PRE_DEV}"; then
-    LOGERR "${nom_script}" "APF_pre_reglement_devises.ksh KO pour $fname"
-    mv -f "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
-    continue
-  fi
-
-  # Etape 6
-  if ! "${SCRIPT_DEV}"; then
-    LOGERR "${nom_script}" "APF_reglement_devises.ksh KO pour $fname"
-    mv -f "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
-    continue
-  fi
-
-  # Etape 7
-  if ! "${SCRIPT_ACK}" "CDS" "1"; then
-    LOGERR "${nom_script}" "APF_gen_ack_payment.ksh CDS 1 KO pour $fname"
-    mv -f "${APF_DIR}/$fname" "${SWIFT_ERR_DIR}/" 2>/dev/null
-    continue
-  fi
-
-  LOGINFO "${nom_script}" "Traitement OK pour $fname"
-done
-
-[ $found -eq 0 ] && LOGERR "${nom_script}" "Aucun fichier MT9XXBONYR?_APF* trouvé dans ${SWIFT_DIR}"
-
-LOGEND "${nom_script}" "Fin" | tee -a "$LOG_GENERAL"
-exit 0
