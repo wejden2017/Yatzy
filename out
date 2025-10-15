@@ -1,4 +1,159 @@
-curl -vk \
-  --proxy "http://proxy_vpc-06cf75bab03aab3d5:3128" \
-  --proxy-user 'zied.ouertani:mar2Kill@pluton01+' \
-  https://nexus.lseg.stockex.local/repository/maven-central/
+drop_user.sql.j2
+-- ============================================
+-- Drop Oracle User
+-- ============================================
+SET SERVEROUTPUT ON SIZE UNLIMITED
+
+DECLARE
+    v_cnt INTEGER;
+BEGIN
+SELECT COUNT(*) INTO v_cnt FROM dba_users WHERE username = UPPER('{{ item.login }}');
+
+IF v_cnt = 1 THEN
+        DBMS_OUTPUT.PUT_LINE('Dropping user {{ item.login }}...');
+EXECUTE IMMEDIATE 'DROP USER {{ item.login }} CASCADE';
+DBMS_OUTPUT.PUT_LINE('✓ User {{ item.login }} dropped successfully');
+ELSE
+        DBMS_OUTPUT.PUT_LINE('⚠ User {{ item.login }} does not exist - nothing to drop');
+END IF;
+END;
+/
+
+PROMPT
+PROMPT ============================================
+PROMPT User {{ item.login }} - DROP completed
+PROMPT ============================================
+
+-- ============================================
+-- Oracle User Management Template
+-- ============================================
+-- Variables disponibles:
+--   item.login            (obligatoire)
+--   item.roles            (liste de rôles, ex. ["DEV_ROLE","BA_ROLE"])
+--   item.schemas          (liste de schémas, optionnel)
+--   item.password         (optionnel)
+--   item.action           (create | reset-password | lock | unlock)
+--   _default_password     (défini depuis users_env_*.yml ou group_vars)
+--   grant_proc_owner      (ex. "SYS")
+--   grant_proc_name       (ex. "GRANT_DEV_ACCESS_TO_SCHEMA")
+
+DECLARE
+    v_cnt INTEGER;
+v_pwd VARCHAR2(512) := '{{ (item.password | default(_default_password)) | replace("'", "''") }}';
+v_action VARCHAR2(32) := '{{ item.action | default("create") | lower }}';
+BEGIN
+SELECT COUNT(*) INTO v_cnt FROM dba_users WHERE username = UPPER('{{ item.login }}');
+
+IF v_cnt = 0 THEN
+        -- CREATE USER
+EXECUTE IMMEDIATE 'CREATE USER {{ item.login }} IDENTIFIED BY "' || v_pwd || '"';
+DBMS_OUTPUT.PUT_LINE('✓ User {{ item.login }} created');
+ELSE
+        -- RESET PASSWORD si demandé, ou lors de create idempotent
+        IF v_action IN ('create','reset-password') THEN
+EXECUTE IMMEDIATE 'ALTER USER {{ item.login }} IDENTIFIED BY "' || v_pwd || '"';
+DBMS_OUTPUT.PUT_LINE('✓ Password reset for {{ item.login }}');
+END IF;
+END IF;
+END;
+/
+
+-- Grant CREATE SESSION minimal (utile si le rôle ne le donne pas)
+BEGIN
+EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO {{ item.login }}';
+DBMS_OUTPUT.PUT_LINE('✓ CREATE SESSION granted to {{ item.login }}');
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -1927 THEN
+            RAISE;
+ELSE
+            DBMS_OUTPUT.PUT_LINE('  (CREATE SESSION already granted)');
+END IF;
+END;
+/
+
+-- Grant des rôles
+{% for r in item.roles | default([]) %}
+BEGIN
+EXECUTE IMMEDIATE 'GRANT {{ r }} TO {{ item.login }}';
+DBMS_OUTPUT.PUT_LINE('✓ Role {{ r }} granted to {{ item.login }}');
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE != -1927 THEN
+            RAISE;
+ELSE
+            DBMS_OUTPUT.PUT_LINE('  (Role {{ r }} already granted)');
+END IF;
+END;
+/
+{% endfor %}
+
+-- Default role = tous les rôles fournis (si liste vide, on ne change rien)
+{% if item.roles is defined and item.roles|length > 0 %}
+BEGIN
+EXECUTE IMMEDIATE 'ALTER USER {{ item.login }} DEFAULT ROLE {{ item.roles | join(", ") }}';
+DBMS_OUTPUT.PUT_LINE('✓ Default roles set: {{ item.roles | join(", ") }}');
+END;
+/
+{% endif %}
+
+-- Appel de la procédure pour chaque schéma (si fourni)
+{% if item.schemas is defined and item.schemas|length > 0 %}
+SET SERVEROUTPUT ON SIZE UNLIMITED
+
+{% for s in item.schemas %}
+DECLARE
+    v_error_msg VARCHAR2(4000);
+BEGIN
+DBMS_OUTPUT.PUT_LINE('');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('Schema: {{ s }} -> User: {{ item.login }}');
+DBMS_OUTPUT.PUT_LINE('========================================');
+
+    -- ✅ CORRECTION : Passer le LOGIN de l'utilisateur
+{{ grant_proc_owner | default('SYS') }}.{{ grant_proc_name | default('GRANT_DEV_ACCESS_TO_SCHEMA') }}(
+                                            p_schema_name => '{{ s }}',
+                                            p_role_name   => '{{ item.login }}'
+                                        );
+
+DBMS_OUTPUT.PUT_LINE('✓ Access granted on schema {{ s }} to {{ item.login }}');
+DBMS_OUTPUT.PUT_LINE('');
+EXCEPTION
+    WHEN OTHERS THEN
+        v_error_msg := SQLERRM;
+DBMS_OUTPUT.PUT_LINE('✗ ERROR granting access on {{ s }}: ' || v_error_msg);
+DBMS_OUTPUT.PUT_LINE('');
+RAISE;
+END;
+/
+{% endfor %}
+
+DBMS_OUTPUT.PUT_LINE('');
+DBMS_OUTPUT.PUT_LINE('========================================');
+DBMS_OUTPUT.PUT_LINE('All schema grants completed for {{ item.login }}');
+DBMS_OUTPUT.PUT_LINE('========================================');
+
+{% endif %}
+
+-- Lock/Unlock selon l'action
+{% set a = (item.action | default('create') | lower) %}
+{% if a == 'lock' %}
+BEGIN
+EXECUTE IMMEDIATE 'ALTER USER {{ item.login }} ACCOUNT LOCK';
+DBMS_OUTPUT.PUT_LINE('🔒 User {{ item.login }} locked');
+END;
+/
+{% elif a in ['create','unlock','reset-password'] %}
+BEGIN
+EXECUTE IMMEDIATE 'ALTER USER {{ item.login }} ACCOUNT UNLOCK';
+DBMS_OUTPUT.PUT_LINE('🔓 User {{ item.login }} unlocked');
+END;
+/
+{% endif %}
+
+-- Summary
+PROMPT
+PROMPT ============================================
+PROMPT User {{ item.login }} - Action: {{ item.action | default('create') | upper }}
+PROMPT Status: COMPLETED
+PROMPT ============================================
