@@ -1,14 +1,44 @@
-manage_db_users.yml
-- name: Oracle users administration (ENV-driven)
-  hosts: local
-  gather_facts: false
+# ============================================
+# Common Variables for all environments
+# ============================================
+
+all:
   vars:
-    ansible_python_interpreter: "{{ ansible_playbook_python }}"
-  roles:
-    - oracle_user_admin
+    ansible_connection: ssh
+    ansible_port: 22
+    ansible_user: ec2-user  # ou oracle selon votre config
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    ansible_python_interpreter: '/usr/bin/python3'
+    
+    # Oracle connection configuration
+    oracle_connect:
+      host: "{{ hostvars[inventory_hostname]['private_ip'] | default('localhost') }}"
+      port: 1521
+      service: "ORCL"  # ← Adapter au nom de votre service Oracle
+      username: "system"
+      password: "{{ lookup('env', 'SYSDBA_PASSWORD') }}"
+      use_sysdba: false  # Mettre à true si vous voulez "/ as sysdba"
+    
+    # ✅ Pas de Docker sur EC2
+    oracle_container:
+      enabled: false
+      name: ""  # Pas de conteneur
+    
+    # Stored procedure for granting access
+    grant_proc_owner: "SYS"
+    grant_proc_name: "GRANT_DEV_ACCESS_TO_SCHEMA"
+    
+    # Default password for new users
+    default_password: "ChangeMe2025!"
+    
+    # Users file path (dynamic based on ENV)
+    users_file: "env/users_env_{{ lookup('env', 'ENV') }}.yml"
+    
+    db_users: []
 
-
-
-requirements.yml
-collections: []
-
+# Oracle servers group (populated by dynamic inventory)
+oracle_servers:
+  vars:
+    # Oracle-specific paths on EC2
+    oracle_home: "/u01/app/oracle/product/19.0.0/dbhome_1"  # ← Adapter si nécessaire
+    oracle_sid: "ORCL"  # ← Adapter à votre SID
