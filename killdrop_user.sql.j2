@@ -1,0 +1,154 @@
+-- ============================================
+-- Oracle User Management - Drop User
+-- Environment: {{ lookup('env', 'ENV') | upper }}
+-- User: {{ item.login }}
+-- Action: DELETE
+-- ============================================
+
+SET SERVEROUTPUT ON SIZE UNLIMITED
+SET FEEDBACK OFF
+SET VERIFY OFF
+SET HEADING OFF
+SET ECHO OFF
+
+DECLARE 
+    v_cnt INTEGER;
+    v_session_count INTEGER := 0;
+    v_killed_sessions INTEGER := 0;
+    v_error_count INTEGER := 0;
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    DBMS_OUTPUT.PUT_LINE('Dropping user: {{ item.login }}');
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    DBMS_OUTPUT.PUT_LINE('');
+    
+    -- Vérifier si l'utilisateur existe
+    SELECT COUNT(*) INTO v_cnt FROM dba_users WHERE username = UPPER('{{ item.login }}');
+    
+    IF v_cnt = 1 THEN
+        DBMS_OUTPUT.PUT_LINE('✓ User {{ item.login }} found in database');
+        DBMS_OUTPUT.PUT_LINE('');
+        
+        -- Compter les sessions actives
+        SELECT COUNT(*) INTO v_session_count 
+        FROM v$session 
+        WHERE username = UPPER('{{ item.login }}');
+        
+        IF v_session_count > 0 THEN
+            DBMS_OUTPUT.PUT_LINE('⚠ Found ' || v_session_count || ' active session(s) for user {{ item.login }}');
+            DBMS_OUTPUT.PUT_LINE('Attempting to kill all sessions...');
+            DBMS_OUTPUT.PUT_LINE('');
+            
+            -- Tuer toutes les sessions actives
+            FOR session_rec IN (
+                SELECT 
+                    sid, 
+                    serial#,
+                    status,
+                    machine,
+                    program,
+                    logon_time
+                FROM v$session 
+                WHERE username = UPPER('{{ item.login }}')
+            ) LOOP
+                BEGIN
+                    DBMS_OUTPUT.PUT_LINE('  Killing session:');
+                    DBMS_OUTPUT.PUT_LINE('    - SID: ' || session_rec.sid || ', Serial#: ' || session_rec.serial#);
+                    DBMS_OUTPUT.PUT_LINE('    - Status: ' || session_rec.status);
+                    DBMS_OUTPUT.PUT_LINE('    - Machine: ' || session_rec.machine);
+                    DBMS_OUTPUT.PUT_LINE('    - Program: ' || session_rec.program);
+                    
+                    EXECUTE IMMEDIATE 'ALTER SYSTEM KILL SESSION ''' || 
+                                      session_rec.sid || ',' || session_rec.serial# || 
+                                      ''' IMMEDIATE';
+                    
+                    v_killed_sessions := v_killed_sessions + 1;
+                    DBMS_OUTPUT.PUT_LINE('    ✓ Session killed successfully');
+                    DBMS_OUTPUT.PUT_LINE('');
+                    
+                EXCEPTION
+                    WHEN OTHERS THEN
+                        v_error_count := v_error_count + 1;
+                        DBMS_OUTPUT.PUT_LINE('    ✗ ERROR killing session: ' || SQLERRM);
+                        DBMS_OUTPUT.PUT_LINE('');
+                        -- Continue avec les autres sessions
+                END;
+            END LOOP;
+            
+            DBMS_OUTPUT.PUT_LINE('Session kill summary:');
+            DBMS_OUTPUT.PUT_LINE('  - Total sessions found: ' || v_session_count);
+            DBMS_OUTPUT.PUT_LINE('  - Successfully killed: ' || v_killed_sessions);
+            DBMS_OUTPUT.PUT_LINE('  - Errors: ' || v_error_count);
+            DBMS_OUTPUT.PUT_LINE('');
+            
+            -- Attendre un peu que les sessions se terminent
+            IF v_killed_sessions > 0 THEN
+                DBMS_OUTPUT.PUT_LINE('Waiting 2 seconds for sessions to terminate...');
+                DBMS_LOCK.SLEEP(2);
+                DBMS_OUTPUT.PUT_LINE('');
+            END IF;
+            
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('✓ No active sessions found for user {{ item.login }}');
+            DBMS_OUTPUT.PUT_LINE('');
+        END IF;
+        
+        -- Supprimer l'utilisateur avec CASCADE
+        DBMS_OUTPUT.PUT_LINE('Dropping user {{ item.login }} CASCADE...');
+        BEGIN
+            EXECUTE IMMEDIATE 'DROP USER {{ item.login }} CASCADE';
+            DBMS_OUTPUT.PUT_LINE('✓ User {{ item.login }} dropped successfully');
+            DBMS_OUTPUT.PUT_LINE('');
+            DBMS_OUTPUT.PUT_LINE('Details:');
+            DBMS_OUTPUT.PUT_LINE('  - All objects owned by {{ item.login }} were dropped');
+            DBMS_OUTPUT.PUT_LINE('  - All privileges granted to {{ item.login }} were revoked');
+            DBMS_OUTPUT.PUT_LINE('  - All roles granted to {{ item.login }} were revoked');
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE('✗ ERROR during DROP USER: ' || SQLERRM);
+                DBMS_OUTPUT.PUT_LINE('');
+                
+                -- Vérifier si l'utilisateur a encore des sessions
+                SELECT COUNT(*) INTO v_session_count 
+                FROM v$session 
+                WHERE username = UPPER('{{ item.login }}');
+                
+                IF v_session_count > 0 THEN
+                    DBMS_OUTPUT.PUT_LINE('⚠ User still has ' || v_session_count || ' active session(s)');
+                    DBMS_OUTPUT.PUT_LINE('  Manual intervention may be required');
+                END IF;
+                
+                RAISE;
+        END;
+        
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('⚠ User {{ item.login }} does not exist in database');
+        DBMS_OUTPUT.PUT_LINE('  Nothing to drop');
+    END IF;
+    
+    DBMS_OUTPUT.PUT_LINE('');
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('');
+        DBMS_OUTPUT.PUT_LINE('========================================');
+        DBMS_OUTPUT.PUT_LINE('✗ CRITICAL ERROR');
+        DBMS_OUTPUT.PUT_LINE('========================================');
+        DBMS_OUTPUT.PUT_LINE('Error Code: ' || SQLCODE);
+        DBMS_OUTPUT.PUT_LINE('Error Message: ' || SQLERRM);
+        DBMS_OUTPUT.PUT_LINE('');
+        DBMS_OUTPUT.PUT_LINE('User {{ item.login }} may not have been dropped');
+        DBMS_OUTPUT.PUT_LINE('Please verify manually');
+        DBMS_OUTPUT.PUT_LINE('========================================');
+        DBMS_OUTPUT.PUT_LINE('');
+        RAISE;
+END;
+/
+
+PROMPT
+PROMPT ============================================
+PROMPT User: {{ item.login }}
+PROMPT Action: DELETE
+PROMPT Status: ✓ COMPLETED
+PROMPT ============================================
+PROMPT
