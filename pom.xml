@@ -1,11 +1,33 @@
----
-- name: Configuration complète Active Directory + FSx ONTAP
-  hosts: localhost
-  gather_facts: no
-
-  tasks:
-    - name: "Étape 1 - Configurer Active Directory et créer les utilisateurs"
-      import_playbook: cats_ad.yml
-
-    - name: "Étape 2 - Configurer FSx ONTAP et les permissions"
-      import_playbook: ontap_fsx.yml
+cats-db-user-admin/
+│
+├── .gitlab-ci.yml                           # Pipeline GitLab CI/CD
+├── ansible.cfg                              # Configuration Ansible
+├── manage_db_users.yml                      # Playbook principal
+├── requirements.yml                         # Collections Ansible (optionnel)
+├── README.md                                # Documentation
+│
+├── .gitignore                               # Fichiers à ignorer
+│
+├── inventory/                               # ← Inventaires dynamiques
+│   ├── aws_ec2_inventory.py                 # Script Python pour récupérer les EC2
+│   └── common.yml                           # Variables communes à tous les environnements
+│
+├── env/                                     # ← Fichiers de configuration par environnement
+│   ├── users_env_dev.yml                    # Users à créer/supprimer en DEV
+│   ├── users_env_qa.yml                     # Users à créer/supprimer en QA
+│   └── users_env_uat.yml                    # Users à créer/supprimer en UAT
+│
+└── roles/                                   # ← Rôles Ansible
+    └── oracle_user_admin/                   # Rôle de gestion des users Oracle
+        ├── tasks/
+        │   └── main.yml                     # Tasks principales (create/delete users)
+        │
+        ├── templates/
+        │   ├── user_present.sql.j2          # Template SQL pour créer/modifier users
+        │   └── drop_user.sql.j2             # Template SQL pour supprimer users
+        │
+        ├── handlers/                        # (Optionnel)
+        │   └── main.yml
+        │
+        └── defaults/                        # (Optionnel)
+            └── main.yml
