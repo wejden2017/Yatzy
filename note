@@ -1,0 +1,223 @@
+🔑 Fonctionnalités clés
+1. Vérification de l'existence
+sqlSELECT COUNT(*) INTO v_cnt FROM dba_users WHERE username = UPPER('{{ item.login }}');
+
+Vérifie si l'utilisateur existe avant toute action
+
+2. Comptage des sessions actives
+sqlSELECT COUNT(*) INTO v_session_count 
+FROM v$session 
+WHERE username = UPPER('{{ item.login }}');
+
+Compte combien de sessions sont ouvertes pour cet utilisateur
+
+3. Kill des sessions avec détails
+sqlFOR session_rec IN (
+    SELECT sid, serial#, status, machine, program, logon_time
+    FROM v$session 
+    WHERE username = UPPER('{{ item.login }}')
+) LOOP
+    EXECUTE IMMEDIATE 'ALTER SYSTEM KILL SESSION ''' || 
+                      session_rec.sid || ',' || session_rec.serial# || 
+                      ''' IMMEDIATE';
+END LOOP;
+
+Affiche les détails de chaque session (SID, machine, programme)
+Tue chaque session avec IMMEDIATE
+Continue même si une session échoue
+
+4. Attente après kill
+sqlDBMS_LOCK.SLEEP(2);
+
+Attend 2 secondes pour que les sessions se terminent proprement
+
+5. Gestion d'erreurs robuste
+
+Compte les sessions tuées avec succès
+Compte les erreurs de kill
+Affiche un résumé détaillé
+Continue même si certaines sessions ne peuvent pas être tuées
+
+6. DROP CASCADE
+sqlEXECUTE IMMEDIATE 'DROP USER {{ item.login }} CASCADE';
+```
+- Supprime l'utilisateur et **tous ses objets**
+
+---
+
+## 🧪 **Exemples de sortie**
+
+### **Cas 1 : Utilisateur sans session active**
+```
+========================================
+Dropping user: toto
+========================================
+
+✓ User toto found in database
+
+✓ No active sessions found for user toto
+
+Dropping user toto CASCADE...
+✓ User toto dropped successfully
+
+Details:
+  - All objects owned by toto were dropped
+  - All privileges granted to toto were revoked
+  - All roles granted to toto were revoked
+
+============================================
+User: toto
+Action: DELETE
+Status: ✓ COMPLETED
+============================================
+```
+
+---
+
+### **Cas 2 : Utilisateur avec sessions actives**
+```
+========================================
+Dropping user: bob
+========================================
+
+✓ User bob found in database
+
+⚠ Found 3 active session(s) for user bob
+Attempting to kill all sessions...
+
+  Killing session:
+    - SID: 123, Serial#: 45678
+    - Status: ACTIVE
+    - Machine: workstation-01
+    - Program: SQL Developer
+    ✓ Session killed successfully
+
+  Killing session:
+    - SID: 456, Serial#: 78901
+    - Status: INACTIVE
+    - Machine: app-server-02
+    - Program: JDBC Thin Client
+    ✓ Session killed successfully
+
+  Killing session:
+    - SID: 789, Serial#: 12345
+    - Status: ACTIVE
+    - Machine: workstation-03
+    - Program: sqlplus@linux
+    ✓ Session killed successfully
+
+Session kill summary:
+  - Total sessions found: 3
+  - Successfully killed: 3
+  - Errors: 0
+
+Waiting 2 seconds for sessions to terminate...
+
+Dropping user bob CASCADE...
+✓ User bob dropped successfully
+
+Details:
+  - All objects owned by bob were dropped
+  - All privileges granted to bob were revoked
+  - All roles granted to bob were revoked
+
+============================================
+User: bob
+Action: DELETE
+Status: ✓ COMPLETED
+============================================
+```
+
+---
+
+### **Cas 3 : Erreur lors du kill de session**
+```
+========================================
+Dropping user: alice
+========================================
+
+✓ User alice found in database
+
+⚠ Found 2 active session(s) for user alice
+Attempting to kill all sessions...
+
+  Killing session:
+    - SID: 234, Serial#: 56789
+    - Status: ACTIVE
+    - Machine: remote-server
+    - Program: JDBC Thin Client
+    ✓ Session killed successfully
+
+  Killing session:
+    - SID: 567, Serial#: 89012
+    - Status: KILLED
+    - Machine: app-server
+    - Program: Python Script
+    ✗ ERROR killing session: ORA-00030: User session ID does not exist
+
+Session kill summary:
+  - Total sessions found: 2
+  - Successfully killed: 1
+  - Errors: 1
+
+Waiting 2 seconds for sessions to terminate...
+
+Dropping user alice CASCADE...
+✓ User alice dropped successfully
+
+Details:
+  - All objects owned by alice were dropped
+  - All privileges granted to alice were revoked
+  - All roles granted to alice were revoked
+
+============================================
+User: alice
+Action: DELETE
+Status: ✓ COMPLETED
+============================================
+```
+
+---
+
+### **Cas 4 : Utilisateur inexistant**
+```
+========================================
+Dropping user: nobody
+========================================
+
+⚠ User nobody does not exist in database
+  Nothing to drop
+
+============================================
+User: nobody
+Action: DELETE
+Status: ✓ COMPLETED
+============================================
+
+⚠️ Note importante : Privilèges requis
+Pour tuer des sessions, l'utilisateur system doit avoir le privilège ALTER SYSTEM :
+sql-- Vérifier les privilèges
+SELECT * FROM dba_sys_privs WHERE grantee = 'SYSTEM' AND privilege = 'ALTER SYSTEM';
+
+-- Si nécessaire, accorder le privilège (en tant que SYSDBA)
+GRANT ALTER SYSTEM TO SYSTEM;
+
+🔐 Sécurité
+Le template utilise IMMEDIATE pour forcer la terminaison :
+sqlALTER SYSTEM KILL SESSION 'sid,serial#' IMMEDIATE
+Effet :
+
+Termine immédiatement la session
+Rollback automatique des transactions en cours
+Libère les ressources (locks, etc.)
+
+
+✅ Checklist d'utilisation
+
+ L'utilisateur system a le privilège ALTER SYSTEM
+ Le template est dans roles/oracle_user_admin/templates/drop_user.sql.j2
+ La variable item.login est définie dans users_env_*.yml
+ L'action est définie comme action: "delete"
+
+
+Voilà ! Ce template est robuste et production-ready avec gestion complète des sessions actives ! 🚀💪
