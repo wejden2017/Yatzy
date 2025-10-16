@@ -1,0 +1,156 @@
+-- ============================================
+-- Oracle User Management - Create/Modify User
+-- Environment: {{ lookup('env', 'ENV') | upper }}
+-- User: {{ item.login }}
+-- Action: {{ item.action | default('create') }}
+-- ============================================
+
+SET SERVEROUTPUT ON SIZE UNLIMITED
+SET FEEDBACK OFF
+SET VERIFY OFF
+SET HEADING OFF
+SET ECHO OFF
+
+DECLARE
+    v_cnt INTEGER;
+    v_pwd VARCHAR2(512) := '{{ (item.password | default(_default_password)) | replace("'", "''") }}';
+    v_action VARCHAR2(32) := '{{ item.action | default("create") | lower }}';
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    DBMS_OUTPUT.PUT_LINE('Processing user: {{ item.login }}');
+    DBMS_OUTPUT.PUT_LINE('Action: ' || v_action);
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    DBMS_OUTPUT.PUT_LINE('');
+    
+    -- Vérifier si l'utilisateur existe
+    SELECT COUNT(*) INTO v_cnt FROM dba_users WHERE username = UPPER('{{ item.login }}');
+    
+    IF v_cnt = 0 THEN
+        -- CREATE USER
+        DBMS_OUTPUT.PUT_LINE('Creating user {{ item.login }}...');
+        EXECUTE IMMEDIATE 'CREATE USER {{ item.login }} IDENTIFIED BY "' || v_pwd || '"';
+        DBMS_OUTPUT.PUT_LINE('✓ User {{ item.login }} created');
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('User {{ item.login }} already exists');
+        -- RESET PASSWORD si demandé
+        IF v_action IN ('create','reset-password') THEN
+            DBMS_OUTPUT.PUT_LINE('Resetting password for {{ item.login }}...');
+            EXECUTE IMMEDIATE 'ALTER USER {{ item.login }} IDENTIFIED BY "' || v_pwd || '"';
+            DBMS_OUTPUT.PUT_LINE('✓ Password reset for {{ item.login }}');
+        END IF;
+    END IF;
+    
+    DBMS_OUTPUT.PUT_LINE('');
+END;
+/
+
+-- Grant CREATE SESSION
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('Granting CREATE SESSION to {{ item.login }}...');
+    EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO {{ item.login }}';
+    DBMS_OUTPUT.PUT_LINE('✓ CREATE SESSION granted');
+EXCEPTION 
+    WHEN OTHERS THEN 
+        IF SQLCODE = -1927 THEN
+            DBMS_OUTPUT.PUT_LINE('  (CREATE SESSION already granted)');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('✗ ERROR granting CREATE SESSION: ' || SQLERRM);
+            RAISE;
+        END IF;
+END;
+/
+
+-- Grant des rôles
+{% for r in item.roles | default([]) %}
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('Granting role {{ r }} to {{ item.login }}...');
+    EXECUTE IMMEDIATE 'GRANT {{ r }} TO {{ item.login }}';
+    DBMS_OUTPUT.PUT_LINE('✓ Role {{ r }} granted');
+EXCEPTION 
+    WHEN OTHERS THEN 
+        IF SQLCODE = -1927 THEN
+            DBMS_OUTPUT.PUT_LINE('  (Role {{ r }} already granted)');
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('✗ ERROR granting role {{ r }}: ' || SQLERRM);
+            RAISE;
+        END IF;
+END;
+/
+{% endfor %}
+
+-- Default role
+{% if item.roles is defined and item.roles|length > 0 %}
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('Setting default roles...');
+    EXECUTE IMMEDIATE 'ALTER USER {{ item.login }} DEFAULT ROLE {{ item.roles | join(", ") }}';
+    DBMS_OUTPUT.PUT_LINE('✓ Default roles set: {{ item.roles | join(", ") }}');
+END;
+/
+{% endif %}
+
+-- Appel de la procédure pour chaque schéma
+{% if item.schemas is defined and item.schemas|length > 0 %}
+DECLARE
+    v_error_msg VARCHAR2(4000);
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('Granting access to schemas...');
+    DBMS_OUTPUT.PUT_LINE('');
+{% for s in item.schemas %}
+    
+    BEGIN
+        DBMS_OUTPUT.PUT_LINE('----------------------------------------');
+        DBMS_OUTPUT.PUT_LINE('Schema: {{ s }} -> User: {{ item.login }}');
+        DBMS_OUTPUT.PUT_LINE('----------------------------------------');
+        
+        {{ grant_proc_owner | default('SYS') }}.{{ grant_proc_name | default('GRANT_DEV_ACCESS_TO_SCHEMA') }}(
+            p_schema_name => '{{ s }}',
+            p_role_name   => '{{ item.login }}'
+        );
+        
+        DBMS_OUTPUT.PUT_LINE('✓ Access granted on schema {{ s }}');
+        DBMS_OUTPUT.PUT_LINE('');
+    EXCEPTION
+        WHEN OTHERS THEN
+            v_error_msg := SQLERRM;
+            DBMS_OUTPUT.PUT_LINE('✗ ERROR granting access on {{ s }}: ' || v_error_msg);
+            DBMS_OUTPUT.PUT_LINE('');
+            RAISE;
+    END;
+{% endfor %}
+    
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    DBMS_OUTPUT.PUT_LINE('All schema grants completed');
+    DBMS_OUTPUT.PUT_LINE('========================================');
+END;
+/
+{% endif %}
+
+-- Lock/Unlock selon l'action
+{% set a = (item.action | default('create') | lower) %}
+{% if a == 'lock' %}
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('Locking account {{ item.login }}...');
+    EXECUTE IMMEDIATE 'ALTER USER {{ item.login }} ACCOUNT LOCK';
+    DBMS_OUTPUT.PUT_LINE('🔒 Account {{ item.login }} locked');
+END;
+/
+{% elif a in ['create','unlock','reset-password'] %}
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('Unlocking account {{ item.login }}...');
+    EXECUTE IMMEDIATE 'ALTER USER {{ item.login }} ACCOUNT UNLOCK';
+    DBMS_OUTPUT.PUT_LINE('🔓 Account {{ item.login }} unlocked');
+END;
+/
+{% endif %}
+
+-- Summary
+PROMPT
+PROMPT ============================================
+PROMPT User: {{ item.login }}
+PROMPT Action: {{ item.action | default('create') | upper }}
+PROMPT Status: ✓ COMPLETED
+PROMPT ============================================
+PROMPT
