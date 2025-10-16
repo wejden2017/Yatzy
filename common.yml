@@ -1,0 +1,40 @@
+inventory/common.yml
+# ============================================
+# Common Variables for all environments
+# ============================================
+
+all:
+  vars:
+    ansible_connection: ssh
+    ansible_port: 22
+    ansible_user: ec2-user
+    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
+    ansible_python_interpreter: '/usr/bin/python3'
+    
+    oracle_service_map:
+      dev: "CATSDEVPDB1"
+      qa: "CATSQAPDB1"
+      uat: "CATSUATPDB1"
+    
+    oracle_connect:
+      host: "{{ hostvars[inventory_hostname]['private_ip'] | default('localhost') }}"
+      port: 1521
+      service: "{{ oracle_service_map[lookup('env', 'ENV')] }}"
+      username: "system"
+      password: "{{ lookup('env', 'SYSDBA_PASSWORD') }}"
+      use_sysdba: false
+    
+    oracle_container:
+      enabled: false
+    
+    oracle_home: "/u01/app/oracle/product/19.0.0.0/dbhome_1"
+    
+    grant_proc_owner: "SYS"
+    grant_proc_name: "GRANT_DEV_ACCESS_TO_SCHEMA"
+    
+    default_password: "ChangeMe2025!"
+    users_file: "env/users_env_{{ lookup('env', 'ENV') }}.yml"
+    db_users: []
+
+oracle_servers:
+  vars: {}
