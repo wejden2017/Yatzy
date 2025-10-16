@@ -1,26 +1,36 @@
 ---
+# ============================================
+# Oracle User Admin - Main Tasks
+# Oracle 19c Enterprise sur EC2 (sans Docker)
+# ============================================
+
+# 1) Charger le fichier env
 - name: Load environment users file
   include_vars:
     file: "{{ users_file }}"
     name: env_cfg
+  tags: [always]
 
+# 2) Mettre en facts
 - name: Merge env config into facts
   set_fact:
     _users: "{{ env_cfg.users | default([]) }}"
     _default_password: "{{ env_cfg.default_password | default(default_password) }}"
+  tags: [always]
 
-- name: Build sqlplus command and docker exec prefix
+# 3) Construire la commande sqlplus (pas de Docker)
+- name: Build sqlplus command
   set_fact:
     _ora_sqlplus: >-
       {{ (oracle_connect.use_sysdba | default(false))
          | ternary('sqlplus -s / as sysdba',
                    'sqlplus -s ' ~ oracle_connect.username ~ '/' ~ oracle_connect.password ~
                    '@//' ~ oracle_connect.host ~ ':' ~ oracle_connect.port ~ '/' ~ oracle_connect.service) }}
-    _ora_exec_prefix: >-
-      {{ (oracle_container.enabled | default(false))
-         | ternary('docker exec -i ' ~ oracle_container.name ~ ' bash -lc', '') }}
+  tags: [always]
 
+# ====== NON-DELETE (create / reset-password / lock / unlock) ======
 
+# 4) Générer les SQL
 - name: Render SQL for non-delete actions
   when: item.action | lower != 'delete'
   template:
@@ -28,57 +38,59 @@
     dest: "/tmp/user_{{ item.login }}.sql"
     mode: "0644"
   loop: "{{ _users }}"
-  loop_control: { label: "{{ item.login }}" }
+  loop_control: 
+    label: "{{ item.login }}"
+  tags: [users, create]
 
-- name: Copy per-user SQL into container
-  when:
-    - oracle_container.enabled | default(false)
-    - item.action | lower != 'delete'
-  shell: |
-    docker cp /tmp/user_{{ item.login }}.sql {{ oracle_container.name }}:/tmp/user_{{ item.login }}.sql
-  args: { executable: /bin/bash }
-  loop: "{{ _users }}"
-  loop_control: { label: "{{ item.login }}" }
-
-# 6) Exécuter
+# 5) Exécuter directement sur EC2 (sans Docker)
 - name: Apply SQL for non-delete actions
   when: item.action | lower != 'delete'
   shell: |
     {% set sqlfile = '/tmp/user_' ~ item.login ~ '.sql' %}
-    {% if oracle_container.enabled | default(false) -%}
-    {{ _ora_exec_prefix }} "sqlplus -L -s /nolog <<'SQL'
-    WHENEVER OSERROR EXIT 1
-    WHENEVER SQLERROR EXIT 1
-    CONNECT {{ oracle_connect.username }}/\"{{ oracle_connect.password }}\"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
-    SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
-    SPOOL /tmp/ansible_user_{{ item.login }}.log
-    @{{ sqlfile }}
-    SPOOL OFF
-    EXIT
-    SQL"
-    {% else -%}
     sqlplus -L -s /nolog <<'SQL'
     WHENEVER OSERROR EXIT 1
-    WHENEVER SQLERROR EXIT 1
+    WHENEVER SQLERROR EXIT SQL.SQLCODE
     CONNECT {{ oracle_connect.username }}/\"{{ oracle_connect.password }}\"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
     SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+    SET SERVEROUTPUT ON SIZE UNLIMITED
     SPOOL /tmp/ansible_user_{{ item.login }}.log
     @{{ sqlfile }}
     SPOOL OFF
     EXIT
     SQL
-    {%- endif %}
-  args: { executable: /bin/bash }
+  args: 
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+    LD_LIBRARY_PATH: "{{ oracle_home }}/lib"
+    PATH: "{{ oracle_home }}/bin:{{ ansible_env.PATH }}"
   register: apply_user
-  failed_when: apply_user.rc != 0 or ('ORA-' in (apply_user.stdout | default('')) )
+  failed_when: 
+    - apply_user.rc != 0
+    - "'ORA-' in (apply_user.stdout | default(''))"
+    - "'ORA-00955' not in (apply_user.stdout | default(''))"  # User exists
+    - "'ORA-01920' not in (apply_user.stdout | default(''))"  # Role granted
   changed_when: true
   loop: "{{ _users }}"
-  loop_control: { label: "{{ item.login }}" }
+  loop_control: 
+    label: "{{ item.login }}"
+  tags: [users, create]
 
+- name: Display user creation logs
+  when: 
+    - item.action | lower != 'delete'
+    - ansible_verbosity >= 1
+  debug:
+    msg: "{{ apply_user.results[loop_index].stdout_lines | default([]) }}"
+  loop: "{{ _users }}"
+  loop_control:
+    index_var: loop_index
+    label: "{{ item.login }}"
+  tags: [users, create]
 
 # ====== DELETE ======
 
-# 7) Générer le SQL de drop
+# 6) Générer le SQL de drop
 - name: Render SQL for delete
   when: item.action | lower == 'delete'
   template:
@@ -86,62 +98,66 @@
     dest: "/tmp/drop_{{ item.login }}.sql"
     mode: "0644"
   loop: "{{ _users }}"
-  loop_control: { label: "{{ item.login }}" }
+  loop_control: 
+    label: "{{ item.login }}"
+  tags: [users, delete]
 
-# 8) Copier dans le conteneur (drop)
-- name: Copy drop SQL into container
-  when:
-    - oracle_container.enabled | default(false)
-    - item.action | lower == 'delete'
-  shell: |
-    docker cp /tmp/drop_{{ item.login }}.sql {{ oracle_container.name }}:/tmp/drop_{{ item.login }}.sql
-  args: { executable: /bin/bash }
-  loop: "{{ _users }}"
-  loop_control: { label: "{{ item.login }}" }
-
-# 9) Exécuter le drop
+# 7) Exécuter le drop directement sur EC2 (sans Docker)
 - name: Apply SQL for delete
   when: (item.action | default('') | lower) == 'delete'
   shell: |
     {% set sqlfile = '/tmp/drop_' ~ item.login ~ '.sql' %}
-    {% if oracle_container.enabled | default(false) -%}
-    {{ _ora_exec_prefix }} "sqlplus -L -s /nolog <<'SQL'
-    WHENEVER OSERROR EXIT 1
-    WHENEVER SQLERROR EXIT 1
-    CONNECT {{ oracle_connect.username }}/\"{{ oracle_connect.password }}\"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
-    SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
-    SPOOL /tmp/ansible_drop_{{ item.login }}.log
-    @{{ sqlfile }}
-    SPOOL OFF
-    EXIT
-    SQL"
-    {% else -%}
     sqlplus -L -s /nolog <<'SQL'
     WHENEVER OSERROR EXIT 1
-    WHENEVER SQLERROR EXIT 1
+    WHENEVER SQLERROR EXIT SQL.SQLCODE
     CONNECT {{ oracle_connect.username }}/\"{{ oracle_connect.password }}\"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
     SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+    SET SERVEROUTPUT ON SIZE UNLIMITED
     SPOOL /tmp/ansible_drop_{{ item.login }}.log
     @{{ sqlfile }}
     SPOOL OFF
     EXIT
     SQL
-    {%- endif %}
   args:
     executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+    LD_LIBRARY_PATH: "{{ oracle_home }}/lib"
+    PATH: "{{ oracle_home }}/bin:{{ ansible_env.PATH }}"
   register: drop_user
-  failed_when: drop_user.rc != 0 or ('ORA-' in (drop_user.stdout | default('')) ) or ('ORA-' in (drop_user.stderr | default('')) )
+  failed_when: 
+    - drop_user.rc != 0
+    - "'ORA-' in (drop_user.stdout | default(''))"
+    - "'ORA-01918' not in (drop_user.stdout | default(''))"  # User does not exist
   changed_when: true
   loop: "{{ _users }}"
   loop_control:
     label: "{{ item.login }}"
+  tags: [users, delete]
 
-- name: Show drop SQL log on failure
-  when: drop_user is failed and (item.action | default('') | lower) == 'delete'
-  shell: docker exec -it {{ oracle_container.name }} bash -lc "sed -n '1,200p' /tmp/ansible_drop_{{ item.login }}.log || true"
-  args:
-    executable: /bin/bash
+- name: Display drop logs
+  when: 
+    - item.action | lower == 'delete'
+    - ansible_verbosity >= 1
+  debug:
+    msg: "{{ drop_user.results[loop_index].stdout_lines | default([]) }}"
   loop: "{{ _users }}"
   loop_control:
+    index_var: loop_index
     label: "{{ item.login }}"
+  tags: [users, delete]
 
+# ====== CLEANUP ======
+
+- name: Cleanup temporary SQL files
+  file:
+    path: "{{ item_file }}"
+    state: absent
+  with_fileglob:
+    - "/tmp/user_*.sql"
+    - "/tmp/drop_*.sql"
+    - "/tmp/ansible_user_*.log"
+    - "/tmp/ansible_drop_*.log"
+  loop_control:
+    loop_var: item_file
+  tags: [cleanup, never]
