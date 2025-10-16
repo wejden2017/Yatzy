@@ -1,0 +1,347 @@
+# ============================================
+# GitLab CI/CD Pipeline
+# Oracle User Management - CATS DB Admin
+# ============================================
+
+stages:
+  - prepare_auth
+  - validate
+  - apply
+
+variables:
+  ANSIBLE_FORCE_COLOR: "true"
+  ANSIBLE_HOST_KEY_CHECKING: "false"
+  VAULT_ADDR: "https://vaultent.ppe.lseg.com"
+  VAULT_NAMESPACE: "aws"
+  VAULT_ROLE: "app-00451-developer"
+  ASSET_ID: "app-00451"
+  AWS_DEFAULT_REGION: "eu-west-2"
+  ANSIBLE_VAULT_PASSWORD_FILE: ".vault_pass"
+  PLAYBOOK: "manage_db_users.yml"
+
+# ============================================
+# Templates partagés
+# ============================================
+
+.before_script_common:
+  before_script:
+    - !reference [ .vault-artifact-decrypter, before_script ]
+    - pip3 install boto3
+    - ansible-galaxy collection install ansible.posix
+    - chmod +x inventory/aws_ec2_inventory.py
+    - export ANSIBLE_CONFIG=./ansible.cfg
+    - echo "$VAULT_PASSWORD" > $ANSIBLE_VAULT_PASSWORD_FILE
+    - |
+      if [ "$IS_BASE64" = "true" ]; then
+        echo "$SSH_PRIVATE_KEY" | base64 -d > ssh_key.pem && chmod 600 ssh_key.pem
+      else
+        echo "$SSH_PRIVATE_KEY" > ssh_key.pem && chmod 600 ssh_key.pem
+      fi
+    - export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
+    - export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
+    - export AWS_REGION="${AWS_REGION}"
+    - export ENV=${ENV}
+    - echo -e "\e[35m[INFO]\033[0m \033[1;36m${ENV} environment selected\033[0m"
+
+.validate_ansible_param:
+  before_script:
+    - !reference [ .before_script_common, before_script ]
+  script:
+    - |
+      if [[ "$ENV" != "dev" && -n "$ANSIBLE_PARAM" ]]; then
+        echo -e "\033[0;31m[ERROR]\033[0m ANSIBLE_PARAM is only allowed in dev environment. Current ENV is ${ENV}"
+        exit 1
+      fi
+
+.ansible_cats_script_common:
+  script:
+    - echo -e "\e[35m[INFO]\033[0m \033[1;36mStart ansible ${PLAYBOOK} with actions ${ACTIONS}\033[0m"
+    - ansible-playbook -i inventory/aws_ec2_inventory.py ${PLAYBOOK} --vault-password-file=$ANSIBLE_VAULT_PASSWORD_FILE -e "env=$ENV" ansible_ssh_private_key_file=$(pwd)/ssh_key.pem ${ANSIBLE_PARAM}
+
+# ============================================
+# Stage 1: Authentification AWS + Vault
+# ============================================
+
+.prepare_auth:
+  stage: prepare_auth
+  image: registry.dxl.lseg.com/ci/stable/security/vault-service/aws:1092025-3a4905ca
+  script:
+    - echo "🔐 Authenticating with AWS..."
+    - export VS_FUNCTION=vault-aws-auth
+    - vault-service
+  artifacts:
+    reports:
+      dotenv: vault-service.env
+    expire_in: 1 hour
+
+aws_auth:
+  extends: .prepare_auth
+  only:
+    - dev
+    - qa
+    - uat
+    - merge_requests
+  tags:
+    - docker
+
+# ============================================
+# Secrets DEV
+# ============================================
+
+secret_from_vault_dev:
+  stage: prepare_auth
+  needs: [aws_auth]
+  image: registry.dxl.lseg.com/ci/stable/security/vault-service/aws:1092025-3a4905ca
+  script:
+    - echo "🔑 Retrieving secrets from Vault for DEV..."
+    - vault-service
+    - export VS_FUNCTION=vault-secret-retriever
+    
+    # EC2 Key Pair
+    - export VAULT_SECRET_PATH="gitlab/app-00451/kv/aws-cats-dev"
+    - export VAULT_SECRET_KEY="EC2_KEY_PAIR"
+    - vault-service
+    - echo "✓ EC2_KEY_PAIR retrieved"
+    
+    # SYSDBA Password
+    - export VAULT_SECRET_KEY="SYSDBA_PASSWORD"
+    - vault-service
+    - echo "✓ SYSDBA_PASSWORD retrieved"
+    
+    # VAULT_PASSWORD (optionnel)
+    - export VAULT_SECRET_KEY="VAULT_PASSWORD"
+    - vault-service || echo "⚠ VAULT_PASSWORD not found"
+    
+    # Export to dotenv
+    - echo "export SYSDBA_PASSWORD='${SYSDBA_PASSWORD}'" >> vault-secrets.env
+    - echo "export SSH_PRIVATE_KEY='${EC2_KEY_PAIR}'" >> vault-secrets.env
+    - echo "export VAULT_PASSWORD='${VAULT_PASSWORD}'" >> vault-secrets.env
+    - echo "export ENV='dev'" >> vault-secrets.env
+    
+  artifacts:
+    reports:
+      dotenv: vault-secrets.env
+    expire_in: 1 hour
+  only:
+    - dev
+    - merge_requests
+  tags:
+    - docker
+
+# ============================================
+# Secrets QA
+# ============================================
+
+secret_from_vault_qa:
+  stage: prepare_auth
+  needs: [aws_auth]
+  image: registry.dxl.lseg.com/ci/stable/security/vault-service/aws:1092025-3a4905ca
+  script:
+    - echo "🔑 Retrieving secrets from Vault for QA..."
+    - vault-service
+    - export VS_FUNCTION=vault-secret-retriever
+    
+    - export VAULT_SECRET_PATH="gitlab/app-00451/kv/aws-cats-qa"
+    - export VAULT_SECRET_KEY="EC2_KEY_PAIR"
+    - vault-service
+    
+    - export VAULT_SECRET_KEY="SYSDBA_PASSWORD"
+    - vault-service
+    
+    - export VAULT_SECRET_KEY="VAULT_PASSWORD"
+    - vault-service || true
+    
+    - echo "export SYSDBA_PASSWORD='${SYSDBA_PASSWORD}'" >> vault-secrets.env
+    - echo "export SSH_PRIVATE_KEY='${EC2_KEY_PAIR}'" >> vault-secrets.env
+    - echo "export VAULT_PASSWORD='${VAULT_PASSWORD}'" >> vault-secrets.env
+    - echo "export ENV='qa'" >> vault-secrets.env
+    
+  artifacts:
+    reports:
+      dotenv: vault-secrets.env
+    expire_in: 1 hour
+  only:
+    - qa
+    - merge_requests
+  tags:
+    - docker
+
+# ============================================
+# Secrets UAT
+# ============================================
+
+secret_from_vault_uat:
+  stage: prepare_auth
+  needs: [aws_auth]
+  image: registry.dxl.lseg.com/ci/stable/security/vault-service/aws:1092025-3a4905ca
+  script:
+    - echo "🔑 Retrieving secrets from Vault for UAT..."
+    - vault-service
+    - export VS_FUNCTION=vault-secret-retriever
+    
+    - export VAULT_SECRET_PATH="gitlab/app-00451/kv/aws-cats-uat"
+    - export VAULT_SECRET_KEY="EC2_KEY_PAIR"
+    - vault-service
+    
+    - export VAULT_SECRET_KEY="SYSDBA_PASSWORD"
+    - vault-service
+    
+    - export VAULT_SECRET_KEY="VAULT_PASSWORD"
+    - vault-service || true
+    
+    - echo "export SYSDBA_PASSWORD='${SYSDBA_PASSWORD}'" >> vault-secrets.env
+    - echo "export SSH_PRIVATE_KEY='${EC2_KEY_PAIR}'" >> vault-secrets.env
+    - echo "export VAULT_PASSWORD='${VAULT_PASSWORD}'" >> vault-secrets.env
+    - echo "export ENV='uat'" >> vault-secrets.env
+    
+  artifacts:
+    reports:
+      dotenv: vault-secrets.env
+    expire_in: 1 hour
+  only:
+    - uat
+    - merge_requests
+  tags:
+    - docker
+
+# ============================================
+# Stage 2: Validation
+# ============================================
+
+validate:dev:
+  extends:
+    - .ansible_cats_script_common
+    - .validate_ansible_param
+  stage: validate
+  image: cytopia/ansible:latest-tools
+  needs: [secret_from_vault_dev]
+  variables:
+    ACTIONS: "validate"
+    ANSIBLE_PARAM: "--check --diff"
+  only:
+    - merge_requests
+  changes:
+    - env/users_env_dev.yml
+    - inventory/**/*
+    - roles/**/*
+    - manage_db_users.yml
+    - .gitlab-ci.yml
+  tags:
+    - docker
+
+validate:qa:
+  extends:
+    - .ansible_cats_script_common
+    - .validate_ansible_param
+  stage: validate
+  image: cytopia/ansible:latest-tools
+  needs: [secret_from_vault_qa]
+  variables:
+    ACTIONS: "validate"
+    ANSIBLE_PARAM: "--check --diff"
+  only:
+    - merge_requests
+  changes:
+    - env/users_env_qa.yml
+    - inventory/**/*
+    - roles/**/*
+    - manage_db_users.yml
+  tags:
+    - docker
+
+validate:uat:
+  extends:
+    - .ansible_cats_script_common
+    - .validate_ansible_param
+  stage: validate
+  image: cytopia/ansible:latest-tools
+  needs: [secret_from_vault_uat]
+  variables:
+    ACTIONS: "validate"
+    ANSIBLE_PARAM: "--check --diff"
+  only:
+    - merge_requests
+  changes:
+    - env/users_env_uat.yml
+    - inventory/**/*
+    - roles/**/*
+    - manage_db_users.yml
+  tags:
+    - docker
+
+# ============================================
+# Stage 3: Apply
+# ============================================
+
+apply:dev:
+  extends: .ansible_cats_script_common
+  stage: apply
+  image: cytopia/ansible:latest-tools
+  needs: [secret_from_vault_dev]
+  before_script:
+    - !reference [ .before_script_common, before_script ]
+  variables:
+    ACTIONS: "apply"
+    ANSIBLE_PARAM: "-v"
+  environment:
+    name: dev
+    action: start
+  only:
+    refs:
+      - dev
+    changes:
+      - env/users_env_dev.yml
+      - inventory/**/*
+      - roles/**/*
+      - manage_db_users.yml
+  tags:
+    - docker
+  when: on_success  # ✅ Automatique après merge sur dev
+
+apply:qa:
+  extends: .ansible_cats_script_common
+  stage: apply
+  image: cytopia/ansible:latest-tools
+  needs: [secret_from_vault_qa]
+  before_script:
+    - !reference [ .before_script_common, before_script ]
+  variables:
+    ACTIONS: "apply"
+    ANSIBLE_PARAM: "-v"
+  environment:
+    name: qa
+    action: start
+  only:
+    refs:
+      - qa
+    changes:
+      - env/users_env_qa.yml
+      - inventory/**/*
+      - roles/**/*
+  tags:
+    - docker
+  when: manual  # ⚠️ Manuel pour QA
+
+apply:uat:
+  extends: .ansible_cats_script_common
+  stage: apply
+  image: cytopia/ansible:latest-tools
+  needs: [secret_from_vault_uat]
+  before_script:
+    - !reference [ .before_script_common, before_script ]
+  variables:
+    ACTIONS: "apply"
+    ANSIBLE_PARAM: "-v"
+  environment:
+    name: uat
+    action: start
+  only:
+    refs:
+      - uat
+    changes:
+      - env/users_env_uat.yml
+      - inventory/**/*
+      - roles/**/*
+  tags:
+    - docker
+  when: manual  # ⚠️ Manuel pour UAT
