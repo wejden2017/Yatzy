@@ -1,0 +1,164 @@
+# ============================================
+# DEV Environment - User Management
+# ============================================
+
+default_password: "ChangeMe1234!"
+
+users:
+  - login: "zouertani"
+    roles: ["DEV_ROLE"]
+    action: "create"
+    schemas: ["LUCA", "LUCA3"]
+
+  - login: "dev_alice"
+    roles: ["DEV_ROLE"]
+    action: "create"
+    schemas: ["LUCA", "LUCA1", "LUCA2"]
+
+  - login: "toto"
+    action: "delete"
+```
+
+---
+
+### **`roles/oracle_user_admin/tasks/main.yml`**
+
+*(Fichier déjà fourni précédemment - version sans Docker)*
+
+---
+
+### **`roles/oracle_user_admin/templates/user_present.sql.j2`**
+
+*(Fichier déjà fourni précédemment)*
+
+---
+
+### **`roles/oracle_user_admin/templates/drop_user.sql.j2`**
+
+*(Fichier déjà fourni précédemment)*
+
+---
+
+### **`.gitignore`**
+```
+# Ansible
+*.retry
+.vault_pass
+ssh_key.pem
+vault-service.env
+vault-secrets.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Environments
+.env
+.venv
+env/
+venv/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+/tmp/
+README.md
+markdown
+# 🗄️ Oracle User Administration - CATS DB Admin
+
+Gestion automatisée des utilisateurs Oracle via GitLab CI/CD et Ansible.
+
+## 📋 Fonctionnalités
+
+- ✅ Création/Suppression d'utilisateurs
+- ✅ Attribution de rôles (DEV_ROLE, BA_ROLE, etc.)
+- ✅ Accès granulaire aux schémas
+- ✅ Lock/Unlock de comptes
+- ✅ Reset de mots de passe
+- ✅ Multi-environnements (DEV, QA, UAT)
+- ✅ Pipeline GitLab CI/CD automatique
+- ✅ Authentification AWS + Vault
+
+## 🏗️ Architecture
+```
+GitLab Merge Request
+         ↓
+   Pipeline CI/CD
+         ↓
+   AWS Auth + Vault (récupération secrets)
+         ↓
+   Inventory dynamique (scan EC2)
+         ↓
+   Ansible Playbook
+         ↓
+   Génération SQL
+         ↓
+   Exécution sur Oracle 19c Enterprise
+```
+
+## 🚀 Utilisation
+
+### 1️⃣ Ajouter un utilisateur
+
+Modifier `env/users_env_dev.yml` :
+```yaml
+users:
+  - login: "nouveau_dev"
+    roles: ["DEV_ROLE"]
+    action: "create"
+    schemas: ["LUCA", "LUCA3"]
+```
+
+### 2️⃣ Commit et Push
+```bash
+git checkout -b feature/add-user-nouveau-dev
+git add env/users_env_dev.yml
+git commit -m "feat: add nouveau_dev user"
+git push origin feature/add-user-nouveau-dev
+```
+
+### 3️⃣ Créer un Merge Request vers `dev`
+
+- Pipeline de validation s'exécute automatiquement
+- Après merge : pipeline d'application s'exécute automatiquement
+
+## 📦 Prérequis
+
+- EC2 avec Oracle 19c Enterprise
+- Tag EC2 : `Role=CATS-DATABASE`
+- Secrets dans Vault :
+  - `EC2_KEY_PAIR`
+  - `SYSDBA_PASSWORD`
+  - `VAULT_PASSWORD`
+
+## 🔧 Configuration
+
+Voir `inventory/common.yml` pour la configuration Oracle.
+
+## 📞 Support
+
+Pour toute question, contactez l'équipe DevOps.
+
+_____________________________________________________________________
+✅ Checklist finale
+ Tous les fichiers créés
+ inventory/aws_ec2_inventory.py exécutable (chmod +x)
+ ORACLE_HOME correct dans common.yml
+ Tags EC2 configurés : Role=CATS-DATABASE
+ Secrets dans Vault (3 environnements)
+ Branches GitLab : dev, qa, uat
+Voilà ! Votre projet est 100% prêt ! 🚀💪
+
+
