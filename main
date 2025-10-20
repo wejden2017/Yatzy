@@ -28,60 +28,69 @@
                    '@//' ~ oracle_connect.host ~ ':' ~ oracle_connect.port ~ '/' ~ oracle_connect.service) }}
   tags: [always]
 
-# ====== NON-DELETE (create / reset-password / lock / unlock) ======
+# ====== CREATE / LOCK / UNLOCK / RESET-PASSWORD ======
 
-# 4) Générer les SQL
+# 4) Générer les SQL (un fichier par user)
 - name: Render SQL for non-delete actions
-  when: item.action | lower != 'delete'
+  when: (item.action | default('create') | lower) != 'delete'
   template:
     src: user_present.sql.j2
     dest: "/tmp/user_{{ item.login }}.sql"
-    mode: "0644"
+    mode: "0640"
   loop: "{{ _users }}"
-  loop_control: 
+  loop_control:
     label: "{{ item.login }}"
+  become: true
+  become_user: oracle
   tags: [users, create]
 
-# 5) Exécuter directement sur EC2 (sans Docker)
+# 5) Exécuter sur l'EC2 (sqlplus local, pas Docker)
 - name: Apply SQL for non-delete actions
-  when: item.action | lower != 'delete'
+  when: (item.action | default('create') | lower) != 'delete'
   shell: |
-    {% set sqlfile = '/tmp/user_' ~ item.login ~ '.sql' %}
+    set -euo pipefail
     sqlplus -L -s /nolog <<'SQL'
     WHENEVER OSERROR EXIT 1
     WHENEVER SQLERROR EXIT SQL.SQLCODE
-    CONNECT {{ oracle_connect.username }}/\"{{ oracle_connect.password }}\"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
+    CONNECT {{ oracle_connect.username }}/"{{ oracle_connect.password }}"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
     SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
     SET SERVEROUTPUT ON SIZE UNLIMITED
     SPOOL /tmp/ansible_user_{{ item.login }}.log
-    @{{ sqlfile }}
+    @/tmp/user_{{ item.login }}.sql
     SPOOL OFF
     EXIT
     SQL
-  args: 
+  args:
     executable: /bin/bash
   environment:
     ORACLE_HOME: "{{ oracle_home }}"
     LD_LIBRARY_PATH: "{{ oracle_home }}/lib"
     PATH: "{{ oracle_home }}/bin:{{ ansible_env.PATH }}"
   register: apply_user
-  failed_when: 
-    - apply_user.rc != 0
-    - "'ORA-' in (apply_user.stdout | default(''))"
-    - "'ORA-00955' not in (apply_user.stdout | default(''))"  # User exists
-    - "'ORA-01920' not in (apply_user.stdout | default(''))"  # Role granted
-  changed_when: true
+  # changed_when: true -> on considère que si le script passe (rc==0) on a changé qqch ;
+  # si on tombe sur un ORA "déjà existant", on ne marque PAS changed.
+  changed_when: apply_user.rc == 0
+  # Échec uniquement si rc != 0 ET que ce n'est pas un code "acceptable" (existant, etc.)
+  failed_when: >
+    (apply_user.rc != 0) and
+    (apply_user.stdout is not defined or
+     ('ORA-00955' not in apply_user.stdout) and     # name is already used by an existing object
+     ('ORA-01920' not in apply_user.stdout))        # user/role name conflict (déjà existant)
+  no_log: true
   loop: "{{ _users }}"
-  loop_control: 
+  loop_control:
     label: "{{ item.login }}"
+  become: true
+  become_user: oracle
   tags: [users, create]
 
-- name: Display user creation logs
-  when: 
-    - item.action | lower != 'delete'
-    - ansible_verbosity >= 1
+# (Optionnel) Afficher un extrait des logs par user en mode verbeux
+- name: Display user creation logs (excerpt)
+  when:
+    - (item.action | default('create') | lower) != 'delete'
+    - ansible_verbosity | int >= 1
   debug:
-    msg: "{{ apply_user.results[loop_index].stdout_lines | default([]) }}"
+    msg: "{{ (apply_user.results[loop_index].stdout | default('')) | regex_findall('(?m)^.*$') | list | tail(20) }}"
   loop: "{{ _users }}"
   loop_control:
     index_var: loop_index
@@ -92,29 +101,31 @@
 
 # 6) Générer le SQL de drop
 - name: Render SQL for delete
-  when: item.action | lower == 'delete'
+  when: (item.action | default('') | lower) == 'delete'
   template:
     src: drop_user.sql.j2
     dest: "/tmp/drop_{{ item.login }}.sql"
-    mode: "0644"
+    mode: "0640"
   loop: "{{ _users }}"
-  loop_control: 
+  loop_control:
     label: "{{ item.login }}"
+  become: true
+  become_user: oracle
   tags: [users, delete]
 
-# 7) Exécuter le drop directement sur EC2 (sans Docker)
+# 7) Exécuter le drop
 - name: Apply SQL for delete
   when: (item.action | default('') | lower) == 'delete'
   shell: |
-    {% set sqlfile = '/tmp/drop_' ~ item.login ~ '.sql' %}
+    set -euo pipefail
     sqlplus -L -s /nolog <<'SQL'
     WHENEVER OSERROR EXIT 1
     WHENEVER SQLERROR EXIT SQL.SQLCODE
-    CONNECT {{ oracle_connect.username }}/\"{{ oracle_connect.password }}\"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
+    CONNECT {{ oracle_connect.username }}/"{{ oracle_connect.password }}"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
     SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
     SET SERVEROUTPUT ON SIZE UNLIMITED
     SPOOL /tmp/ansible_drop_{{ item.login }}.log
-    @{{ sqlfile }}
+    @/tmp/drop_{{ item.login }}.sql
     SPOOL OFF
     EXIT
     SQL
@@ -125,31 +136,35 @@
     LD_LIBRARY_PATH: "{{ oracle_home }}/lib"
     PATH: "{{ oracle_home }}/bin:{{ ansible_env.PATH }}"
   register: drop_user
-  failed_when: 
-    - drop_user.rc != 0
-    - "'ORA-' in (drop_user.stdout | default(''))"
-    - "'ORA-01918' not in (drop_user.stdout | default(''))"  # User does not exist
-  changed_when: true
+  changed_when: drop_user.rc == 0
+  # drop: on tolère ORA-01918 (user n'existe pas) -> pas un échec
+  failed_when: >
+    (drop_user.rc != 0) and
+    (drop_user.stdout is not defined or
+     ('ORA-01918' not in drop_user.stdout))         # user does not exist
+  no_log: true
   loop: "{{ _users }}"
   loop_control:
     label: "{{ item.login }}"
+  become: true
+  become_user: oracle
   tags: [users, delete]
 
-- name: Display drop logs
-  when: 
-    - item.action | lower == 'delete'
-    - ansible_verbosity >= 1
+- name: Display drop logs (excerpt)
+  when:
+    - (item.action | default('') | lower) == 'delete'
+    - ansible_verbosity | int >= 1
   debug:
-    msg: "{{ drop_user.results[loop_index].stdout_lines | default([]) }}"
+    msg: "{{ (drop_user.results[loop_index].stdout | default('')) | regex_findall('(?m)^.*$') | list | tail(20) }}"
   loop: "{{ _users }}"
   loop_control:
     index_var: loop_index
     label: "{{ item.login }}"
   tags: [users, delete]
 
-# ====== CLEANUP ======
+# ====== CLEANUP (manuel via --tags cleanup) ======
 
-- name: Cleanup temporary SQL files
+- name: Cleanup temporary SQL files (opt-in)
   file:
     path: "{{ item_file }}"
     state: absent
@@ -160,4 +175,6 @@
     - "/tmp/ansible_drop_*.log"
   loop_control:
     loop_var: item_file
+  become: true
+  become_user: oracle
   tags: [cleanup, never]
