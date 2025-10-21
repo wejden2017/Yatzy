@@ -1,40 +1,68 @@
-- name: Apply SQL for non-delete actions
-  when: (item.action | default('create') | lower) != 'delete'
-  shell: |
-    set -eo pipefail
-    sqlplus -L -s /nolog <<'SQL'
-    WHENEVER OSERROR EXIT 1
-    WHENEVER SQLERROR EXIT SQL.SQLCODE
-    CONNECT {{ oracle_connect.username }}/"{{ oracle_connect.password }}"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
-    SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
-    SET SERVEROUTPUT ON SIZE UNLIMITED
-    SPOOL /tmp/ansible_user_{{ item.login }}.log
-    @/tmp/user_{{ item.login }}.sql
-    SPOOL OFF
-    EXIT
-    SQL
-  args:
-    executable: /bin/bash
-  environment:
-    ORACLE_HOME: "{{ oracle_home }}"
-    LD_LIBRARY_PATH: "{{ oracle_home }}/lib"
-    PATH: "{{ oracle_home }}/bin:{{ ansible_env.PATH | default('') }}"
-  register: apply_user
-  # On ne marque pas "changed" si c'est juste "déjà existant"
-  changed_when: >
-    apply_user.rc == 0 and
-    ('ORA-00955' not in (apply_user.stdout | default(''))) and
-    ('ORA-01920' not in (apply_user.stdout | default('')))
-  # Échec seulement si rc!=0 et que ce n'est pas un cas tolérable
-  failed_when: >
-    apply_user.rc != 0 and
-    ('ORA-00955' not in (apply_user.stdout | default(''))) and
-    ('ORA-01920' not in (apply_user.stdout | default('')))
-  no_log: true
-  loop: "{{ _users }}"
-  loop_control:
-    label: "{{ item.login }}"
-  become: true
-  become_user: oracle
-  tags: [users, create]
+-- ================================================
+-- Create/Update user for LUCA* schemas
+-- Env: {{ lookup('env','ENV') | upper }}
+-- User: {{ item.login | upper }}
+-- ================================================
 
+SET SERVEROUTPUT ON SIZE UNLIMITED
+SET FEEDBACK OFF
+SET VERIFY OFF
+SET HEADING OFF
+SET ECHO OFF
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+
+DECLARE
+  v_user  VARCHAR2(128) := UPPER('{{ item.login }}');
+  v_pwd   VARCHAR2(512) := '{{ item.password | default(_default_password) }}';
+  v_cnt   INTEGER := 0;
+BEGIN
+  SELECT COUNT(*) INTO v_cnt FROM dba_users WHERE username = v_user;
+
+  IF v_cnt = 0 THEN
+    DBMS_OUTPUT.PUT_LINE('Creating user '||v_user||' ...');
+    EXECUTE IMMEDIATE
+      'CREATE USER '||v_user||
+      ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'||
+      ' DEFAULT TABLESPACE CATS_DATA'||
+      ' TEMPORARY TABLESPACE TEMP'||
+      ' QUOTA 2G ON CATS_DATA'||
+      ' PASSWORD EXPIRE';
+  ELSE
+    DBMS_OUTPUT.PUT_LINE('User '||v_user||' already exists; skipping CREATE.');
+    -- Optionnel : décommente si tu veux imposer le mot de passe à chaque run
+    -- EXECUTE IMMEDIATE 'ALTER USER '||v_user||' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"';
+  END IF;
+
+  -- Toujours s'assurer que le compte est utilisable
+  EXECUTE IMMEDIATE 'ALTER USER '||v_user||' ACCOUNT UNLOCK';
+
+  -- Appeler la proc pour chaque schéma LUCA*
+  {% for schema_name in (item.schemas | default([])) %}
+  BEGIN
+    DBMS_OUTPUT.PUT_LINE('Granting DEV access to schema {{ schema_name }} via proc...');
+    EXECUTE IMMEDIATE q'[BEGIN GRANT_DEV_ACCESS_TO_SCHEMA(p_schema_name => '{{ schema_name }}', p_role_name => 'DEV_ROLE'); END;]';
+  EXCEPTION
+    WHEN OTHERS THEN
+      -- si la proc n'existe pas ou autre : trace et relance
+      DBMS_OUTPUT.PUT_LINE('GRANT_DEV_ACCESS_TO_SCHEMA({{ schema_name }}) failed: '||SQLERRM);
+      RAISE;
+  END;
+  {% endfor %}
+
+  -- Rôle DEV_ROLE (idempotent si déjà accordé)
+  EXECUTE IMMEDIATE 'GRANT DEV_ROLE TO '||v_user;
+
+  -- Default role
+  EXECUTE IMMEDIATE 'ALTER USER '||v_user||' DEFAULT ROLE DEV_ROLE';
+
+  DBMS_OUTPUT.PUT_LINE('Done for '||v_user);
+END;
+/
+
+
+users:
+  - login: "zouertani"
+    action: "create"
+    # password: "ChangeMe123!"    # si absent → _default_password
+    roles: ["DEV_ROLE"]
+    schemas: ["LUCA","LUCA1","LUCA2","LUCA3","LUCA4","LUCA5","LUCA6","LUCA7","LUCA8","LUCA9"]
