@@ -1,12 +1,40 @@
-sqlplus -L -s /nolog <<'SQL'
-WHENEVER OSERROR EXIT 1
-WHENEVER SQLERROR EXIT SQL.SQLCODE
-CONNECT "system"/"t!awU!eYKZxxG5@"@//localhost:1521/CATSDEVPDB1
-SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
-SET SERVEROUTPUT ON SIZE UNLIMITED
-SPOOL /tmp/manual_user_userlch.log
-@/tmp/user_userlch.sql
-SPOOL OFF
-EXIT
-SQL
-echo "RC=$?"
+- name: Apply SQL for non-delete actions
+  when: (item.action | default('create') | lower) != 'delete'
+  shell: |
+    set -eo pipefail
+    sqlplus -L -s /nolog <<'SQL'
+    WHENEVER OSERROR EXIT 1
+    WHENEVER SQLERROR EXIT SQL.SQLCODE
+    CONNECT {{ oracle_connect.username }}/"{{ oracle_connect.password }}"@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
+    SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+    SET SERVEROUTPUT ON SIZE UNLIMITED
+    SPOOL /tmp/ansible_user_{{ item.login }}.log
+    @/tmp/user_{{ item.login }}.sql
+    SPOOL OFF
+    EXIT
+    SQL
+  args:
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+    LD_LIBRARY_PATH: "{{ oracle_home }}/lib"
+    PATH: "{{ oracle_home }}/bin:{{ ansible_env.PATH | default('') }}"
+  register: apply_user
+  # On ne marque pas "changed" si c'est juste "déjà existant"
+  changed_when: >
+    apply_user.rc == 0 and
+    ('ORA-00955' not in (apply_user.stdout | default(''))) and
+    ('ORA-01920' not in (apply_user.stdout | default('')))
+  # Échec seulement si rc!=0 et que ce n'est pas un cas tolérable
+  failed_when: >
+    apply_user.rc != 0 and
+    ('ORA-00955' not in (apply_user.stdout | default(''))) and
+    ('ORA-01920' not in (apply_user.stdout | default('')))
+  no_log: true
+  loop: "{{ _users }}"
+  loop_control:
+    label: "{{ item.login }}"
+  become: true
+  become_user: oracle
+  tags: [users, create]
+
