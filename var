@@ -1,77 +1,12 @@
-# ============================================
-# Common Variables for all environments
-# Oracle User Management - CATS DB Admin
-# ============================================
-
-all:
-  vars:
-    # ========================================
-    # Connexion SSH
-    # ========================================
-    ansible_connection: ssh
-    ansible_port: 22
-    ansible_user: ec2-user
-    ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-    ansible_python_interpreter: '/usr/bin/python3'
-    
-    # ========================================
-    # Oracle Service Name par environnement
-    # ========================================
-    oracle_service_map:
-      dev: "CATSDEVPDB1"
-      qa: "CATSQAPDB1"
-      uat: "CATSUATPDB1"
-    
-    # ========================================
-    # Configuration Oracle Connection
-    # ========================================
-    oracle_connect:
-      # L'IP vient de l'inventaire dynamique
-      host: "{{ hostvars[inventory_hostname]['private_ip'] | default('localhost') }}"
-      port: 1521
-      # Service Name déterminé dynamiquement selon ENV
-      service: "{{ oracle_service_map[lookup('env', 'ENV')] }}"
-      username: "system"
-      # Password récupéré depuis Vault via variable d'environnement
-      password: "{{ lookup('env', 'SYSDBA_PASSWORD') }}"
-      use_sysdba: false
-    
-    # ========================================
-    # Oracle Container (disabled sur EC2)
-    # ========================================
-    oracle_container:
-      enabled: false
-      name: ""
-    
-    # ========================================
-    # Oracle Environment sur EC2
-    # ========================================
-    # ORACLE_HOME path sur votre EC2
-    oracle_home: "/u01/app/oracle/product/19.0.0/dbhome_1"
-    
-    # ========================================
-    # Procédure stockée pour les grants
-    # ========================================
-    grant_proc_owner: "SYS"
-    grant_proc_name: "GRANT_DEV_ACCESS_TO_SCHEMA"
-    
-    # ========================================
-    # Configuration utilisateurs
-    # ========================================
-    # Mot de passe par défaut pour les nouveaux users
-    default_password: "ChangeMe2025!"
-    
-    # Fichier users dynamique selon l'environnement
-    users_file: "env/users_env_{{ lookup('env', 'ENV') }}.yml"
-    
-    # Liste des utilisateurs (sera remplie depuis users_file)
-    db_users: []
-
-# ========================================
-# Groupe oracle_servers
-# (Hosts ajoutés par l'inventaire dynamique)
-# ========================================
-oracle_servers:
-  vars:
-    # Variables additionnelles spécifiques au groupe oracle_servers
-    # (si nécessaire dans le futur)
+sqlplus -L -s /nolog <<'SQL'
+WHENEVER OSERROR EXIT 1
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+CONNECT system/"t!awU!eYKZxxG5@"/@//localhost:1521/CATSDEVPDB1
+SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+SET SERVEROUTPUT ON SIZE UNLIMITED
+SPOOL /tmp/manual_user_userlch.log
+@/tmp/user_userlch.sql
+SPOOL OFF
+EXIT
+SQL
+echo "RC=$?"
