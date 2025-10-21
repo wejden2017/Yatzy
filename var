@@ -1,9 +1,10 @@
 -- ================================================
--- Create/Update user for LUCA* schemas
+-- Create/Update user & grant DEV access to LUCA*
 -- Env: {{ lookup('env','ENV') | upper }}
 -- User: {{ item.login | upper }}
 -- ================================================
 
+SET DEFINE OFF
 SET SERVEROUTPUT ON SIZE UNLIMITED
 SET FEEDBACK OFF
 SET VERIFY OFF
@@ -25,44 +26,72 @@ BEGIN
       ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'||
       ' DEFAULT TABLESPACE CATS_DATA'||
       ' TEMPORARY TABLESPACE TEMP'||
-      ' QUOTA 2G ON CATS_DATA'||
-      ' PASSWORD EXPIRE';
+      ' QUOTA 2G ON CATS_DATA';
+      -- Si tu veux forcer un changement au premier login, dé-commente:
+      -- ' PASSWORD EXPIRE';
   ELSE
     DBMS_OUTPUT.PUT_LINE('User '||v_user||' already exists; skipping CREATE.');
-    -- Optionnel : décommente si tu veux imposer le mot de passe à chaque run
+    -- Optionnel: réinitialiser le mot de passe
     -- EXECUTE IMMEDIATE 'ALTER USER '||v_user||' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"';
   END IF;
 
-  -- Toujours s'assurer que le compte est utilisable
   EXECUTE IMMEDIATE 'ALTER USER '||v_user||' ACCOUNT UNLOCK';
-
-  -- Appeler la proc pour chaque schéma LUCA*
-  {% for schema_name in (item.schemas | default([])) %}
-  BEGIN
-    DBMS_OUTPUT.PUT_LINE('Granting DEV access to schema {{ schema_name }} via proc...');
-    EXECUTE IMMEDIATE q'[BEGIN GRANT_DEV_ACCESS_TO_SCHEMA(p_schema_name => '{{ schema_name }}', p_role_name => 'DEV_ROLE'); END;]';
-  EXCEPTION
-    WHEN OTHERS THEN
-      -- si la proc n'existe pas ou autre : trace et relance
-      DBMS_OUTPUT.PUT_LINE('GRANT_DEV_ACCESS_TO_SCHEMA({{ schema_name }}) failed: '||SQLERRM);
-      RAISE;
-  END;
-  {% endfor %}
-
-  -- Rôle DEV_ROLE (idempotent si déjà accordé)
-  EXECUTE IMMEDIATE 'GRANT DEV_ROLE TO '||v_user;
-
-  -- Default role
-  EXECUTE IMMEDIATE 'ALTER USER '||v_user||' DEFAULT ROLE DEV_ROLE';
-
-  DBMS_OUTPUT.PUT_LINE('Done for '||v_user);
 END;
 /
 
+-- Assurer l'existence du rôle DEV_ROLE + privilèges génériques utiles
+DECLARE
+  v_cnt INTEGER := 0;
+BEGIN
+  SELECT COUNT(*) INTO v_cnt FROM dba_roles WHERE role = 'DEV_ROLE';
+  IF v_cnt = 0 THEN
+    DBMS_OUTPUT.PUT_LINE('Creating role DEV_ROLE...');
+    EXECUTE IMMEDIATE 'CREATE ROLE DEV_ROLE';
+  ELSE
+    DBMS_OUTPUT.PUTLINE('Role DEV_ROLE already exists.');
+  END IF;
 
-users:
-  - login: "zouertani"
-    action: "create"
-    # password: "ChangeMe123!"    # si absent → _default_password
-    roles: ["DEV_ROLE"]
-    schemas: ["LUCA","LUCA1","LUCA2","LUCA3","LUCA4","LUCA5","LUCA6","LUCA7","LUCA8","LUCA9"]
+  -- (Facultatif) privilèges globaux utiles au dev; commente ce que tu ne souhaites pas
+  FOR g IN (
+    SELECT 'GRANT CREATE SESSION TO DEV_ROLE' AS stmt FROM dual UNION ALL
+    SELECT 'GRANT CREATE ANY TABLE TO DEV_ROLE' FROM dual UNION ALL
+    SELECT 'GRANT CREATE ANY VIEW TO DEV_ROLE' FROM dual UNION ALL
+    SELECT 'GRANT CREATE ANY SEQUENCE TO DEV_ROLE' FROM dual UNION ALL
+    SELECT 'GRANT CREATE ANY PROCEDURE TO DEV_ROLE' FROM dual
+  ) LOOP
+    BEGIN
+      EXECUTE IMMEDIATE g.stmt;
+    EXCEPTION
+      WHEN OTHERS THEN
+        -- ignorer "déjà accordé"
+        IF SQLCODE NOT IN (-1927, -1920, -1919) THEN
+          DBMS_OUTPUT.PUT_LINE('Grant to role failed: '||g.stmt||' -> '||SQLERRM);
+          RAISE;
+        END IF;
+    END;
+  END LOOP;
+END;
+/
+
+-- Appeler la procédure SYS.GRANT_DEV_ACCESS_TO_SCHEMA pour chaque schéma
+{% for s in (item.schemas | default([])) %}
+BEGIN
+  DBMS_OUTPUT.PUT_LINE('Calling SYS.GRANT_DEV_ACCESS_TO_SCHEMA for {{ s }} ...');
+  SYS.GRANT_DEV_ACCESS_TO_SCHEMA(p_schema_name => '{{ s }}', p_role_name => 'DEV_ROLE');
+EXCEPTION
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('ERROR calling SYS.GRANT_DEV_ACCESS_TO_SCHEMA(''{{ s }}''): '||SQLERRM);
+    RAISE;
+END;
+/
+{% endfor %}
+
+-- Associer DEV_ROLE à l'utilisateur + default role
+BEGIN
+  EXECUTE IMMEDIATE 'GRANT DEV_ROLE TO {{ item.login | upper }}';
+  EXECUTE IMMEDIATE 'ALTER USER {{ item.login | upper }} DEFAULT ROLE DEV_ROLE';
+  DBMS_OUTPUT.PUT_LINE('DEV_ROLE granted & set as default for {{ item.login | upper }}.');
+END;
+/
+
+PROMPT Done for {{ item.login | upper }}
