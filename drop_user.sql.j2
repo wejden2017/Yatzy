@@ -1,155 +1,68 @@
--- ============================================
--- Oracle User Management - Drop User
--- Environment: {{ lookup('env', 'ENV') | upper }}
--- User: {{ item.login }}
--- Action: DELETE
--- ============================================
+-- ================================================
+-- Drop user (idempotent) – kills sessions first
+-- Env: {{ lookup('env','ENV') | upper }}
+-- User: {{ item.login | upper }}
+-- ================================================
 
 SET SERVEROUTPUT ON SIZE UNLIMITED
 SET FEEDBACK OFF
 SET VERIFY OFF
 SET HEADING OFF
 SET ECHO OFF
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 
-DECLARE 
-    v_cnt INTEGER;
+DECLARE
+  v_user    VARCHAR2(128) := UPPER('{{ item.login }}');
+  v_exists  NUMBER := 0;
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('========================================');
-    DBMS_OUTPUT.PUT_LINE('Dropping user: {{ item.login }}');
-    DBMS_OUTPUT.PUT_LINE('========================================');
-    DBMS_OUTPUT.PUT_LINE('');
-    
-    -- Vérifier si l'utilisateur existe
-    SELECT COUNT(*) INTO v_cnt FROM dba_users WHERE username = UPPER('{{ item.login }}');
-    
-    IF v_cnt = 1 THEN
-        DBMS_OUTPUT.PUT_LINE('User {{ item.login }} found, proceeding with drop...');
-        
-        -- Forcer la déconnexion des sessions actives
-        FOR session IN (SELECT sid, serial# FROM v$session WHERE username = UPPER('{{ item.login }}')) LOOP
-            BEGIN
-                EXECUTE IMMEDIATE 'ALTER SYSTEM KILL SESSION ''' || session.sid || ',' || session.serial# || ''' IMMEDIATE';
-                DBMS_OUTPUT.PUT_LINE('  ✓ Killed session: ' || session.sid || ',' || session.serial#);
-            EXCEPTION
-                WHEN OTHERS THEN
-                    DBMS_OUTPUT.PUT_LINE('  ⚠ Could not kill session: ' || SQLERRM);
-            END;
-        END LOOP;
-        
-        -- Supprimer l'utilisateur avec CASCADE
-        EXECUTE IMMEDIATE 'DROP USER {{ item.login }} CASCADE';
-        DBMS_OUTPUT.PUT_LINE('');
-        DBMS_OUTPUT.PUT_LINE('✓ User {{ item.login }} dropped successfully');
-        DBMS_OUTPUT.PUT_LINE('  (All objects owned by {{ item.login }} were dropped)');
-    ELSE
-        DBMS_OUTPUT.PUT_LINE('⚠ User {{ item.login }} does not exist');
-        DBMS_OUTPUT.PUT_LINE('  Nothing to drop');
-    END IF;
-    
-    DBMS_OUTPUT.PUT_LINE('');
+  -- 1) User exists?
+  SELECT COUNT(*)
+    INTO v_exists
+    FROM dba_users
+   WHERE username = v_user;
+
+  IF v_exists = 0 THEN
+    DBMS_OUTPUT.PUT_LINE('User '||v_user||' does not exist; nothing to drop.');
+    RETURN;
+  END IF;
+
+  DBMS_OUTPUT.PUT_LINE('User '||v_user||' exists; searching sessions to kill...');
+
+  -- 2) Kill all sessions for that user (RAC-aware attempt, then fallback)
+  FOR s IN (
+    SELECT sid, serial#, inst_id
+      FROM gv$session
+     WHERE username = v_user
+       AND type <> 'BACKGROUND'
+  )
+  LOOP
+    BEGIN
+      DBMS_OUTPUT.PUT_LINE('Killing session '||s.sid||','||s.serial#||' @' || s.inst_id);
+      EXECUTE IMMEDIATE
+        'ALTER SYSTEM KILL SESSION '''||s.sid||','||s.serial#||'@'||s.inst_id||''' IMMEDIATE';
+    EXCEPTION
+      WHEN OTHERS THEN
+        -- Fallback (single-instance / non-RAC) using DISCONNECT SESSION
+        BEGIN
+          EXECUTE IMMEDIATE
+            'ALTER SYSTEM DISCONNECT SESSION '''||s.sid||','||s.serial#||''' IMMEDIATE';
+        EXCEPTION
+          WHEN OTHERS THEN
+            DBMS_OUTPUT.PUT_LINE('Could not kill session '||s.sid||','||s.serial#||' : '||SQLERRM);
+        END;
+    END;
+  END LOOP;
+
+  -- tiny wait to release possible locks
+  BEGIN DBMS_LOCK.SLEEP(1); EXCEPTION WHEN OTHERS THEN NULL; END;
+
+  -- 3) Drop the user
+  DBMS_OUTPUT.PUT_LINE('Dropping user '||v_user||' CASCADE ...');
+  EXECUTE IMMEDIATE 'DROP USER '||v_user||' CASCADE';
+  DBMS_OUTPUT.PUT_LINE('User '||v_user||' dropped.');
 EXCEPTION
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('');
-        DBMS_OUTPUT.PUT_LINE('✗ ERROR dropping user {{ item.login }}:');
-        DBMS_OUTPUT.PUT_LINE('  ' || SQLERRM);
-        DBMS_OUTPUT.PUT_LINE('');
-        RAISE;
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('ERROR dropping '||v_user||' : '||SQLERRM);
+    RAISE;
 END;
 /
-
-PROMPT ============================================
-PROMPT User: {{ item.login }}
-PROMPT Action: DELETE
-PROMPT Status: ✓ COMPLETED
-PROMPT ============================================
-PROMPT
-```
-
----
-
-## 🔑 **Caractéristiques clés de ces templates**
-
-### **✅ user_present.sql.j2**
-
-1. **Idempotence** : Vérifie si l'utilisateur existe avant de créer
-2. **Gestion des mots de passe** : Échappement des quotes `replace("'", "''")`
-3. **Gestion des erreurs** : Ignore les erreurs `-1927` (already granted)
-4. **Output détaillé** : Logs clairs avec `DBMS_OUTPUT`
-5. **Support multi-actions** : create, reset-password, lock, unlock
-6. **Appel de procédure** : Pour chaque schéma dans la liste `schemas`
-7. **Pas de Docker** : Exécution directe via sqlplus
-
-### **✅ drop_user.sql.j2**
-
-1. **Sécurité** : Vérifie l'existence avant de supprimer
-2. **Kill sessions** : Termine les sessions actives avant DROP
-3. **CASCADE** : Supprime tous les objets du user
-4. **Gestion d'erreurs** : Gestion propre si user inexistant
-5. **Logs détaillés** : Feedback clair à l'utilisateur
-
----
-
-## 🧪 **Exemple de sortie lors de l'exécution**
-
-### **Création d'utilisateur :**
-```
-========================================
-Processing user: zouertani
-Action: create
-========================================
-
-Creating user zouertani...
-✓ User zouertani created
-
-Granting CREATE SESSION to zouertani...
-✓ CREATE SESSION granted
-
-Granting role DEV_ROLE to zouertani...
-✓ Role DEV_ROLE granted
-
-Setting default roles...
-✓ Default roles set: DEV_ROLE
-
-Granting access to schemas...
-
-----------------------------------------
-Schema: LUCA -> User: zouertani
-----------------------------------------
-✓ Access granted on schema LUCA
-
-----------------------------------------
-Schema: LUCA3 -> User: zouertani
-----------------------------------------
-✓ Access granted on schema LUCA3
-
-========================================
-All schema grants completed
-========================================
-
-Unlocking account zouertani...
-🔓 Account zouertani unlocked
-
-============================================
-User: zouertani
-Action: CREATE
-Status: ✓ COMPLETED
-============================================
-```
-
-### **Suppression d'utilisateur :**
-```
-========================================
-Dropping user: toto
-========================================
-
-User toto found, proceeding with drop...
-  ✓ Killed session: 123,456
-
-✓ User toto dropped successfully
-  (All objects owned by toto were dropped)
-
-============================================
-User: toto
-Action: DELETE
-Status: ✓ COMPLETED
-============================================
