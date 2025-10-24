@@ -1,312 +1,256 @@
-# ============================================
-# GitLab CI/CD Pipeline
-# Oracle User Management - CATS DB Admin
-# ============================================
+#!/bin/ksh
+#
+#---------------------------------------------------------------------------
+# Application Refonte LUCA - BATCH
+#---------------------------------------------------------------------------
+#
+# SOPRA
+#
+# Function : Installe la partie dba d'une livraison
+#
+# Gestion Configuration CVS :
+#
+# Nom du shell............: $RCSfile install_dba_scripts.ksh,v $
+# Date de modification....: $Date: 2013/10/31 $
+# Auteur.................: $Author: wda $
+# Revision...............: $Revision: 1.0 $
+# Classement.............: $Source: $
+#
+# Parametres d'entree : $1 => SERVICE_NAME
+#                       $2 => USER
+#                       $3 => PASSWORD
+#                       $4 => IP_SERVER
+#                       $5 => PACKAGE
+#
+# Codes Retour :
+#               0 => OK
+#               1 => Sortie en erreur le dossier des scripts existe deja
+#               2 => Sortie en erreur lors de la decompression de cats-script
+#               3 => Sortie en erreur le dossier cats-scripts n'a pas ete trouve dans le tar
+#               4 => Sortie en erreur un script n'a pas de script de rollback
+#               5 => Sortie en erreur l'insertion d'une ligne dans SCRIPT_HISTORY a echoue
+#               6 => Sortie en erreur l'execution du script a echoue
+#               7 => Sortie en erreur la mise a jour d'une ligne dans SCRIPT_HISTORY a echoue
+#               8 => Sortie en erreur la construction des packages a echoue
+#               9 => Sortie en erreur le nombre de parametres est incorrect
+#
+#---------------------------------------------------------------------------
+# WDA 28/10/2013 Creation du script shell
+# JFE 12/11/2013 Ajout parametres pour lancer le shell et redirection des messages dans les logs
+# CCM 19/12/2013 Appel de sqlplus avec ORACLE_SID a chaque fois
+# JFE 30/12/2013 Gestion du rollback directement avec sqlplus
+# Modification pour support service name et IP
 
-stages:
-  - prepare_auth
-  - validate
-  - apply
+# Fichier de log
+rep_depart=$(pwd)
+fic_shell_sans_ext=$(basename $0 ".ksh")
+LOG_FILE=$rep_depart/${fic_shell_sans_ext}.log
+exec 1>> $LOG_FILE
+exec 2>> $LOG_FILE
 
-variables:
-  ANSIBLE_FORCE_COLOR: "true"
-  ANSIBLE_HOST_KEY_CHECKING: "false"
-  VAULT_ADDR: "https://vaultent.ppe.lseg.com"
-  VAULT_NAMESPACE: "aws"
-  VAULT_ROLE: "app-00451-developer"
-  ASSET_ID: "app-00451"
-  AWS_DEFAULT_REGION: "eu-west-2"
-  ANSIBLE_VAULT_PASSWORD_FILE: ".vault_pass"
-  PLAYBOOK: "manage_db_users.yml"
+echo `date +%y/%m/%d` `date +%H:%M:%S` "Debut Shell $0 $1 $2 $3 $4 $5" >> $LOG_FILE
 
-# ============================================
-# Template shared for before_script
-# ============================================
+# Verification du nombre de parametres
+if [[ $# != 5 ]]
+then
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Usage: install_dba_scripts.ksh <SERVICE_NAME> <USER> <PASSWORD> <IP_SERVER> <PACKAGE>" >> $LOG_FILE
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <9>\n" >> $LOG_FILE
+    exit 9
+fi
 
-.before_script_common:
-  before_script:
-    - !reference [ .vault-artifact-decrypter, before_script ]
-    - pip3 install boto3
-    - ansible-galaxy collection install ansible.posix
-    - chmod +x inventory/aws_ec2_inventory.py
-    - export ANSIBLE_CONFIG=./ansible.cfg
-    - echo "$VAULT_PASSWORD" > $ANSIBLE_VAULT_PASSWORD_FILE
-    - |
-      if [ "$IS_BASE64" = "true" ]; then
-        echo "$SSH_PRIVATE_KEY" | base64 -d > ssh_key.pem && chmod 600 ssh_key.pem
-      else
-        echo "$SSH_PRIVATE_KEY" > ssh_key.pem && chmod 600 ssh_key.pem
-      fi
-    - export AWS_ACCESS_KEY_ID=${AWS_ACCESS_KEY_ID}
-    - export AWS_SECRET_ACCESS_KEY=${AWS_SECRET_ACCESS_KEY}
-    - export AWS_REGION="${AWS_REGION}"
-    - export ENV=${ENV}
-    - echo -e "\e[35m[INFO]\033[0m \033[1;36m${ENV} environment selected\033[0m"
+# Parametrage BDD
+SERVICE_NAME=$1
+USER=$2
+PASS=$3
+IP_SERVER=$4
+PACKAGE=$5
 
-.validate_ansible_param:
-  before_script:
-    - !reference [ .before_script_common, before_script ]
-  script:
-    - |
-      if [[ "$ENV" != "dev" && -n "$ANSIBLE_PARAM" ]]; then
-        echo -e "\033[0;31m[ERROR]\033[0m ANSIBLE_PARAM is only allowed in dev. Current ENV is ${ENV}"
-        exit 1
-      fi
+# Construction de la chaine de connexion avec service name
+# Format: user/password@//host:port/service_name
+ORACLE_CONNECT_STRING="$USER/$PASS@//$IP_SERVER:1521/$SERVICE_NAME"
 
-.ansible_cats_script_common:
-  script:
-    - echo -e "\e[35m[INFO]\033[0m \033[1;36mStart ansible ${PLAYBOOK} with actions ${ACTIONS}\033[0m"
-    - ansible-playbook -i inventory/aws_ec2_inventory.py ${PLAYBOOK} --vault-password-file=$ANSIBLE_VAULT_PASSWORD_FILE -e "env=$ENV" ansible_ssh_private_key_file=$(pwd)/ssh_key.pem ${ANSIBLE_PARAM}
+# Parametrage cats-script
+rep_script=cats-script
 
-# ============================================
-# Stage 1: Authentification AWS + Vault
-# ============================================
+# Parametrage cats-plsql
+tar_plsql=cats-plsql.tar
+buildAll=buildAll.sql
 
-.prepare_auth:
-  stage: prepare_auth
-  image: registry.dxl.lseg.com/ci/stable/security/vault-service/aws:1092025-3a4905ca
-  script:
-    - echo "🔐 Authenticating with AWS..."
-    - export VS_FUNCTION=vault-aws-auth
-    - vault-service
-  artifacts:
-    reports:
-      dotenv: vault-service.env
-    expire_in: 1 hour
+#---------------------------------------------
+#--------------- CATS-SCRIPT -----------------
+#---------------------------------------------
 
-aws_auth:
-  extends: .prepare_auth
-  only:
-    - dev
-    - qa
-    - uat
-    - merge_requests
-  tags:
-    - docker
+# Verification de la non existance du dossier a extraire
+if [[ -d $rep_script ]]
+then
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur le dossier a extraire \"$rep_script\" existe deja, veuillez le supprimer et relancer le script" >> $LOG_FILE
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <1>\n" >> $LOG_FILE
+    exit 1
+fi
 
-# Secrets DEV
-secret_from_vault_dev:
-  stage: prepare_auth
-  needs: [aws_auth]
-  image: registry.dxl.lseg.com/ci/stable/security/vault-service/aws:1092025-3a4905ca
-  script:
-    - echo "🔑 Retrieving secrets from Vault for DEV..."
-    - vault-service
-    - export VS_FUNCTION=vault-secret-retriever
-    - export VAULT_SECRET_PATH="gitlab/app-00451/kv/aws-cats-dev"
-    - export VAULT_SECRET_KEY="EC2_KEY_PAIR"
-    - vault-service
-    - export VAULT_SECRET_KEY="SYSDBA_PASSWORD"
-    - vault-service
-    - export VAULT_SECRET_KEY="VAULT_PASSWORD"
-    - vault-service || echo "⚠ VAULT_PASSWORD not found"
-    - echo "export SYSDBA_PASSWORD='${SYSDBA_PASSWORD}'" >> vault-secrets.env
-    - echo "export SSH_PRIVATE_KEY='${EC2_KEY_PAIR}'" >> vault-secrets.env
-    - echo "export VAULT_PASSWORD='${VAULT_PASSWORD}'" >> vault-secrets.env
-    - echo "export ENV='dev'" >> vault-secrets.env
-  artifacts:
-    reports:
-      dotenv: vault-secrets.env
-    expire_in: 1 hour
-  only:
-    - dev
-    - merge_requests
-  tags:
-    - docker
+# Decompression de l'archive contenant les scripts
+tar xvf $rep_script.tar
+if [[ $? -ne 0 ]]
+then
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur lors de la decompression" >> $LOG_FILE
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <2>\n" >> $LOG_FILE
+    exit 2
+fi
 
-# Secrets QA
-secret_from_vault_qa:
-  stage: prepare_auth
-  needs: [aws_auth]
-  image: registry.dxl.lseg.com/ci/stable/security/vault-service/aws:1092025-3a4905ca
-  script:
-    - echo "🔑 Retrieving secrets from Vault for QA..."
-    - vault-service
-    - export VS_FUNCTION=vault-secret-retriever
-    - export VAULT_SECRET_PATH="gitlab/app-00451/kv/aws-cats-qa"
-    - export VAULT_SECRET_KEY="EC2_KEY_PAIR"
-    - vault-service
-    - export VAULT_SECRET_KEY="SYSDBA_PASSWORD"
-    - vault-service
-    - export VAULT_SECRET_KEY="VAULT_PASSWORD"
-    - vault-service || true
-    - echo "export SYSDBA_PASSWORD='${SYSDBA_PASSWORD}'" >> vault-secrets.env
-    - echo "export SSH_PRIVATE_KEY='${EC2_KEY_PAIR}'" >> vault-secrets.env
-    - echo "export VAULT_PASSWORD='${VAULT_PASSWORD}'" >> vault-secrets.env
-    - echo "export ENV='qa'" >> vault-secrets.env
-  artifacts:
-    reports:
-      dotenv: vault-secrets.env
-    expire_in: 1 hour
-  only:
-    - qa
-    - merge_requests
-  tags:
-    - docker
+cd $rep_script
+if [[ $? -ne 0 ]]
+then
+    echo "Erreur le dossier $rep_script n'a pas ete compresse dans le tar $rep_script.tar"
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <3>\n" >> $LOG_FILE
+    exit 3
+fi
 
-# Secrets UAT
-secret_from_vault_uat:
-  stage: prepare_auth
-  needs: [aws_auth]
-  image: registry.dxl.lseg.com/ci/stable/security/vault-service/aws:1092025-3a4905ca
-  script:
-    - echo "🔑 Retrieving secrets from Vault for UAT..."
-    - vault-service
-    - export VS_FUNCTION=vault-secret-retriever
-    - export VAULT_SECRET_PATH="gitlab/app-00451/kv/aws-cats-uat"
-    - export VAULT_SECRET_KEY="EC2_KEY_PAIR"
-    - vault-service
-    - export VAULT_SECRET_KEY="SYSDBA_PASSWORD"
-    - vault-service
-    - export VAULT_SECRET_KEY="VAULT_PASSWORD"
-    - vault-service || true
-    - echo "export SYSDBA_PASSWORD='${SYSDBA_PASSWORD}'" >> vault-secrets.env
-    - echo "export SSH_PRIVATE_KEY='${EC2_KEY_PAIR}'" >> vault-secrets.env
-    - echo "export VAULT_PASSWORD='${VAULT_PASSWORD}'" >> vault-secrets.env
-    - echo "export ENV='uat'" >> vault-secrets.env
-  artifacts:
-    reports:
-      dotenv: vault-secrets.env
-    expire_in: 1 hour
-  only:
-    - uat
-    - merge_requests
-  tags:
-    - docker
+# Recuperation de la liste des scripts triee par ordre alphabetique
+liste_scripts=$(ls -1 | sort)
 
-# ============================================
-# Stage 2: Validation
-# ============================================
+# Pour chaque script extrait
+for script in $liste_scripts
+do
+    if [[ -d $script ]]; then
+        continue
+    fi
 
-validate:dev:
-  extends:
-    - .ansible_cats_script_common
-    - .validate_ansible_param
-  stage: validate
-  image: cytopia/ansible:latest-tools
-  needs: [secret_from_vault_dev]
-  variables:
-    ACTIONS: "validate"
-    ANSIBLE_PARAM: "--check --diff"
-  only:
-    - merge_requests
-  changes:
-    - env/users_env_dev.yml
-    - inventory/**/*
-    - roles/**/*
-    - manage_db_users.yml
-    - .gitlab-ci.yml
-  tags:
-    - docker
+    # on applique la convention de nommage des fichiers rollback
+    script_rollback=${script%'.sql'}_ROLLBACK.sql
 
-validate:qa:
-  extends:
-    - .ansible_cats_script_common
-    - .validate_ansible_param
-  stage: validate
-  image: cytopia/ansible:latest-tools
-  needs: [secret_from_vault_qa]
-  variables:
-    ACTIONS: "validate"
-    ANSIBLE_PARAM: "--check --diff"
-  only:
-    - merge_requests
-  changes:
-    - env/users_env_qa.yml
-    - inventory/**/*
-    - roles/**/*
-  tags:
-    - docker
+    if [[ ! -f "rollback/$script_rollback" ]]
+    then
+        echo `date +%y/%m/%d` `date +%H:%M:%S` "le script $script n'a pas de script de rollback associe. attendu : rollback/$script_rollback" >> $LOG_FILE
+        echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <4>\n" >> $LOG_FILE
+        exit 4
+    fi
 
-validate:uat:
-  extends:
-    - .ansible_cats_script_common
-    - .validate_ansible_param
-  stage: validate
-  image: cytopia/ansible:latest-tools
-  needs: [secret_from_vault_uat]
-  variables:
-    ACTIONS: "validate"
-    ANSIBLE_PARAM: "--check --diff"
-  only:
-    - merge_requests
-  changes:
-    - env/users_env_uat.yml
-    - inventory/**/*
-    - roles/**/*
-  tags:
-    - docker
+    # Recuperation de la version de la livraison
+    version=$(echo $script | cut -d'_' -f1)
+    if [[ $? -ne 0 ]]
+    then
+        version='0'
+    fi
 
-# ============================================
-# Stage 3: Apply
-# ============================================
+    # Recuperation de l'id du fichier
+    id=$(echo $script | cut -d'_' -f2)
+    if [[ $? -ne 0 ]]
+    then
+        id='1'
+    fi
 
-apply:dev:
-  extends: .ansible_cats_script_common
-  stage: apply
-  image: cytopia/ansible:latest-tools
-  needs: [secret_from_vault_dev]
-  before_script:
-    - !reference [ .before_script_common, before_script ]
-  variables:
-    ACTIONS: "apply"
-    ANSIBLE_PARAM: "-v"
-  environment:
-    name: dev
-    action: start
-  only:
-    refs:
-      - dev
-    changes:
-      - env/users_env_dev.yml
-      - inventory/**/*
-      - roles/**/*
-  tags:
-    - docker
-  when: on_success
+    # Recherche d'un enregistrement du script sur la base
+    statut=$(sqlplus -S $ORACLE_CONNECT_STRING <<! 
+        set PAGESIZE    0
+        set echo on
+        SELECT (SELECT STATUT FROM SCRIPT_HISTORY WHERE NOM_SCRIPT='$script') FROM DUAL;
+!
+)
 
-apply:qa:
-  extends: .ansible_cats_script_common
-  stage: apply
-  image: cytopia/ansible:latest-tools
-  needs: [secret_from_vault_qa]
-  before_script:
-    - !reference [ .before_script_common, before_script ]
-  variables:
-    ACTIONS: "apply"
-    ANSIBLE_PARAM: "-v"
-  environment:
-    name: qa
-  only:
-    refs:
-      - qa
-    changes:
-      - env/users_env_qa.yml
-      - inventory/**/*
-      - roles/**/*
-  tags:
-    - docker
-  when: manual
+    if [[ -z $statut ]]
+    then
+        statut=0
+        # si le script n'a pas ete renseigne dans la base
+        # Insertion d'une ligne dans SCRIPT_HISTORY
+        sqlplus -S $ORACLE_CONNECT_STRING <<!
+            WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
+            set echo on
+            INSERT INTO SCRIPT_HISTORY (VERSION,ID,NOM_SCRIPT,STATUT,DATE_LIVRAISON, CATS_PACKAGE) VALUES ('$version','$id','$script',$statut,sysdate, '$PACKAGE');
+            COMMIT;
+!
 
-apply:uat:
-  extends: .ansible_cats_script_common
-  stage: apply
-  image: cytopia/ansible:latest-tools
-  needs: [secret_from_vault_uat]
-  before_script:
-    - !reference [ .before_script_common, before_script ]
-  variables:
-    ACTIONS: "apply"
-    ANSIBLE_PARAM: "-v"
-  environment:
-    name: uat
-  only:
-    refs:
-      - uat
-    changes:
-      - env/users_env_uat.yml
-      - inventory/**/*
-      - roles/**/*
-  tags:
-    - docker
-  when: manual
+        if [[ $? -ne 0 ]]
+        then
+            echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur lors de l'insertion dans SCRIPT_HISTORY" >> $LOG_FILE
+            echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <5>\n" >> $LOG_FILE
+            exit 5
+        fi
+    fi
+
+    if [[ $statut -eq 1 ]]
+    then
+        echo `date +%y/%m/%d` `date +%H:%M:%S` "Script $script deja execute" >> $LOG_FILE
+    fi
+
+    if [[ $statut -eq 0 ]]
+    then
+        # si le script n'a pas ete execute
+        # Execution du script
+        sqlplus -S $ORACLE_CONNECT_STRING <<!
+            WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
+            set echo on
+            set SQLBLANKLINES ON
+            @$script;
+!
+
+        if [[ $? -ne 0 ]]
+        then
+            echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur lors de l'execution du script $script" >> $LOG_FILE
+            echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <6>\n" >> $LOG_FILE
+            exit 6
+        fi
+
+        # Mise a jour de la ligne correspondant au script
+        sqlplus -S $ORACLE_CONNECT_STRING <<!
+            WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
+            set echo on
+            UPDATE SCRIPT_HISTORY SET STATUT=1, DATE_LIVRAISON=SYSDATE WHERE NOM_SCRIPT='$script';
+            COMMIT;
+!
+
+        if [[ $? -ne 0 ]]
+        then
+            echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur lors de la mise a jour dans SCRIPT_HISTORY" >> $LOG_FILE
+            echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <7>\n" >> $LOG_FILE
+            exit 7
+        fi
+
+        echo `date +%y/%m/%d` `date +%H:%M:%S` "Script $script execute" >> $LOG_FILE
+    fi
+done
+
+statut=''
+
+# Suppression des fichiers extraits
+cd $rep_depart
+rm -r $rep_script
+
+#---------------------------------------------
+#-------------- CATS-PL/SQL -----------------
+#---------------------------------------------
+
+rep_temp=temp_plsql
+
+# Creation du dossier temporaire
+mkdir $rep_temp
+
+# Copie du tar vers le dossier temporaire
+cp $tar_plsql $rep_temp
+
+cd $rep_temp
+
+# Decompression de l'archive contenant les packages
+tar xvf $tar_plsql
+
+# Execution du buildAll
+sqlplus -S $ORACLE_CONNECT_STRING <<!
+    WHENEVER SQLERROR EXIT FAILURE;
+    set echo on
+    @$buildAll
+!
+
+if [[ $? -ne 0 ]]
+then
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur lors de l'execution de $buildAll" >> $LOG_FILE
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <8>\n" >> $LOG_FILE
+    exit 8
+fi
+
+# Suppression des fichiers extraits
+cd $rep_depart
+rm -r $rep_temp
+
+echo `date +%y/%m/%d` `date +%H:%M:%S` "Installation des scripts dba et des packages terminee" >> $LOG_FILE
+echo `date +%y/%m/%d` `date +%H:%M:%S` "Fin Shell $0 \n\n" >> $LOG_FILE
+
+exit 0
