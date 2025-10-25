@@ -76,17 +76,31 @@ fi
 SERVICE_NAME=$1
 USER=$2
 IP_SERVER=$3
-CATS_PKG=$4
+PACKAGE=$4
+PASS=$LUCA_PASSWORD
+PORT=1521
+
+# Validation du package (ne peut pas être vide ou NULL)
+if [[ "$PACKAGE" == "NULL" ]]; then
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "ERREUR: Le parametre PACKAGE ne peut pas etre NULL" >> $LOG_FILE
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: 9" >> $LOG_FILE
+    exit 9
+fi
+
+# Construction de la chaine de connexion avec service name
+# Format: user/password@//host:port/service_name
+ORACLE_CONNECT_STRING="$USER/$PASS@//$IP_SERVER:$PORT/$SERVICE_NAME"
 
 echo `date +%y/%m/%d` `date +%H:%M:%S` "Parametres du rollback:" >> $LOG_FILE
 echo `date +%y/%m/%d` `date +%H:%M:%S` "  - Service Name: $SERVICE_NAME" >> $LOG_FILE
 echo `date +%y/%m/%d` `date +%H:%M:%S` "  - Utilisateur: $USER" >> $LOG_FILE
 echo `date +%y/%m/%d` `date +%H:%M:%S` "  - Serveur IP: $IP_SERVER" >> $LOG_FILE
-echo `date +%y/%m/%d` `date +%H:%M:%S` "  - Package rollback: $CATS_PKG" >> $LOG_FILE
+echo `date +%y/%m/%d` `date +%H:%M:%S` "  - Package rollback: $PACKAGE" >> $LOG_FILE
+echo `date +%y/%m/%d` `date +%H:%M:%S` "Configuration Oracle: $USER@//$IP_SERVER:$PORT/$SERVICE_NAME" >> $LOG_FILE
 
 # Test de connexion Oracle
 echo `date +%y/%m/%d` `date +%H:%M:%S` "Test de connexion Oracle..." >> $LOG_FILE
-TEST_CONN=$(sqlplus -S $USER/$LUCA_PASSWORD@$IP_SERVER/$SERVICE_NAME <<EOF
+TEST_CONN=$(sqlplus -S $ORACLE_CONNECT_STRING <<EOF
 set pagesize 0
 set echo off
 SELECT 'CONNECTION_OK' FROM DUAL;
@@ -187,17 +201,17 @@ do
     echo `date +%y/%m/%d` `date +%H:%M:%S` "Analyse: VERSION=$version, ID=$id" >> $LOG_FILE
     
     # Recherche d'un enregistrement du script original sur la base
-    statut=$(sqlplus -S $USER/$LUCA_PASSWORD@$IP_SERVER/$SERVICE_NAME <<EOF
+    statut=$(sqlplus -S $ORACLE_CONNECT_STRING <<EOF
 set pagesize 0
 set echo off
-SELECT (SELECT STATUT FROM SCRIPT_HISTORY WHERE NOM_SCRIPT='$orig_script' and CATS_PACKAGE='$CATS_PKG') FROM DUAL;
+SELECT (SELECT STATUT FROM SCRIPT_HISTORY WHERE NOM_SCRIPT='$orig_script' and CATS_PACKAGE='$PACKAGE') FROM DUAL;
 exit;
 EOF
 )
     
     if [[ "$statut" -eq 1 ]]
     then
-        echo `date +%y/%m/%d` `date +%H:%M:%S` "Script $orig_script deja execute dans la version $CATS_PKG --> rollback necessaire" >> $LOG_FILE
+        echo `date +%y/%m/%d` `date +%H:%M:%S` "Script $orig_script deja execute dans la version $PACKAGE --> rollback necessaire" >> $LOG_FILE
     fi
     
     if [[ "$statut" -eq 1 ]]
@@ -209,7 +223,7 @@ EOF
         
         echo `date +%y/%m/%d` `date +%H:%M:%S` "Execution du script de rollback $script" >> $LOG_FILE
         
-        sqlplus -s $USER/$LUCA_PASSWORD@$IP_SERVER/$SERVICE_NAME <<EOF
+        sqlplus -s $ORACLE_CONNECT_STRING <<EOF
 WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
 set echo on
 set SQLBLANKLINES ON
@@ -226,11 +240,11 @@ EOF
         fi
         
         # Mise a jour de la ligne correspondant au script original dans SCRIPT_HISTORY
-        sqlplus -s $USER/$LUCA_PASSWORD@$IP_SERVER/$SERVICE_NAME <<EOF
+        sqlplus -s $ORACLE_CONNECT_STRING <<EOF
 WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
 set echo on
-DELETE FROM SCRIPT_HISTORY WHERE NOM_SCRIPT='$orig_script' and CATS_PACKAGE='$CATS_PKG';
-INSERT INTO ROLLBACK_HISTORY (VERSION,ID,NOM_SCRIPT,STATUT,DATE_ROLLBACK,CATS_PACKAGE) VALUES ('$version','$id','$script',1,sysdate,'$CATS_PKG');
+DELETE FROM SCRIPT_HISTORY WHERE NOM_SCRIPT='$orig_script' and CATS_PACKAGE='$PACKAGE';
+INSERT INTO ROLLBACK_HISTORY (VERSION,ID,NOM_SCRIPT,STATUT,DATE_ROLLBACK,CATS_PACKAGE) VALUES ('$version','$id','$script',1,sysdate,'$PACKAGE');
 COMMIT;
 exit;
 EOF
@@ -272,7 +286,7 @@ echo `date +%y/%m/%d` `date +%H:%M:%S` "Parametres du deploiement:" >> $LOG_FILE
 echo `date +%y/%m/%d` `date +%H:%M:%S` "  - Service Name: $SERVICE_NAME" >> $LOG_FILE
 echo `date +%y/%m/%d` `date +%H:%M:%S` "  - Utilisateur: $USER" >> $LOG_FILE
 echo `date +%y/%m/%d` `date +%H:%M:%S` "  - Serveur IP: $IP_SERVER" >> $LOG_FILE
-echo `date +%y/%m/%d` `date +%H:%M:%S` "  - Package rollback: $CATS_PKG" >> $LOG_FILE
+echo `date +%y/%m/%d` `date +%H:%M:%S` "  - Package rollback: $PACKAGE" >> $LOG_FILE
 echo `date +%y/%m/%d` `date +%H:%M:%S` "  - Fichier de log: $LOG_FILE" >> $LOG_FILE
 echo `date +%y/%m/%d` `date +%H:%M:%S` "======================================" >> $LOG_FILE
 echo `date +%y/%m/%d` `date +%H:%M:%S` "=== FIN SCRIPT ROLLBACK === Code retour: 0" >> $LOG_FILE
