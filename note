@@ -23,3 +23,8 @@ retries = 3
 [privilege_escalation]
 
 export PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:$PATH"
+
+
+  ansible_remote_tmp: /tmp
+  ansible_environment:
+    PATH: "/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin"
