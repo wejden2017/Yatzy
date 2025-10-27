@@ -21,3 +21,5 @@ retries = 3
 # CRITIQUE : Forcer l'environnement PATH correct
 [inventory]
 [privilege_escalation]
+
+export PATH="/bin:/usr/bin:/usr/local/bin:/sbin:/usr/sbin:$PATH"
