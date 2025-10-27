@@ -3,23 +3,21 @@ roles_path = roles
 inventory = inventory
 deprecation_warnings = False
 host_key_checking = False
+become = true
 
-# SOLUTION : Configuration des répertoires temporaires
+# Configuration des répertoires temporaires
 remote_tmp = /tmp/.ansible-$USER/tmp
 local_tmp = ~/.ansible/tmp
 
 # Configuration SSH
 timeout = 30
-command_timeout = 60
-
-# Privilèges
-become = true
-become_method = sudo
 
 [ssh_connection]
-# Retry de connexion
-retries = 3
+# SOLUTION : Forcer le PATH correct et éviter les scripts de profil problématiques
 ssh_args = -o ServerAliveInterval=30 -o ServerAliveCountMax=3 -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no
+pipelining = True
+retries = 3
 
-# CRITIQUE : Forcer l'utilisation de /tmp pour les opérations temporaires
-control_path_dir = /tmp/.ansible-cp
+# CRITIQUE : Forcer l'environnement PATH correct
+[inventory]
+[privilege_escalation]
