@@ -10,17 +10,6 @@
     - update_database
     - download
 
-- name: Create Oracle work directory
-  ansible.builtin.file:
-    path: "/opt/cats/oracle_work"
-    state: directory
-    owner: "{{ cats_user }}"
-    group: "{{ cats_grp.name }}"
-    mode: '0755'
-  tags: 
-    - update_database
-    - prepare
-
 - name: Set Oracle database IP from inventory
   set_fact:
     oracle_server_ip: "{{ groups['oracle_servers'][0] }}"
@@ -35,10 +24,10 @@
     - update_database
     - config
 
-- name: Copy Oracle installation script to work directory
+- name: Copy Oracle installation script to deploy directory
   ansible.builtin.copy:
     src: "/tmp/{{ cats_full }}/install_dba_scripts_aws.ksh"
-    dest: "/opt/cats/oracle_work/install_dba_scripts_aws.ksh"
+    dest: "{{ tar_deploy_path }}/install_dba_scripts_aws.ksh"
     remote_src: yes
     owner: "{{ cats_user }}"
     group: "{{ cats_grp.name }}"
@@ -47,10 +36,10 @@
     - update_database
     - scripts
 
-- name: Copy Oracle rollback script to work directory
+- name: Copy Oracle rollback script to deploy directory
   ansible.builtin.copy:
     src: "/tmp/{{ cats_full }}/rollback_dba_scripts_aws.ksh"
-    dest: "/opt/cats/oracle_work/rollback_dba_scripts_aws.ksh"
+    dest: "{{ tar_deploy_path }}/rollback_dba_scripts_aws.ksh"
     remote_src: yes
     owner: "{{ cats_user }}"
     group: "{{ cats_grp.name }}"
@@ -59,10 +48,10 @@
     - update_database
     - scripts
 
-- name: Copy Oracle archives to work directory
+- name: Copy Oracle archives to deploy directory
   ansible.builtin.copy:
     src: "/tmp/{{ cats_full }}/{{ item }}"
-    dest: "/opt/cats/oracle_work/{{ item }}"
+    dest: "{{ tar_deploy_path }}/{{ item }}"
     remote_src: yes
     owner: "{{ cats_user }}"
     group: "{{ cats_grp.name }}"
@@ -82,12 +71,13 @@
       Service Name: {{ oracle_service_name }}
       Database IP: {{ oracle_server_ip }}
       Package Version: cats_{{ cats_version }}
+      Work Directory: {{ tar_deploy_path }}
   tags: 
     - update_database
 
 - name: Execute Oracle Database Update
   ansible.builtin.shell: |
-    cd /opt/cats/oracle_work
+    cd {{ tar_deploy_path }}
     export LUCA_PASSWORD="{{ vault_luca_password }}"
     ./install_dba_scripts_aws.ksh {{ oracle_service_name }} {{ oracle_user | default('luca') }} {{ oracle_server_ip }} cats_{{ cats_version }}
   register: oracle_update_result
@@ -115,7 +105,7 @@
 
 - name: Archive Oracle logs
   ansible.builtin.copy:
-    src: "/opt/cats/oracle_work/install_dba_scripts_aws.log"
+    src: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
     dest: "/opt/cats/logs/oracle_update_{{ cats_version }}_{{ ansible_date_time.epoch }}.log"
     remote_src: yes
   ignore_errors: yes
