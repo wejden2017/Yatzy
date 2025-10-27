@@ -1,19 +1,129 @@
-# ==================== UPDATE DATABASE ==================== 
-"update_database_$[[ inputs.environment ]]":
-  stage: 🗄️ update-database
-  variables:
-    PLAYBOOKS: "cats_services.yml"
-    ACTIONS: "do_update_database=true"
-  extends: [ .vault-artifact-decrypter, ".env-$[[ inputs.environment ]]" ]
-  needs: [ aws_auth, secret_from_vault, "install_services_$[[ inputs.environment ]]" ]
-  before_script:
-    - !reference [ .before_script_common, before_script ]
-    - !reference [ .validate_ansible_param, before_script ]
-  script:
-    - !reference [ .ansible_cats_script_common, script ]
+# roles/update_database/tasks/main.yml
+---
+# Update Oracle Database (download sera fait par services/deploy)
+
+- name: Verify that CATS package is already downloaded
+  ansible.builtin.stat:
+    path: "/tmp/{{ cats_full }}"
+  register: cats_package_check
+  tags: 
+    - update_database
+    - verify
+
+- name: Download CATS package if not present
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: download_release
+  when: not cats_package_check.stat.exists
+  tags: 
+    - update_database
+    - download
+
+- name: Set Oracle database IP from inventory
+  set_fact:
+    oracle_server_ip: "{{ groups['oracle_servers'][0] }}"
+  tags: 
+    - update_database
+    - config
+
+- name: Set Oracle service name based on environment
+  set_fact:
+    oracle_service_name: "{{ oracle_service_names[environment] }}"
+  tags: 
+    - update_database
+    - config
+
+- name: Extract CATS Script for Oracle operations
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ cats_full }}/{{ cats_script }}"
+    dest: "{{ tar_deploy_path }}"
+    remote_src: yes
+    owner: "{{ cats_user }}"
+    group: "{{ cats_grp.name }}"
+  tags: 
+    - update_database
+    - extract
+
+- name: Extract CATS PL/SQL for Oracle operations
+  ansible.builtin.unarchive:
+    src: "/tmp/{{ cats_full }}/cats-plsql.tar"
+    dest: "{{ tar_deploy_path }}"
+    remote_src: yes
+    owner: "{{ cats_user }}"
+    group: "{{ cats_grp.name }}"
+  tags: 
+    - update_database
+    - extract
+
+- name: Copy Oracle installation script to deploy directory
+  ansible.builtin.copy:
+    src: "/tmp/{{ cats_full }}/install_dba_scripts_aws.ksh"
+    dest: "{{ tar_deploy_path }}/install_dba_scripts_aws.ksh"
+    remote_src: yes
+    owner: "{{ cats_user }}"
+    group: "{{ cats_grp.name }}"
+    mode: '0755'
+  tags: 
+    - update_database
+    - scripts
+
+- name: Copy Oracle rollback script to deploy directory
+  ansible.builtin.copy:
+    src: "/tmp/{{ cats_full }}/rollback_dba_scripts_aws.ksh"
+    dest: "{{ tar_deploy_path }}/rollback_dba_scripts_aws.ksh"
+    remote_src: yes
+    owner: "{{ cats_user }}"
+    group: "{{ cats_grp.name }}"
+    mode: '0755'
+  tags: 
+    - update_database
+    - scripts
+
+- name: Display Oracle connection parameters
+  ansible.builtin.debug:
+    msg: |
+      Oracle Database Update Starting...
+      Environment: {{ environment }}
+      Service Name: {{ oracle_service_name }}
+      Database IP: {{ oracle_server_ip }}
+      Package Version: cats_{{ cats_version }}
+      Work Directory: {{ tar_deploy_path }}
+  tags: 
+    - update_database
+
+- name: Execute Oracle Database Update
+  ansible.builtin.shell: |
+    cd {{ tar_deploy_path }}
+    export LUCA_PASSWORD="{{ vault_luca_password }}"
+    ./install_dba_scripts_aws.ksh {{ oracle_service_name }} {{ oracle_user | default('luca') }} {{ oracle_server_ip }} cats_{{ cats_version }}
+  register: oracle_update_result
   environment:
-    name: $ENV
+    LUCA_PASSWORD: "{{ vault_luca_password }}"
+  failed_when: oracle_update_result.rc != 0
   tags:
-    - $TAGS
-  when: manual
-  allow_failure: false  # CRITIQUE : Arrêt complet si échec DB
+    - update_database
+    - execute
+
+- name: Display Oracle Update Success
+  ansible.builtin.debug:
+    msg: |
+      ========================================
+      ORACLE DATABASE UPDATE COMPLETED
+      ========================================
+      Return Code: {{ oracle_update_result.rc }}
+      Package: cats_{{ cats_version }}
+      Service: {{ oracle_service_name }}
+      Database: {{ oracle_server_ip }}
+      ========================================
+  when: oracle_update_result.rc == 0
+  tags:
+    - update_database
+
+- name: Archive Oracle logs
+  ansible.builtin.copy:
+    src: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
+    dest: "/opt/cats/logs/oracle_update_{{ cats_version }}_{{ ansible_date_time.epoch }}.log"
+    remote_src: yes
+  ignore_errors: yes
+  tags:
+    - update_database
