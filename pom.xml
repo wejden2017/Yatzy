@@ -1,33 +1,123 @@
-cats-db-user-admin/
-│
-├── .gitlab-ci.yml                           # Pipeline GitLab CI/CD
-├── ansible.cfg                              # Configuration Ansible
-├── manage_db_users.yml                      # Playbook principal
-├── requirements.yml                         # Collections Ansible (optionnel)
-├── README.md                                # Documentation
-│
-├── .gitignore                               # Fichiers à ignorer
-│
-├── inventory/                               # ← Inventaires dynamiques
-│   ├── aws_ec2_inventory.py                 # Script Python pour récupérer les EC2
-│   └── common.yml                           # Variables communes à tous les environnements
-│
-├── env/                                     # ← Fichiers de configuration par environnement
-│   ├── users_env_dev.yml                    # Users à créer/supprimer en DEV
-│   ├── users_env_qa.yml                     # Users à créer/supprimer en QA
-│   └── users_env_uat.yml                    # Users à créer/supprimer en UAT
-│
-└── roles/                                   # ← Rôles Ansible
-    └── oracle_user_admin/                   # Rôle de gestion des users Oracle
-        ├── tasks/
-        │   └── main.yml                     # Tasks principales (create/delete users)
-        │
-        ├── templates/
-        │   ├── user_present.sql.j2          # Template SQL pour créer/modifier users
-        │   └── drop_user.sql.j2             # Template SQL pour supprimer users
-        │
-        ├── handlers/                        # (Optionnel)
-        │   └── main.yml
-        │
-        └── defaults/                        # (Optionnel)
-            └── main.yml
+# roles/update_database/tasks/main.yml
+---
+# Download CATS package and update Oracle Database
+
+- name: Download the CATS Full package and extract it
+  ansible.builtin.include_role:
+    name: common
+    tasks_from: download_release
+  tags: 
+    - update_database
+    - download
+
+- name: Create Oracle work directory
+  ansible.builtin.file:
+    path: "/opt/cats/oracle_work"
+    state: directory
+    owner: "{{ cats_user }}"
+    group: "{{ cats_grp.name }}"
+    mode: '0755'
+  tags: 
+    - update_database
+    - prepare
+
+- name: Set Oracle database IP from inventory
+  set_fact:
+    oracle_server_ip: "{{ groups['oracle_servers'][0] }}"
+  tags: 
+    - update_database
+    - config
+
+- name: Set Oracle service name based on environment
+  set_fact:
+    oracle_service_name: "{{ oracle_service_names[environment] }}"
+  tags: 
+    - update_database
+    - config
+
+- name: Copy Oracle installation script to work directory
+  ansible.builtin.copy:
+    src: "/tmp/{{ cats_full }}/install_dba_scripts_aws.ksh"
+    dest: "/opt/cats/oracle_work/install_dba_scripts_aws.ksh"
+    remote_src: yes
+    owner: "{{ cats_user }}"
+    group: "{{ cats_grp.name }}"
+    mode: '0755'
+  tags: 
+    - update_database
+    - scripts
+
+- name: Copy Oracle rollback script to work directory
+  ansible.builtin.copy:
+    src: "/tmp/{{ cats_full }}/rollback_dba_scripts_aws.ksh"
+    dest: "/opt/cats/oracle_work/rollback_dba_scripts_aws.ksh"
+    remote_src: yes
+    owner: "{{ cats_user }}"
+    group: "{{ cats_grp.name }}"
+    mode: '0755'
+  tags: 
+    - update_database
+    - scripts
+
+- name: Copy Oracle archives to work directory
+  ansible.builtin.copy:
+    src: "/tmp/{{ cats_full }}/{{ item }}"
+    dest: "/opt/cats/oracle_work/{{ item }}"
+    remote_src: yes
+    owner: "{{ cats_user }}"
+    group: "{{ cats_grp.name }}"
+    mode: '0644'
+  loop:
+    - "cats-script.tar"
+    - "cats-plsql.tar"
+  tags: 
+    - update_database
+    - archives
+
+- name: Display Oracle connection parameters
+  ansible.builtin.debug:
+    msg: |
+      Oracle Database Update Starting...
+      Environment: {{ environment }}
+      Service Name: {{ oracle_service_name }}
+      Database IP: {{ oracle_server_ip }}
+      Package Version: cats_{{ cats_version }}
+  tags: 
+    - update_database
+
+- name: Execute Oracle Database Update
+  ansible.builtin.shell: |
+    cd /opt/cats/oracle_work
+    export LUCA_PASSWORD="{{ vault_luca_password }}"
+    ./install_dba_scripts_aws.ksh {{ oracle_service_name }} {{ oracle_user | default('luca') }} {{ oracle_server_ip }} cats_{{ cats_version }}
+  register: oracle_update_result
+  environment:
+    LUCA_PASSWORD: "{{ vault_luca_password }}"
+  failed_when: oracle_update_result.rc != 0
+  tags:
+    - update_database
+    - execute
+
+- name: Display Oracle Update Success
+  ansible.builtin.debug:
+    msg: |
+      ========================================
+      ORACLE DATABASE UPDATE COMPLETED
+      ========================================
+      Return Code: {{ oracle_update_result.rc }}
+      Package: cats_{{ cats_version }}
+      Service: {{ oracle_service_name }}
+      Database: {{ oracle_server_ip }}
+      ========================================
+  when: oracle_update_result.rc == 0
+  tags:
+    - update_database
+
+- name: Archive Oracle logs
+  ansible.builtin.copy:
+    src: "/opt/cats/oracle_work/install_dba_scripts_aws.log"
+    dest: "/opt/cats/logs/oracle_update_{{ cats_version }}_{{ ansible_date_time.epoch }}.log"
+    remote_src: yes
+  ignore_errors: yes
+  tags:
+    - update_database
