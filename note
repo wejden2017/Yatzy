@@ -1,8 +1,3 @@
-- name: Debug ALL available variables
-  ansible.builtin.debug:
-    msg: |
-      ALL VARIABLES DEBUG:
-      environment: {{ environment | default('NOT_FOUND') }}
-      ENV: {{ ansible_env.ENV | default('NOT_FOUND') }}
-      hostvars environment: {{ hostvars[inventory_hostname].environment | default('NOT_FOUND') }}
-      Extra vars: {{ ansible_extra_vars | default('NOT_FOUND') }}
+"deploy_update_database_$[[ inputs.environment ]]":
+  variables:
+    ACTIONS: "do_update_database=true environment=$[[ inputs.environment ]]"
