@@ -1,1 +1,6 @@
-environment: "{{ lookup('env', 'ENV') | default('dev') }}"
+- name: Set Oracle service name based on environment
+  set_fact:
+    oracle_service_name: "{{ oracle_service_names[environment | default('dev')] }}"
+  tags: 
+    - update_database
+    - config
