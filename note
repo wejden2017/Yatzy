@@ -1,6 +1,8 @@
-- name: Set Oracle service name based on environment
-  set_fact:
-    oracle_service_name: "{{ oracle_service_names[environment | default('dev')] }}"
-  tags: 
-    - update_database
-    - config
+- name: Debug ALL available variables
+  ansible.builtin.debug:
+    msg: |
+      ALL VARIABLES DEBUG:
+      environment: {{ environment | default('NOT_FOUND') }}
+      ENV: {{ ansible_env.ENV | default('NOT_FOUND') }}
+      hostvars environment: {{ hostvars[inventory_hostname].environment | default('NOT_FOUND') }}
+      Extra vars: {{ ansible_extra_vars | default('NOT_FOUND') }}
