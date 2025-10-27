@@ -1,31 +1,19 @@
-# roles/update_database/vars/main.yml
----
-# Variables pour la mise à jour de base de données Oracle
-
-# Service names Oracle par environnement
-oracle_service_names:
-  dev: "CATSDEVPDB1"
-  qa: "CATSQAPDB1"
-  uat: "CATSUATPDB1"
-
-# Utilisateur Oracle par défaut
-oracle_user: "luca"
-
-# Port Oracle 
-oracle_port: "1521"
-
-# Utilise les répertoires existants CATS
-# oracle_work_dir utilise tar_deploy_path = /opt/cats/deploy
-oracle_logs_dir: "/opt/cats/logs"
-
-# Scripts Oracle
-oracle_install_script: "install_dba_scripts_aws.ksh"
-oracle_rollback_script: "rollback_dba_scripts_aws.ksh"
-
-# Archives Oracle nécessaires
-oracle_archives:
-  - "cats-script.tar"
-  - "cats-plsql.tar"
-
-# Timeout pour les opérations Oracle (en secondes)
-oracle_timeout: 1800  # 30 minutes
+# ==================== UPDATE DATABASE ==================== 
+"update_database_$[[ inputs.environment ]]":
+  stage: 🗄️ update-database
+  variables:
+    PLAYBOOKS: "cats_services.yml"
+    ACTIONS: "do_update_database=true"
+  extends: [ .vault-artifact-decrypter, ".env-$[[ inputs.environment ]]" ]
+  needs: [ aws_auth, secret_from_vault, "install_services_$[[ inputs.environment ]]" ]
+  before_script:
+    - !reference [ .before_script_common, before_script ]
+    - !reference [ .validate_ansible_param, before_script ]
+  script:
+    - !reference [ .ansible_cats_script_common, script ]
+  environment:
+    name: $ENV
+  tags:
+    - $TAGS
+  when: manual
+  allow_failure: false  # CRITIQUE : Arrêt complet si échec DB
