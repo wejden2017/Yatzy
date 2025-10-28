@@ -1,18 +1,5 @@
-# Juste avant l’archive du log
-- name: Freeze a unique log stamp for this run
-  set_fact:
-    log_stamp: "{{ ansible_date_time.epoch }}"
-
-- name: Archive Oracle log
-  copy:
-    src: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
-    dest: "/opt/cats/log/oracle_update_{{ cats_version }}_{{ log_stamp }}.log"
-    remote_src: yes
-  ignore_errors: yes
-  tags: [update_database]
-
 - name: Fetch Oracle update log to artifacts folder
-  fetch:
+  ansible.builtin.fetch:
     src: "/opt/cats/log/oracle_update_{{ cats_version }}_{{ log_stamp }}.log"
     dest: "artifacts/oracle_update_{{ cats_version }}_{{ log_stamp }}.log"
     flat: true
