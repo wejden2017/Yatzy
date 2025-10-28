@@ -1,12 +1,13 @@
-# Assure l’existence du fichier (ne change pas le owner)
+# ✅ Crée le fichier si pas présent, sans toucher au owner si déjà là
 - name: Ensure script log file exists
   ansible.builtin.file:
     path: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
     state: touch
   become: true
+  changed_when: false
   tags: [update_database]
 
-# Vide le contenu du fichier (préféré)
+# ✅ Vide le contenu du fichier (truncate)
 - name: Truncate script log file
   ansible.builtin.shell: |
     truncate -s 0 "{{ tar_deploy_path }}/install_dba_scripts_aws.log" || :
