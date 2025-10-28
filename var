@@ -1,48 +1,18 @@
-# 1) Normaliser l'env venant du CLI / GitLab / hostvars
-- name: Normalize environment
-  set_fact:
+# 1) Debug (facultatif, mais utile une fois)
+- name: Show cats_env and its type
+  ansible.builtin.debug:
+    msg: "cats_env={{ cats_env }} (type={{ cats_env | type_debug }})"
+  tags: [config, update_database]
+
+# 2) Normaliser cats_env -> string, lower, trim
+- name: Normalize cats_env to a single string
+  ansible.builtin.set_fact:
     cats_env: >-
-      {{ environment
-         | default(ansible_env.ENV)
-         | default(hostvars[inventory_hostname].environment)
-         | lower | trim }}
-
-# 2) Valider l'env
-- name: Validate environment
-  assert:
-    that:
-      - cats_env in oracle_service_names.keys()
-    fail_msg: "Unknown environment '{{ cats_env }}'. Expected one of: {{ oracle_service_names.keys() | list }}"
-
-# 3) Choisir le service Oracle à partir de la map
-- name: Set Oracle service name based on environment
-  set_fact:
-    oracle_service_name: "{{ oracle_service_names[cats_env] }}"
-
-
-Ensuite, mets à jour tes usages pour ne plus référencer environment dans les noms de fichier/log (c’est lui qui était vide et te faisait []) mais cats_env :
-
-# Archive du log côté remote
-- name: Archive Oracle log on remote host
-  copy:
-    src: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
-    dest: "/opt/cats/log/oracle_update_{{ cats_env }}_{{ cats_version }}_{{ log_timestamp }}.log"
-  remote_src: true
-  become: true
-
-# Fetch vers les artifacts du runner
-- name: Fetch Oracle update log to artifacts folder
-  fetch:
-    src: "/opt/cats/log/oracle_update_{{ cats_env }}_{{ cats_version }}_{{ log_timestamp }}.log"
-    dest: "{{ local_artifacts_dir }}/"
-    flat: true
-  become: true
-
-
-Et pour ton debug, affiche aussi cats_env pour vérifier la résolution :
-
-- name: Debug resolved inputs
-  debug:
-    msg: "ENV(raw)={{ environment | default('NOT_SET') }} | cats_env={{ cats_env }} | SERVICE={{ oracle_service_name }} | VERSION={{ cats_version }}"
-
-Check-list rapide
+      {{
+        (
+          cats_env
+            if cats_env is string
+            else (cats_env | first)        # si une liste a été passée
+        ) | string | trim | lower
+      }}
+  tags: [config, update_database]
