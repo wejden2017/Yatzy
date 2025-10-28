@@ -1,31 +1,21 @@
-- name: Ensure log file exists (tolerant)
-  ansible.builtin.shell: |
-    set -e
-    test -f "{{ tar_deploy_path }}/install_dba_scripts_aws.log" && stat -c '%s' "{{ tar_deploy_path }}/install_dba_scripts_aws.log" || true
-  changed_when: false
+# Juste avant l’archive du log
+- name: Freeze a unique log stamp for this run
+  set_fact:
+    log_stamp: "{{ ansible_date_time.epoch }}"
 
-# Rapatrier le log du remote vers le workspace GitLab (répertoire local du job)
-- name: Fetch Oracle update log to artifacts folder
-  ansible.builtin.fetch:
+- name: Archive Oracle log
+  copy:
     src: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
-    dest: "artifacts/{{ inventory_hostname }}-install_dba_scripts_aws.log"
+    dest: "/opt/cats/log/oracle_update_{{ cats_version }}_{{ log_stamp }}.log"
+    remote_src: yes
+  ignore_errors: yes
+  tags: [update_database]
+
+- name: Fetch Oracle update log to artifacts folder
+  fetch:
+    src: "/opt/cats/log/oracle_update_{{ cats_version }}_{{ log_stamp }}.log"
+    dest: "artifacts/oracle_update_{{ cats_version }}_{{ log_stamp }}.log"
     flat: true
   become: true
-  failed_when: false   # on veut des artifacts même si le script a échoué
-
-
-  artifacts:
-    name: "db-update-$ENV-$CI_PIPELINE_ID"
-    when: always          # on publie même si le job échoue
-    expire_in: 14 days
-    paths:
-      - artifacts/*.log
-      - artifacts/*.tgz
-
-
-- name: Tail Oracle update log on failure
-  ansible.builtin.shell: |
-    set -e
-    tail -n 200 "{{ tar_deploy_path }}/install_dba_scripts_aws.log" || true
-  when: oracle_update_result is defined and oracle_update_result.rc != 0
-  changed_when: false
+  failed_when: false
+  tags: [update_database]
