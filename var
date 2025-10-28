@@ -1,16 +1,15 @@
-# ✅ Crée le fichier si pas présent, sans toucher au owner si déjà là
-- name: Ensure script log file exists
-  ansible.builtin.file:
-    path: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
-    state: touch
-  become: true
-  changed_when: false
+# Horodatage lisible
+- name: Compute readable timestamp
+  set_fact:
+    log_timestamp: "{{ ansible_date_time.date | regex_replace('-', '') }}{{ ansible_date_time.time | regex_replace(':', '') }}"
+  when: ansible_date_time is defined
   tags: [update_database]
 
-# ✅ Vide le contenu du fichier (truncate)
-- name: Truncate script log file
-  ansible.builtin.shell: |
-    truncate -s 0 "{{ tar_deploy_path }}/install_dba_scripts_aws.log" || :
-  become: true
-  changed_when: false
+# Fallback si ansible_date_time absent → CI pipeline ID → sinon epoch
+- name: Fallback timestamp if ansible_date_time missing
+  set_fact:
+    log_timestamp: >-
+      {{ lookup('env','CI_PIPELINE_ID')
+         | default(lookup('pipe','date +%Y%m%d%H%M%S')) }}
+  when: log_timestamp is not defined
   tags: [update_database]
