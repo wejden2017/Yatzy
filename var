@@ -1,22 +1,29 @@
-- name: Extraire les sous-archives Oracle nécessaires
+- name: Ensure log file exists (tolerant)
   ansible.builtin.shell: |
-    set -euo pipefail
-    tar -xf "{{ tar_deploy_path }}/cats_{{ cats_version }}.tar" \
-      --strip-components=1 \
-      -C "{{ tar_deploy_path }}" \
-      "cats_{{ cats_version }}/cats-script.tar" \
-      "cats_{{ cats_version }}/cats-plsql.tar"
-  args:
-    creates: "{{ tar_deploy_path }}/cats-script.tar"
-  tags: [update_database, scripts]
+    set -e
+    test -f "{{ tar_deploy_path }}/install_dba_scripts_aws.log" && stat -c '%s' "{{ tar_deploy_path }}/install_dba_scripts_aws.log" || true
+  changed_when: false
 
-- name: Assurer les bons droits sur les sous-archives
-  ansible.builtin.file:
-    path: "{{ item }}"
-    owner: "{{ cats_user }}"
-    group: "{{ cats_grp.name }}"
-    mode: '0644'
-  loop:
-    - "{{ tar_deploy_path }}/cats-script.tar"
-    - "{{ tar_deploy_path }}/cats-plsql.tar"
-  tags: [update_database, scripts]
+# Rapatrier le log du remote vers le workspace GitLab (répertoire local du job)
+- name: Fetch Oracle update log to artifacts folder
+  ansible.builtin.fetch:
+    src: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
+    dest: "artifacts/{{ inventory_hostname }}-install_dba_scripts_aws.log"
+    flat: true
+  become: true
+  failed_when: false   # on veut des artifacts même si le script a échoué
+
+
+artifacts:
+  when: always           # garder les logs même si le job échoue
+  expire_in: 14 days
+  paths:
+    - artifacts/*.log
+
+
+- name: Tail Oracle update log on failure
+  ansible.builtin.shell: |
+    set -e
+    tail -n 200 "{{ tar_deploy_path }}/install_dba_scripts_aws.log" || true
+  when: oracle_update_result is defined and oracle_update_result.rc != 0
+  changed_when: false
