@@ -1,8 +1,9 @@
-- name: Fetch Oracle update log to artifacts folder
-  ansible.builtin.fetch:
-    src: "/opt/cats/log/oracle_update_{{ cats_version }}_{{ log_stamp }}.log"
-    dest: "artifacts/oracle_update_{{ cats_version }}_{{ log_stamp }}.log"
-    flat: true
-  become: true
-  failed_when: false
+- name: Ensure local artifacts folder exists
+  ansible.builtin.file:
+    path: artifacts
+    state: directory
+    mode: "0755"
+  delegate_to: localhost
+  run_once: true
   tags: [update_database]
+
