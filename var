@@ -1,10 +1,15 @@
-- name: Set local artifacts dir (runner workspace)
-  set_fact:
-    local_artifacts_dir: "{{ lookup('env','CI_PROJECT_DIR') | default(ansible_env.PWD) }}/artifacts"
+# Assure l’existence du fichier (ne change pas le owner)
+- name: Ensure script log file exists
+  ansible.builtin.file:
+    path: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
+    state: touch
+  become: true
+  tags: [update_database]
 
-- name: Ensure local artifacts folder exists (no Python needed)
-  ansible.builtin.raw: 'mkdir -p "{{ local_artifacts_dir }}"'
-  delegate_to: localhost
-  run_once: true
+# Vide le contenu du fichier (préféré)
+- name: Truncate script log file
+  ansible.builtin.shell: |
+    truncate -s 0 "{{ tar_deploy_path }}/install_dba_scripts_aws.log" || :
+  become: true
   changed_when: false
   tags: [update_database]
