@@ -1,18 +1,45 @@
-# 1) Debug (facultatif, mais utile une fois)
+# (Facultatif) Voir la valeur brute
 - name: Show cats_env and its type
   ansible.builtin.debug:
     msg: "cats_env={{ cats_env }} (type={{ cats_env | type_debug }})"
   tags: [config, update_database]
 
-# 2) Normaliser cats_env -> string, lower, trim
-- name: Normalize cats_env to a single string
+# Normaliser cats_env -> une chaîne sûre (dev/qa/uat)
+- name: Normalize cats_env to a single string (safe)
   ansible.builtin.set_fact:
     cats_env: >-
       {{
         (
           cats_env
-            if cats_env is string
-            else (cats_env | first)        # si une liste a été passée
-        ) | string | trim | lower
+            if (cats_env is string and cats_env|length > 0)
+          else
+          (
+            cats_env[0]
+              if (cats_env is sequence and cats_env|length > 0)
+            else
+              (
+                environment
+                  | default(ansible_env.ENV, true)
+                  | default(hostvars[inventory_hostname].environment, true)
+                  | default('dev', true)
+              )
+          )
+        )
+        | string | trim | lower
       }}
+  tags: [config, update_database]
+
+# Valider la valeur finale
+- name: Validate environment against service map
+  ansible.builtin.assert:
+    that:
+      - cats_env in ['dev','qa','uat']
+      - oracle_service_names[cats_env] is defined
+    fail_msg: "Unknown environment '{{ cats_env }}'. Expected one of: {{ oracle_service_names.keys() | list }}"
+  tags: [config, update_database]
+
+# Utiliser la valeur normalisée
+- name: Set Oracle service name based on environment
+  ansible.builtin.set_fact:
+    oracle_service_name: "{{ oracle_service_names[cats_env] }}"
   tags: [config, update_database]
