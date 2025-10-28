@@ -1,28 +1,25 @@
-# 1) Normaliser les entrées depuis le wrapper ou le rôle
+# --- Normalisation des entrées (DOIT être tout en haut du rôle) ---
 - name: Normalize inputs (environment, cats_version)
   set_fact:
-    # ordre de priorité : variable explicite du rôle > variable du wrapper > variables d'environnement CI > défaut
     environment: >-
       {{ (environment | default(env) | default(lookup('env','ENV')) | default('dev')) | lower }}
     cats_version: >-
       {{ cats_version | default(version) | default(lookup('env','CATS_VERSION')) | default('6.03.09.003') }}
   tags: [update_database]
 
-# 2) Valider que l'environnement est supporté
 - name: Validate environment against service map
   fail:
     msg: "Unknown environment '{{ environment }}'. Expected one of: {{ oracle_service_names.keys() | list | join(', ') }}"
   when: oracle_service_names[environment] is not defined
   tags: [update_database]
 
-# 3) Dériver le service Oracle en fonction de l'env
 - name: Set Oracle service name based on environment
   set_fact:
     oracle_service_name: "{{ oracle_service_names[environment] }}"
-  tags: [update_database]
+  tags: [update_database, config]
 
-# (optionnel) Petit debug le temps des tests
+# (optionnel) debug pendant les tests
 - name: Debug resolved inputs
-  debug:
+  ansible.builtin.debug:
     msg: "ENV={{ environment }} | SERVICE={{ oracle_service_name }} | VERSION={{ cats_version }}"
   tags: [update_database]
