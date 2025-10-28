@@ -14,11 +14,13 @@
   failed_when: false   # on veut des artifacts même si le script a échoué
 
 
-artifacts:
-  when: always           # garder les logs même si le job échoue
-  expire_in: 14 days
-  paths:
-    - artifacts/*.log
+  artifacts:
+    name: "db-update-$ENV-$CI_PIPELINE_ID"
+    when: always          # on publie même si le job échoue
+    expire_in: 14 days
+    paths:
+      - artifacts/*.log
+      - artifacts/*.tgz
 
 
 - name: Tail Oracle update log on failure
