@@ -1,13 +1,48 @@
+# === Préparation du nom de fichier de log (timestamp figé)
+- name: Freeze a unique log stamp for this run
+  set_fact:
+    log_stamp: "{{ (ansible_date_time.epoch | default(lookup('pipe','date +%s'))) }}"
+  tags: [update_database]
+
+# === Vérifier l’existence du log généré par le script (côté remote)
+- name: Ensure log file exists (tolerant)
+  ansible.builtin.shell: |
+    set -e
+    test -f "{{ tar_deploy_path }}/install_dba_scripts_aws.log" && stat -c '%s' "{{ tar_deploy_path }}/install_dba_scripts_aws.log" || true
+  changed_when: false
+  tags: [update_database]
+
+# === Archiver le log côté remote dans /opt/cats/log avec un nom propre
+- name: Archive Oracle log
+  ansible.builtin.copy:
+    src: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
+    dest: "/opt/cats/log/oracle_update_{{ cats_version }}_{{ log_stamp }}.log"
+    remote_src: yes
+  become: true
+  ignore_errors: yes
+  tags: [update_database]
+
+# === Définir le dossier local des artifacts (runner)
+- name: Set local artifacts dir (runner workspace)
+  set_fact:
+    local_artifacts_dir: "{{ lookup('env','CI_PROJECT_DIR') | default(ansible_env.PWD) }}/artifacts"
+  tags: [update_database]
+
 - name: Ensure local artifacts folder exists
   ansible.builtin.file:
-    path: artifacts
+    path: "{{ local_artifacts_dir }}"
     state: directory
     mode: "0755"
   delegate_to: localhost
   run_once: true
   tags: [update_database]
 
-- name: Freeze a unique log stamp for this run
-  set_fact:
-    log_stamp: "{{ (ansible_date_time.epoch | default(lookup('pipe','date +%s'))) }}"
-
+# === Rapatrier le log depuis l’EC2 vers le runner (pour GitLab Artifacts)
+- name: Fetch Oracle update log to artifacts folder
+  ansible.builtin.fetch:
+    src: "/opt/cats/log/oracle_update_{{ cats_version }}_{{ log_stamp }}.log"
+    dest: "{{ local_artifacts_dir }}/oracle_update_{{ cats_version }}_{{ log_stamp }}.log"
+    flat: true
+  become: true
+  failed_when: false
+  tags: [update_database]
