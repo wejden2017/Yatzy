@@ -3,10 +3,7 @@
     local_artifacts_dir: "{{ lookup('env','CI_PROJECT_DIR') | default(ansible_env.PWD) }}/artifacts"
 
 - name: Ensure local artifacts folder exists (no Python needed)
-  ansible.builtin.shell: |
-    mkdir -p "{{ local_artifacts_dir }}"
-  args:
-    warn: false
+  ansible.builtin.raw: 'mkdir -p "{{ local_artifacts_dir }}"'
   delegate_to: localhost
   run_once: true
   changed_when: false
