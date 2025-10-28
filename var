@@ -1,25 +1,27 @@
-# --- Normalisation des entrées (DOIT être tout en haut du rôle) ---
-- name: Normalize inputs (environment, cats_version)
+# 1) Log de diagnostic pour voir d'où vient la valeur et son type
+- name: Debug raw environment sources
+  debug:
+    msg: |
+      env (extra vars) = {{ env | default('UNDEF') }}  [type={{ env | type_debug }}]
+      ENV (process env) = {{ lookup('env','ENV') | default('UNDEF') }}
+      hostvars[inventory_hostname].environment = {{ hostvars[inventory_hostname].environment | default('UNDEF') }}
+
+# 2) Normaliser une 'environment' propre : string non vide, sinon fallback
+- name: Normalize environment
   set_fact:
     environment: >-
-      {{ (environment | default(env) | default(lookup('env','ENV')) | default('dev')) | lower }}
-    cats_version: >-
-      {{ cats_version | default(version) | default(lookup('env','CATS_VERSION')) | default('6.03.09.003') }}
-  tags: [update_database]
+      {%- set cli = (env if (env is defined and env is string and env|length > 0) else '') -%}
+      {%- set ci  = lookup('env','ENV') | default('', true) -%}
+      {%- set hv  = hostvars[inventory_hostname].environment | default('', true) -%}
+      {{ (cli or ci or hv or 'dev') | string | lower }}
 
-- name: Validate environment against service map
-  fail:
-    msg: "Unknown environment '{{ environment }}'. Expected one of: {{ oracle_service_names.keys() | list | join(', ') }}"
-  when: oracle_service_names[environment] is not defined
-  tags: [update_database]
-
-- name: Set Oracle service name based on environment
-  set_fact:
-    oracle_service_name: "{{ oracle_service_names[environment] }}"
-  tags: [update_database, config]
-
-# (optionnel) debug pendant les tests
-- name: Debug resolved inputs
-  ansible.builtin.debug:
-    msg: "ENV={{ environment }} | SERVICE={{ oracle_service_name }} | VERSION={{ cats_version }}"
-  tags: [update_database]
+# 3) Valider la valeur
+- name: Validate environment
+  assert:
+    that:
+      - environment in ['dev','qa','uat']
+    fail_msg: >-
+      Unknown environment '{{ environment }}'. Expected one of: dev, qa, uat.
+      Sources => cli={{ env | default('UNDEF') }} ({{ env | type_debug }}),
+                 ENV={{ lookup('env','ENV') | default('UNDEF') }},
+                 hostvars={{ hostvars[inventory_hostname].environment | default('UNDEF') }}.
