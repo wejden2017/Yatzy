@@ -1,109 +1,28 @@
----
-# ===================== UPDATE DATABASE =====================
-
-# (facultatif) affichage des paramètres de connexion
-- name: Display Oracle connection parameters
-  ansible.builtin.debug:
-    msg: |
-      Oracle Database Update Starting...
-      Environment: {{ environment | default('dev') }}
-      Service Name: {{ oracle_service_name }}
-      Database IP: {{ oracle_server_ip }}
-      Package Version: cats_{{ cats_version }}
-      Work Directory: {{ tar_deploy_path }}
+# 1) Normaliser les entrées depuis le wrapper ou le rôle
+- name: Normalize inputs (environment, cats_version)
+  set_fact:
+    # ordre de priorité : variable explicite du rôle > variable du wrapper > variables d'environnement CI > défaut
+    environment: >-
+      {{ (environment | default(env) | default(lookup('env','ENV')) | default('dev')) | lower }}
+    cats_version: >-
+      {{ cats_version | default(version) | default(lookup('env','CATS_VERSION')) | default('6.03.09.003') }}
   tags: [update_database]
 
-# Horodatage lisible (YYYYMMDD-HHMMSS)
-- name: Compute readable timestamp
-  ansible.builtin.set_fact:
-    log_timestamp: "{{ ansible_date_time.date | regex_replace('-', '') }}-{{ ansible_date_time.time | regex_replace(':', '') }}"
-  when: ansible_date_time is defined
+# 2) Valider que l'environnement est supporté
+- name: Validate environment against service map
+  fail:
+    msg: "Unknown environment '{{ environment }}'. Expected one of: {{ oracle_service_names.keys() | list | join(', ') }}"
+  when: oracle_service_names[environment] is not defined
   tags: [update_database]
 
-# Fallback si les facts ne sont pas là (ex: minimal facts, local connection…)
-- name: Fallback timestamp if ansible_date_time missing
-  ansible.builtin.set_fact:
-    log_timestamp: "{{ lookup('env','CI_PIPELINE_ID') | default(lookup('pipe','date +%Y%m%d-%H%M%S')) }}"
-  when: log_timestamp is not defined
+# 3) Dériver le service Oracle en fonction de l'env
+- name: Set Oracle service name based on environment
+  set_fact:
+    oracle_service_name: "{{ oracle_service_names[environment] }}"
   tags: [update_database]
 
-# S’assurer que le fichier de log du script existe
-- name: Ensure script log file exists
-  ansible.builtin.file:
-    path: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
-    state: touch
-  become: true
-  changed_when: false
-  tags: [update_database]
-
-# Vider le log avant chaque exécution
-- name: Truncate script log file
-  ansible.builtin.shell: 'truncate -s 0 "{{ tar_deploy_path }}/install_dba_scripts_aws.log" || :'
-  become: true
-  changed_when: false
-  tags: [update_database]
-
-# (Option) forcer la présence du mot de passe côté env CI
-- name: Capture LUCA password from CI env (validation)
-  ansible.builtin.set_fact:
-    luca_password: "{{ lookup('env','LUCA_PASSWORD') | mandatory('LUCA_PASSWORD missing in CI job env') }}"
-  tags: [update_database]
-
-# Exécuter la mise à jour Oracle
-- name: Execute Oracle Database Update
-  ansible.builtin.shell: |
-    cd {{ tar_deploy_path }}
-    ./install_dba_scripts_aws.ksh {{ oracle_service_name }} {{ oracle_user | default('luca') }} {{ oracle_server_ip }} cats_{{ cats_version }}
-  environment:
-    LUCA_PASSWORD: "{{ luca_password }}"
-  register: oracle_update_result
-  failed_when: oracle_update_result.rc != 0
-  tags: [update_database, execute]
-
-# Affichage succès (pour lecture rapide dans les logs de job)
-- name: Display Oracle Update Success
-  ansible.builtin.debug:
-    msg: |
-      =========================================
-      ORACLE DATABASE UPDATE COMPLETED
-      =========================================
-      Return Code: {{ oracle_update_result.rc }}
-      Package: cats_{{ cats_version }}
-      Service: {{ oracle_service_name }}
-      Database: {{ oracle_server_ip }}
-  when: oracle_update_result.rc == 0
-  tags: [update_database]
-
-# Archiver le log côté remote avec nom lisible/unique
-- name: Archive Oracle log on remote host
-  ansible.builtin.copy:
-    src: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
-    dest: "/opt/cats/log/oracle_update_{{ environment | default('dev') }}_{{ cats_version }}_{{ log_timestamp }}.log"
-    remote_src: true
-  become: true
-  ignore_errors: true
-  tags: [update_database]
-
-# Répertoire local (dans le workspace du runner) où GitLab ira piocher les artifacts
-- name: Set local artifacts dir (runner workspace)
-  ansible.builtin.set_fact:
-    local_artifacts_dir: "{{ lookup('env','CI_PROJECT_DIR') | default(ansible_env.PWD) }}/artifacts"
-  tags: [update_database]
-
-# Créer ce répertoire côté runner (sans dépendance Python)
-- name: Ensure local artifacts folder exists
-  ansible.builtin.raw: 'mkdir -p "{{ local_artifacts_dir }}"'
-  delegate_to: localhost
-  run_once: true
-  changed_when: false
-  tags: [update_database]
-
-# Rapatrier le log pour qu’il apparaisse dans les artifacts du job
-- name: Fetch Oracle update log to artifacts folder
-  ansible.builtin.fetch:
-    src: "/opt/cats/log/oracle_update_{{ environment | default('dev') }}_{{ cats_version }}_{{ log_timestamp }}.log"
-    dest: "{{ local_artifacts_dir }}/"
-    flat: true
-  become: true
-  failed_when: false
+# (optionnel) Petit debug le temps des tests
+- name: Debug resolved inputs
+  debug:
+    msg: "ENV={{ environment }} | SERVICE={{ oracle_service_name }} | VERSION={{ cats_version }}"
   tags: [update_database]
