@@ -1,27 +1,48 @@
-# 1) Log de diagnostic pour voir d'où vient la valeur et son type
-- name: Debug raw environment sources
-  debug:
-    msg: |
-      env (extra vars) = {{ env | default('UNDEF') }}  [type={{ env | type_debug }}]
-      ENV (process env) = {{ lookup('env','ENV') | default('UNDEF') }}
-      hostvars[inventory_hostname].environment = {{ hostvars[inventory_hostname].environment | default('UNDEF') }}
-
-# 2) Normaliser une 'environment' propre : string non vide, sinon fallback
+# 1) Normaliser l'env venant du CLI / GitLab / hostvars
 - name: Normalize environment
   set_fact:
-    environment: >-
-      {%- set cli = (env if (env is defined and env is string and env|length > 0) else '') -%}
-      {%- set ci  = lookup('env','ENV') | default('', true) -%}
-      {%- set hv  = hostvars[inventory_hostname].environment | default('', true) -%}
-      {{ (cli or ci or hv or 'dev') | string | lower }}
+    cats_env: >-
+      {{ environment
+         | default(ansible_env.ENV)
+         | default(hostvars[inventory_hostname].environment)
+         | lower | trim }}
 
-# 3) Valider la valeur
+# 2) Valider l'env
 - name: Validate environment
   assert:
     that:
-      - environment in ['dev','qa','uat']
-    fail_msg: >-
-      Unknown environment '{{ environment }}'. Expected one of: dev, qa, uat.
-      Sources => cli={{ env | default('UNDEF') }} ({{ env | type_debug }}),
-                 ENV={{ lookup('env','ENV') | default('UNDEF') }},
-                 hostvars={{ hostvars[inventory_hostname].environment | default('UNDEF') }}.
+      - cats_env in oracle_service_names.keys()
+    fail_msg: "Unknown environment '{{ cats_env }}'. Expected one of: {{ oracle_service_names.keys() | list }}"
+
+# 3) Choisir le service Oracle à partir de la map
+- name: Set Oracle service name based on environment
+  set_fact:
+    oracle_service_name: "{{ oracle_service_names[cats_env] }}"
+
+
+Ensuite, mets à jour tes usages pour ne plus référencer environment dans les noms de fichier/log (c’est lui qui était vide et te faisait []) mais cats_env :
+
+# Archive du log côté remote
+- name: Archive Oracle log on remote host
+  copy:
+    src: "{{ tar_deploy_path }}/install_dba_scripts_aws.log"
+    dest: "/opt/cats/log/oracle_update_{{ cats_env }}_{{ cats_version }}_{{ log_timestamp }}.log"
+  remote_src: true
+  become: true
+
+# Fetch vers les artifacts du runner
+- name: Fetch Oracle update log to artifacts folder
+  fetch:
+    src: "/opt/cats/log/oracle_update_{{ cats_env }}_{{ cats_version }}_{{ log_timestamp }}.log"
+    dest: "{{ local_artifacts_dir }}/"
+    flat: true
+  become: true
+
+
+Et pour ton debug, affiche aussi cats_env pour vérifier la résolution :
+
+- name: Debug resolved inputs
+  debug:
+    msg: "ENV(raw)={{ environment | default('NOT_SET') }} | cats_env={{ cats_env }} | SERVICE={{ oracle_service_name }} | VERSION={{ cats_version }}"
+
+Check-list rapide
