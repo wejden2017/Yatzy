@@ -1,8 +1,6 @@
-- name: Ensure local artifacts folder exists (shell fallback)
-  ansible.builtin.shell: 'mkdir -p "{{ lookup(''env'',''CI_PROJECT_DIR'') }}/artifacts"'
-  args:
-    executable: /bin/sh
-  delegate_to: localhost
-  run_once: true
-  changed_when: false
-  tags: [update_database]
+- name: Fetch Oracle update log into artifacts/
+  ansible.builtin.fetch:
+    src: "/opt/cats/log/{{ oracle_log_file }}"
+    dest: "{{ lookup('env','CI_PROJECT_DIR') }}/artifacts/"
+    flat: true
+  become: true
