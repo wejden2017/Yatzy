@@ -1,25 +1,11 @@
-default_password: "ChangeMe1234!"
+- name: Freeze build timestamps once
+  ansible.builtin.set_fact:
+    build_ts: "{{ lookup('pipe', 'date +%Y%m%d-%H%M%S') }}"   # lisible: 20251029-114840
+    build_epoch: "{{ lookup('pipe', 'date +%s') }}"           # unique: 1730209720
+    ci_job_id: "{{ lookup('env','CI_JOB_ID') | default('local', true) }}"
+  tags: [update_database]
 
-# action: create | delete | lock | unlock | reset-password
-users:
-  - login: "zouertani"
-    roles: ["DEV_ROLE"]
-    action: "create"
-    schemas: ["LUCA","LUCA3"]
-
-  #- login: "ba_user"
-  #  roles: ["BA_ROLE"]
-  #  action: "create"
-
-  #- login: "helper_dba"
-  #  roles: ["DBA_ROLE"]
-  #  action: "lock"
-
-  - login: "toto"
-    action: "delete"
-
-  #- login: "reset_me"
-  #  roles: ["DEV_ROLE"]
-  #  action: "reset-password"
-
-
+- name: Compute final log name
+  ansible.builtin.set_fact:
+    oracle_log_file: "oracle_update_{{ env }}_{{ cats_version }}_{{ ci_job_id }}_{{ build_ts }}.log"
+  tags: [update_database]
