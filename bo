@@ -1,39 +1,8 @@
-- name: Freeze build timestamps once
-  ansible.builtin.set_fact:
-    build_ts: "{{ lookup('pipe','date +%Y%m%d-%H%M%S') }}"
-    build_epoch: "{{ lookup('pipe','date +%s') }}"
-    ci_job_id: "{{ lookup('env','CI_JOB_ID') | default('local', true) }}"
-  run_once: true
-  delegate_to: localhost
-
-- name: Compute final log name (UTILISE-LE PARTOUT)
-  ansible.builtin.set_fact:
-    oracle_log_file: "oracle_update_{{ env }}_{{ cats_version }}_{{ build_epoch }}_{{ build_ts }}.log"
-  run_once: true
-  delegate_to: localhost
-
-
-- name: Archive Oracle log on remote host
-  ansible.builtin.copy:
-    src: "{{ tar_deploy_path }}/{{ oracle_install_script_log }}"
-    dest: "/opt/cats/log/{{ oracle_log_file }}"
-    remote_src: true
-    owner: cats
-    group: cats
-    mode: "0644"
-  become: true
-
-- name: Ensure local artifacts folder exists
-  ansible.builtin.file:
-    path: "{{ lookup('env','CI_PROJECT_DIR') }}/artifacts"
-    state: directory
-    mode: "0755"
+- name: Ensure local artifacts folder exists (shell fallback)
+  ansible.builtin.shell: 'mkdir -p "{{ lookup(''env'',''CI_PROJECT_DIR'') }}/artifacts"'
+  args:
+    executable: /bin/sh
   delegate_to: localhost
   run_once: true
-
-- name: Fetch Oracle update log into artifacts/
-  ansible.builtin.fetch:
-    src: "/opt/cats/log/{{ oracle_log_file }}"
-    dest: "{{ lookup('env','CI_PROJECT_DIR') }}/artifacts/"
-    flat: true
-  become: true
+  changed_when: false
+  tags: [update_database]
