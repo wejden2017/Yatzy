@@ -1,0 +1,490 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Rapport de Déploiement Oracle - CATSDEVPDB1</title>
+    <style>
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background-color: #f5f5f5;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+        
+        .header .subtitle {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .summary-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+        
+        .summary-card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            text-align: center;
+            transition: transform 0.3s ease;
+        }
+        
+        .summary-card:hover {
+            transform: translateY(-5px);
+        }
+        
+        .summary-card .number {
+            font-size: 3em;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        
+        .summary-card .label {
+            font-size: 1.1em;
+            color: #666;
+        }
+        
+        .success { color: #28a745; }
+        .warning { color: #ffc107; }
+        .danger { color: #dc3545; }
+        .info { color: #17a2b8; }
+        
+        .section {
+            background: white;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .section-header {
+            background: #f8f9fa;
+            padding: 20px;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        .section-header h2 {
+            color: #495057;
+            margin-bottom: 5px;
+        }
+        
+        .section-content {
+            padding: 20px;
+        }
+        
+        .info-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+        }
+        
+        .info-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background: #f8f9fa;
+            border-radius: 5px;
+        }
+        
+        .info-label {
+            font-weight: bold;
+            color: #495057;
+        }
+        
+        .info-value {
+            color: #6c757d;
+        }
+        
+        .table-container {
+            overflow-x: auto;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #dee2e6;
+        }
+        
+        th {
+            background-color: #f8f9fa;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            font-weight: 500;
+            text-transform: uppercase;
+        }
+        
+        .status-success {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .status-skipped {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .status-failed {
+            background-color: #f8d7da;
+            color: #721c24;
+        }
+        
+        .toggle-btn {
+            background: #007bff;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-bottom: 15px;
+        }
+        
+        .toggle-btn:hover {
+            background: #0056b3;
+        }
+        
+        .footer {
+            text-align: center;
+            padding: 20px;
+            color: #6c757d;
+            font-size: 0.9em;
+        }
+        
+        .collapsible {
+            max-height: 0;
+            overflow: hidden;
+            transition: max-height 0.3s ease;
+        }
+        
+        .collapsible.show {
+            max-height: none;
+        }
+        
+        @media (max-width: 768px) {
+            .container {
+                padding: 10px;
+            }
+            
+            .header h1 {
+                font-size: 2em;
+            }
+            
+            .summary-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+        
+    </style>
+</head>
+<body>
+    <div class="container">
+        
+        <div class="header">
+            <h1>🗄️ Rapport de Déploiement Oracle</h1>
+            <div class="subtitle">
+                Service: CATSDEVPDB1 | Démarré le: 25/11/05 16:07:05
+            </div>
+        </div>
+        
+        
+        <div class="summary-grid">
+            <div class="summary-card">
+                <div class="number info">26</div>
+                <div class="label">Scripts Total</div>
+            </div>
+            <div class="summary-card">
+                <div class="number success">3</div>
+                <div class="label">Scripts Exécutés</div>
+            </div>
+            <div class="summary-card">
+                <div class="number warning">23</div>
+                <div class="label">Scripts Ignorés</div>
+            </div>
+            <div class="summary-card">
+                <div class="number success">7</div>
+                <div class="label">Packages Créés</div>
+            </div>
+        </div>
+        
+        
+        <div class="section">
+            <div class="section-header">
+                <h2>📋 Informations de Déploiement</h2>
+            </div>
+            <div class="section-content">
+                <div class="info-grid">
+                    <div class="info-item">
+                        <span class="info-label">Service:</span>
+                        <span class="info-value">CATSDEVPDB1</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Utilisateur:</span>
+                        <span class="info-value">luca</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Serveur IP:</span>
+                        <span class="info-value">10.105.57.186</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Package:</span>
+                        <span class="info-value">cats_7.01.03_001</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Heure de début:</span>
+                        <span class="info-value">25/11/05 16:07:05</span>
+                    </div>
+                    <div class="info-item">
+                        <span class="info-label">Rapport généré:</span>
+                        <span class="info-value">05/11/2025 15:49:11</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        
+        <div class="section">
+            <div class="section-header">
+                <h2>📜 Scripts SQL</h2>
+                <button class="toggle-btn" onclick="toggleSection('scripts-table')">
+                    Afficher/Masquer Détails
+                </button>
+            </div>
+            <div class="section-content">
+                <div id="scripts-table" class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nom du Script</th>
+                                <th>Statut</th>
+                                <th>Heure d'Exécution</th>
+                                <th>Rollback</th>
+                                <th>Déjà Exécuté</th>
+                                <th>Résultat Oracle</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            
+            <tr>
+                <td>5.00.01_001_dummy.sql</td>
+                <td><span class="status-badge status-skipped">SKIPPED</span></td>
+                <td>25/11/05 16:07:06</td>
+                <td>❌</td>
+                <td>Oui</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>6.03.09_004_LSC-12820_MODIFY_CONCORDE_STANDARD_FLOW_HISTO_VIEW.sql</td>
+                <td><span class="status-badge status-skipped">SKIPPED</span></td>
+                <td>25/11/05 16:07:06</td>
+                <td>❌</td>
+                <td>Oui</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>6.03.23_001_LSC-12940_DML_MODIFY_PATH_ACTION.sql</td>
+                <td><span class="status-badge status-success">SUCCESS</span></td>
+                <td>25/11/05 16:07:06</td>
+                <td>❌</td>
+                <td>Non</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>6.03.23_003_LSC_12763_VALO_SWIFT_MANAGER_ADD_NEW_TREATMENT_WITH_LABELS.sql</td>
+                <td><span class="status-badge status-skipped">SKIPPED</span></td>
+                <td>25/11/05 16:07:07</td>
+                <td>❌</td>
+                <td>Oui</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>6.03.23_004_LSC-12791_DDL_ALTER_CCG_RECONCILIATION.sql</td>
+                <td><span class="status-badge status-success">SUCCESS</span></td>
+                <td>25/11/05 16:07:07</td>
+                <td>❌</td>
+                <td>Non</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>7.01.02_018_LSC-12545_CBP_DECOMMISSIONING.sql</td>
+                <td><span class="status-badge status-success">SUCCESS</span></td>
+                <td>25/11/05 16:07:10</td>
+                <td>❌</td>
+                <td>Non</td>
+                <td>-</td>
+            </tr>
+            
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        
+        <div class="section">
+            <div class="section-header">
+                <h2>📦 Packages PL/SQL</h2>
+                <button class="toggle-btn" onclick="toggleSection('packages-table')">
+                    Afficher/Masquer Détails
+                </button>
+            </div>
+            <div class="section-content">
+                <div id="packages-table" class="table-container">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>Nom du Package</th>
+                                <th>Type</th>
+                                <th>Statut</th>
+                                <th>Heure d'Exécution</th>
+                                <th>Message d'Erreur</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            
+            <tr>
+                <td>/header/pack_3g.pks</td>
+                <td>PKS</td>
+                <td><span class="status-badge status-success">SUCCESS</span></td>
+                <td>25/11/05 16:07:11</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>/header/pack_adh_a_traiter.pks</td>
+                <td>PKS</td>
+                <td><span class="status-badge status-success">SUCCESS</span></td>
+                <td>25/11/05 16:07:11</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>/header/pack_affectation.pks</td>
+                <td>PKS</td>
+                <td><span class="status-badge status-success">SUCCESS</span></td>
+                <td>25/11/05 16:07:11</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>/header/pack_agregation.pks</td>
+                <td>PKS</td>
+                <td><span class="status-badge status-success">SUCCESS</span></td>
+                <td>25/11/05 16:07:11</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>/header/pack_alim_cours.pks</td>
+                <td>PKS</td>
+                <td><span class="status-badge status-success">SUCCESS</span></td>
+                <td>25/11/05 16:07:11</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>/body/pack_agregation.pkb</td>
+                <td>PKB</td>
+                <td><span class="status-badge status-success">SUCCESS</span></td>
+                <td>25/11/05 16:07:11</td>
+                <td>-</td>
+            </tr>
+            
+            <tr>
+                <td>/body/pack_affectation.pkb</td>
+                <td>PKB</td>
+                <td><span class="status-badge status-success">SUCCESS</span></td>
+                <td>25/11/05 16:07:11</td>
+                <td>-</td>
+            </tr>
+            
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        
+        
+        <div class="footer">
+            <p>Rapport généré automatiquement le 05/11/2025 à 15:49:11</p>
+            <p>Analyseur de logs Oracle Database Deployment</p>
+        </div>
+        
+    </div>
+    
+    <script>
+        
+        function toggleSection(sectionId) {
+            const section = document.getElementById(sectionId);
+            if (section.classList.contains('show')) {
+                section.classList.remove('show');
+                section.style.maxHeight = '0';
+            } else {
+                section.classList.add('show');
+                section.style.maxHeight = section.scrollHeight + 'px';
+            }
+        }
+        
+        // Initialiser les sections comme visibles
+        document.addEventListener('DOMContentLoaded', function() {
+            const tables = document.querySelectorAll('.table-container');
+            tables.forEach(table => {
+                table.classList.add('show');
+                table.style.maxHeight = table.scrollHeight + 'px';
+            });
+        });
+        
+    </script>
+</body>
+</html>
