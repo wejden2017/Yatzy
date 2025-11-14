@@ -32,3 +32,21 @@ EXCEPTION
         DBMS_OUTPUT.PUT_LINE('✗ ERREUR: ' || SQLCODE || ' - ' || SQLERRM);
 END;
 /
+
+sqlplus / as sysdba
+
+SQL> ALTER SESSION SET CONTAINER = CATSOAPDB1;
+
+SQL> -- Supprimer l'ancien directory
+SQL> DROP DIRECTORY DATA_APF;
+
+SQL> -- Recréer le directory
+SQL> CREATE DIRECTORY DATA_APF AS '/shared-folder/cats/data/apf';
+
+SQL> -- Redonner les permissions à LUCA
+SQL> GRANT READ, WRITE ON DIRECTORY DATA_APF TO LUCA;
+
+SQL> -- Vérifier
+SQL> SELECT * FROM DBA_DIRECTORIES WHERE DIRECTORY_NAME = 'DATA_APF';
+
+SQL> EXIT;
