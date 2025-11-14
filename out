@@ -1,31 +1,34 @@
 SET SERVEROUTPUT ON;
 
-DECLARE
-    v_file      UTL_FILE.FILE_TYPE;
-    v_line      VARCHAR2(32767);
-    v_directory VARCHAR2(100) := 'DATA_APF';
-    v_filename  VARCHAR2(100) := 'zoi.txt';
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('=== TEST LECTURE FICHIER ===');
-    DBMS_OUTPUT.PUT_LINE('Directory: ' || v_directory);
-    DBMS_OUTPUT.PUT_LINE('Fichier: ' || v_filename);
-    DBMS_OUTPUT.PUT_LINE('----------------------------');
+    FOR rec IN (SELECT DIRECTORY_NAME, DIRECTORY_PATH 
+                FROM DBA_DIRECTORIES 
+                WHERE DIRECTORY_NAME = 'DATA_APF') LOOP
+        DBMS_OUTPUT.PUT_LINE('Directory: ' || rec.DIRECTORY_NAME);
+        DBMS_OUTPUT.PUT_LINE('Path: ' || rec.DIRECTORY_PATH);
+    END LOOP;
+END;
+/
+
+
+
+SET SERVEROUTPUT ON;
+
+DECLARE
+    v_exists BOOLEAN;
+    v_length NUMBER;
+    v_blocksize NUMBER;
+BEGIN
+    UTL_FILE.FGETATTR('DATA_APF', 'itf_svgrm.txt', v_exists, v_length, v_blocksize);
     
-    v_file := UTL_FILE.FOPEN(v_directory, v_filename, 'R', 32767);
-    DBMS_OUTPUT.PUT_LINE('✓ Fichier ouvert avec succès');
-    
-    UTL_FILE.GET_LINE(v_file, v_line);
-    DBMS_OUTPUT.PUT_LINE('✓ Première ligne lue: ' || v_line);
-    
-    UTL_FILE.FCLOSE(v_file);
-    DBMS_OUTPUT.PUT_LINE('✓ Fichier fermé');
-    DBMS_OUTPUT.PUT_LINE('=== TEST REUSSI ===');
-    
+    IF v_exists THEN
+        DBMS_OUTPUT.PUT_LINE('✓ Fichier trouvé!');
+        DBMS_OUTPUT.PUT_LINE('  Taille: ' || v_length);
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('✗ Fichier non trouvé par Oracle');
+    END IF;
 EXCEPTION
     WHEN OTHERS THEN
         DBMS_OUTPUT.PUT_LINE('✗ ERREUR: ' || SQLCODE || ' - ' || SQLERRM);
-        IF UTL_FILE.IS_OPEN(v_file) THEN
-            UTL_FILE.FCLOSE(v_file);
-        END IF;
 END;
 /
