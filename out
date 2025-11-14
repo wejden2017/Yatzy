@@ -4,42 +4,24 @@ DECLARE
     v_file      UTL_FILE.FILE_TYPE;
     v_line      VARCHAR2(32767);
     v_directory VARCHAR2(100) := 'DATA_APF';
-    v_filename  VARCHAR2(100) := 'test.txt';  -- Mettez le nom d'un fichier qui existe déjà
+    v_filename  VARCHAR2(100) := 'zoi.txt';
 BEGIN
     DBMS_OUTPUT.PUT_LINE('=== TEST LECTURE FICHIER ===');
     DBMS_OUTPUT.PUT_LINE('Directory: ' || v_directory);
     DBMS_OUTPUT.PUT_LINE('Fichier: ' || v_filename);
     DBMS_OUTPUT.PUT_LINE('----------------------------');
     
-    -- Ouverture du fichier
     v_file := UTL_FILE.FOPEN(v_directory, v_filename, 'R', 32767);
     DBMS_OUTPUT.PUT_LINE('✓ Fichier ouvert avec succès');
     
-    -- Lecture première ligne
     UTL_FILE.GET_LINE(v_file, v_line);
-    DBMS_OUTPUT.PUT_LINE('✓ Première ligne lue: ' || SUBSTR(v_line, 1, 100));
+    DBMS_OUTPUT.PUT_LINE('✓ Première ligne lue: ' || v_line);
     
-    -- Fermeture
     UTL_FILE.FCLOSE(v_file);
     DBMS_OUTPUT.PUT_LINE('✓ Fichier fermé');
     DBMS_OUTPUT.PUT_LINE('=== TEST REUSSI ===');
     
 EXCEPTION
-    WHEN UTL_FILE.INVALID_PATH THEN
-        DBMS_OUTPUT.PUT_LINE('✗ ERREUR INVALID_PATH: Le directory n''existe pas ou n''est pas accessible');
-        DBMS_OUTPUT.PUT_LINE('  → Vérifier les permissions Linux sur /shared-folder/cats/data/apf');
-    WHEN UTL_FILE.INVALID_OPERATION THEN
-        DBMS_OUTPUT.PUT_LINE('✗ ERREUR INVALID_OPERATION: Impossible d''ouvrir le fichier');
-        DBMS_OUTPUT.PUT_LINE('  → Le fichier existe-t-il ? Permissions correctes ?');
-    WHEN UTL_FILE.READ_ERROR THEN
-        DBMS_OUTPUT.PUT_LINE('✗ ERREUR READ_ERROR: Impossible de lire le fichier');
-    WHEN UTL_FILE.INVALID_FILENAME THEN
-        DBMS_OUTPUT.PUT_LINE('✗ ERREUR INVALID_FILENAME: Nom de fichier invalide');
-    WHEN NO_DATA_FOUND THEN
-        DBMS_OUTPUT.PUT_LINE('✗ Fichier vide ou fin de fichier atteinte');
-        IF UTL_FILE.IS_OPEN(v_file) THEN
-            UTL_FILE.FCLOSE(v_file);
-        END IF;
     WHEN OTHERS THEN
         DBMS_OUTPUT.PUT_LINE('✗ ERREUR: ' || SQLCODE || ' - ' || SQLERRM);
         IF UTL_FILE.IS_OPEN(v_file) THEN
