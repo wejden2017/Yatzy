@@ -1,3 +1,31 @@
-"deploy_update_database_$[[ inputs.environment ]]":
-  variables:
-    ACTIONS: "do_update_database=true environment=$[[ inputs.environment ]]"
+SET SERVEROUTPUT ON;
+
+DECLARE
+    v_file      UTL_FILE.FILE_TYPE;
+    v_line      VARCHAR2(32767);
+    v_directory VARCHAR2(100) := 'DATA_APF';
+    v_filename  VARCHAR2(100) := 'itf_svgrm.txt';
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('=== TEST LECTURE FICHIER ===');
+    DBMS_OUTPUT.PUT_LINE('Directory: ' || v_directory);
+    DBMS_OUTPUT.PUT_LINE('Fichier: ' || v_filename);
+    DBMS_OUTPUT.PUT_LINE('----------------------------');
+    
+    v_file := UTL_FILE.FOPEN(v_directory, v_filename, 'R', 32767);
+    DBMS_OUTPUT.PUT_LINE('✓ Fichier ouvert avec succès');
+    
+    UTL_FILE.GET_LINE(v_file, v_line);
+    DBMS_OUTPUT.PUT_LINE('✓ Première ligne lue: ' || SUBSTR(v_line, 1, 100));
+    
+    UTL_FILE.FCLOSE(v_file);
+    DBMS_OUTPUT.PUT_LINE('✓ Fichier fermé');
+    DBMS_OUTPUT.PUT_LINE('=== TEST REUSSI ===');
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('✗ ERREUR: ' || SQLCODE || ' - ' || SQLERRM);
+        IF UTL_FILE.IS_OPEN(v_file) THEN
+            UTL_FILE.FCLOSE(v_file);
+        END IF;
+END;
+/
