@@ -50,3 +50,8 @@ SQL> -- Vérifier
 SQL> SELECT * FROM DBA_DIRECTORIES WHERE DIRECTORY_NAME = 'DATA_APF';
 
 SQL> EXIT;
+
+Quand Oracle accède au FSx via NFS avec `sec=sys` :
+- ✅ **UID transmis** : 54321 (oracle)
+- ✅ **GID primaire transmis** : 54321 (oinstall)  
+- ❌ **Groupes supplémentaires** : 4510(cats), 54322(dba), etc. → **PAS toujours pris en compte !**
