@@ -1,26 +1,26 @@
 bashdocker exec -it 1b1f053f5947 bash
-Une fois dans le conteneur, tapez :
+Puis dans le conteneur :
 bashrunmqsc QM1
 ```
 
-Puis entrez ces commandes **une par une** dans runmqsc :
+Dans runmqsc, tapez ces commandes **une par une** :
 ```
-ALTER CHANNEL(DEV.APP.SVRCONN) CHLTYPE(SVRCONN) MCAUSER('mqm')
-```
-
-Attendez la confirmation, puis :
-```
-SET CHLAUTH(DEV.APP.SVRCONN) TYPE(BLOCKUSER) USERLIST('nobody')
+ALTER AUTHINFO(SYSTEM.DEFAULT.AUTHINFO.IDPWOS) AUTHTYPE(IDPWOS) CHCKCLNT(NONE)
 ```
 
 Attendez la confirmation, puis :
 ```
-SET CHLAUTH(DEV.APP.SVRCONN) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(OPTIONAL) ACTION(REPLACE)
+ALTER QMGR CONNAUTH(' ')
 ```
 
-Attendez la confirmation, puis :
+Puis :
 ```
 REFRESH SECURITY TYPE(CONNAUTH)
+```
+
+Puis :
+```
+REFRESH SECURITY TYPE(AUTHINFO)
 ```
 
 Puis :
