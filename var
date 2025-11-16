@@ -1,11 +1,23 @@
-Restez dans runmqsc et tapez ces commandes une par une :
-ALTER CHANNEL(DEV.APP.SVRCONN) CHLTYPE(SVRCONN) MCAUSER('mqm')
-ALTER QMGR CONNAUTH('')
-REFRESH SECURITY TYPE(CONNAUTH)
-SET CHLAUTH(DEV.APP.SVRCONN) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(NOACCESS) ACTION(REMOVE)
-SET CHLAUTH(DEV.APP.SVRCONN) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) ACTION(ADD)
-REFRESH SECURITY(*)
-END
-Sortez et redémarrez :
-exit
-docker restart 1b1f053f5947
+# 1. Arrêter et supprimer l'ancien conteneur
+docker stop ibm-mq
+docker rm ibm-mq
+
+# 2. Créer le nouveau conteneur avec la bonne configuration
+docker run -d \
+  --name ibm-mq \
+  --restart unless-stopped \
+  -p 1414:1414 \
+  -p 9443:9443 \
+  -v /mnt/mqdata:/mnt/mqm \
+  -e LICENSE=accept \
+  -e MQ_QMGR_NAME=QM1 \
+  -e MQ_ADMIN_PASSWORD=admin \
+  -e MQ_DEV=true \
+  -e MQ_APP_PASSWORD="" \
+  ibmcom/mq:9.2.4.0-r1-amd64
+
+# 3. Vérifier que le conteneur démarre correctement
+docker ps
+
+# 4. Suivre les logs (attendez que "Started web server" apparaisse)
+docker logs -f ibm-mq
