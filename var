@@ -1,3 +1,25 @@
+# 1. Vérifier le fichier qm.ini (configuration principale)
+sudo cat /mnt/mqdata/data/qmgrs/QM1/qm.ini
+
+# 2. Chercher des fichiers .mqsc d'initialisation
+sudo find /mnt/mqdata -name "*.mqsc" -o -name "*.ini"
+
+# 3. Vérifier s'il y a un dossier de config auto
+sudo ls -la /mnt/mqdata/data/qmgrs/QM1/
+```
+
+Envoyez-moi les résultats, en particulier le contenu de `qm.ini`.
+
+## Ce qu'on cherche dans qm.ini :
+
+Le fichier `qm.ini` contient probablement quelque chose comme :
+```
+Service:
+   Name=AuthorizationService
+   ...
+Security:
+   ConnAuth=DEV.AUTHINFO
+
 # 1. Vérifier que le conteneur tourne bien
 docker ps | grep ibm-mq
 
