@@ -1,3 +1,27 @@
+# Voir ce qu'il y a dans cached.mqsc (c'est probablement là le problème)
+sudo cat /mnt/mqdata/data/qmgrs/QM1/autocfg/cached.mqsc
+
+docker stop ibm-mq
+
+# 2. Sauvegarder qm.ini
+sudo cp /mnt/mqdata/data/qmgrs/QM1/qm.ini /mnt/mqdata/data/qmgrs/QM1/qm.ini.backup
+
+# 3. Modifier qm.ini
+sudo nano /mnt/mqdata/data/qmgrs/QM1/qm.ini
+```
+
+Dans le fichier, **modifiez ou ajoutez ces lignes** :
+
+Dans la section `Channels:`, changez :
+```
+ChlauthEarlyAdopt=No
+```
+
+Et **ajoutez** cette section si elle n'existe pas :
+```
+Security:
+   MQIBindType=STANDARD
+
 # 1. Vérifier le fichier qm.ini (configuration principale)
 sudo cat /mnt/mqdata/data/qmgrs/QM1/qm.ini
 
