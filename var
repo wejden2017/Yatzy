@@ -1,8 +1,32 @@
-docker exec -it 1b1f053f5947 runmqsc QM1 << EOF
+bashdocker exec -it 1b1f053f5947 bash
+Une fois dans le conteneur, tapez :
+bashrunmqsc QM1
+```
+
+Puis entrez ces commandes **une par une** dans runmqsc :
+```
 ALTER CHANNEL(DEV.APP.SVRCONN) CHLTYPE(SVRCONN) MCAUSER('mqm')
+```
+
+Attendez la confirmation, puis :
+```
 SET CHLAUTH(DEV.APP.SVRCONN) TYPE(BLOCKUSER) USERLIST('nobody')
-SET CHLAUTH('*') TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(NOACCESS) DESCR('Back-stop rule') ACTION(REPLACE)
-SET CHLAUTH(DEV.APP.SVRCONN) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(OPTIONAL) ACTION(REPLACE)
+```
+
+Attendez la confirmation, puis :
+```
+SET CHLAUTH(DEV.APP.SVRCONN) TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL) CHCKCLNT(OPTIONAL)
+```
+
+Attendez la confirmation, puis :
+```
 REFRESH SECURITY TYPE(CONNAUTH)
+```
+
+Puis :
+```
 END
-EOF
+Sortez du conteneur :
+bashexit
+Redémarrez le conteneur :
+bashdocker restart 1b1f053f5947
