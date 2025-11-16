@@ -1,3 +1,15 @@
+# 1. Vérifier que le conteneur tourne bien
+docker ps | grep ibm-mq
+
+# 2. Vérifier la configuration actuelle
+docker exec ibm-mq runmqsc QM1 << EOF
+DISPLAY QMGR CHLAUTH CONNAUTH
+DISPLAY CHANNEL(DEV.APP.SVRCONN)
+DISPLAY CHLAUTH(DEV.APP.SVRCONN)
+END
+EOF
+
+
 # Arrêter et supprimer
 docker stop ibm-mq
 docker rm ibm-mq
