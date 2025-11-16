@@ -1,39 +1,22 @@
-Vérification avant de supprimer le conteneur
-bash# 1. Vérifier où sont montés les volumes
-docker inspect ibm-mq | grep -A 20 Mounts
-
-# 2. Vérifier le contenu du volume
-ls -la /mnt/mqdata/
-
-# 3. Vérifier si le queue manager est bien dans le volume
-ls -la /mnt/mqdata/qmgrs/
-Si vous voyez /mnt/mqdata/qmgrs/QM1/ → VOS DONNÉES SONT SÛRES ✅
-Le volume /mnt/mqdata contient toutes vos queues et messages. Quand vous recréez le conteneur avec le même volume (-v /mnt/mqdata:/mnt/mqm), tout sera préservé.
-Sauvegarde de sécurité (optionnelle mais recommandée)
-bash# Faire une sauvegarde complète du volume
-sudo tar -czf /tmp/mqdata-backup-$(date +%Y%m%d-%H%M%S).tar.gz /mnt/mqdata/
-
-# Vérifier la sauvegarde
-ls -lh /tmp/mqdata-backup-*
-Recréation SANS perte de données
-bash# Arrêter le conteneur (les données restent dans /mnt/mqdata)
+# Arrêter et supprimer
 docker stop ibm-mq
-
-# Supprimer le conteneur (les données restent dans /mnt/mqdata)
 docker rm ibm-mq
 
-# Recréer avec le MÊME volume
+# Recréer SANS MQ_APP_PASSWORD
 docker run -d \
   --name ibm-mq \
   --restart unless-stopped \
   -p 1414:1414 \
   -p 9443:9443 \
-  -v /mnt/mqdata:/mnt/mqm \
+  -v /mnt/mqdata:/var/mqm \
   -e LICENSE=accept \
   -e MQ_QMGR_NAME=QM1 \
   -e MQ_ADMIN_PASSWORD=admin \
   -e MQ_DEV=true \
-  -e MQ_APP_PASSWORD="" \
   ibmcom/mq:9.2.4.0-r1-amd64
-Vos queues et messages seront intacts tant que vous utilisez le même volume ! 🎉
-Voulez-vous d'abord vérifier avec les commandes de vérification ?
+
+# Attendre 30 secondes
+sleep 30
+
+# Vérifier les logs
+docker logs ibm-mq | tail -20
