@@ -1,32 +1,23 @@
+docker exec -it 1b1f053f5947 bash
+runmqsc QM1
+```
+
+Dans runmqsc, tapez :
+```
+DISPLAY CHLAUTH(DEV.APP.SVRCONN)
+DISPLAY CHANNEL(DEV.APP.SVRCONN)
+DISPLAY QMGR CHLAUTH CONNAUTH
+Tapez END pour sortir, puis envoyez-moi le résultat.
+Solution radicale : Supprimer TOUTES les règles CHLAUTH
+Si vous voulez essayer directement, exécutez ceci :
 bashdocker exec -it 1b1f053f5947 bash
-Puis dans le conteneur :
-bashrunmqsc QM1
+runmqsc QM1
 ```
 
-Dans runmqsc, tapez ces commandes **une par une** :
+Puis dans runmqsc :
 ```
-ALTER AUTHINFO(SYSTEM.DEFAULT.AUTHINFO.IDPWOS) AUTHTYPE(IDPWOS) CHCKCLNT(NONE)
-```
-
-Attendez la confirmation, puis :
-```
-ALTER QMGR CONNAUTH(' ')
-```
-
-Puis :
-```
-REFRESH SECURITY TYPE(CONNAUTH)
-```
-
-Puis :
-```
-REFRESH SECURITY TYPE(AUTHINFO)
-```
-
-Puis :
-```
+SET CHLAUTH('*') TYPE(BLOCKUSER) USERLIST('nobody') ACTION(REPLACE)
+SET CHLAUTH('*') TYPE(ADDRESSMAP) ADDRESS('*') USERSRC(CHANNEL)
+ALTER QMGR CHLAUTH(DISABLED)
+REFRESH SECURITY(*)
 END
-Sortez du conteneur :
-bashexit
-Redémarrez le conteneur :
-bashdocker restart 1b1f053f5947
