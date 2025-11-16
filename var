@@ -18,6 +18,15 @@ EOF
 # 4. Redémarrer le conteneur
 docker start ibm-mq
 
+# Attendre 30 secondes
+sleep 30
+
+# Vérifier la config
+docker exec ibm-mq runmqsc QM1 << EOF
+DISPLAY QMGR CHLAUTH CONNAUTH
+DISPLAY CHANNEL(DEV.APP.SVRCONN)
+END
+EOF
 
 # Voir ce qu'il y a dans cached.mqsc (c'est probablement là le problème)
 sudo cat /mnt/mqdata/data/qmgrs/QM1/autocfg/cached.mqsc
