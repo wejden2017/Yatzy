@@ -1,3 +1,24 @@
+# 1. Arrêter le conteneur
+docker stop ibm-mq
+
+# 2. Renommer le fichier d'autoconfiguration pour le désactiver
+sudo mv /mnt/mqdata/data/qmgrs/QM1/autocfg/cached.mqsc /mnt/mqdata/data/qmgrs/QM1/autocfg/cached.mqsc.disabled
+
+# 3. Créer notre propre fichier de config qui sera appliqué au démarrage
+sudo tee /mnt/mqdata/data/qmgrs/QM1/autocfg/99-disable-auth.mqsc << 'EOF'
+* Disable all authentication
+ALTER CHANNEL(DEV.APP.SVRCONN) CHLTYPE(SVRCONN) MCAUSER('mqm')
+ALTER QMGR CHLAUTH(DISABLED)
+ALTER QMGR CONNAUTH('')
+REFRESH SECURITY TYPE(CONNAUTH)
+SET CHLAUTH('*') TYPE(BLOCKUSER) USERLIST('nobody') ACTION(REPLACE)
+REFRESH SECURITY(*)
+EOF
+
+# 4. Redémarrer le conteneur
+docker start ibm-mq
+
+
 # Voir ce qu'il y a dans cached.mqsc (c'est probablement là le problème)
 sudo cat /mnt/mqdata/data/qmgrs/QM1/autocfg/cached.mqsc
 
