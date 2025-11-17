@@ -1,73 +1,16 @@
-* ---------------------------------------------------------------
-* Fichier MQSC généré automatiquement par Ansible
-* ---------------------------------------------------------------
-
-* ---------------------------------------------------------------
-* Désactivation de la sécurité (CHLAUTH + CONNAUTH)
-* DEV et QA uniquement !
+* Désactiver les sécurités d'auth (au cas où)
 ALTER QMGR CHLAUTH(DISABLED)
 ALTER QMGR CONNAUTH(' ')
 REFRESH SECURITY TYPE(CONNAUTH)
 
-DEFINE CHANNEL('{{ mq_channel }}') CHLTYPE(SVRCONN) TRPTYPE(TCP) +
-       MCAUSER('app') REPLACE
+* Forcer le MCAUSER sur le channel applicatif
+ALTER CHANNEL(DEV.APP.SVRCONN) CHLTYPE(SVRCONN) MCAUSER('mqm')
 
-SET AUTHREC PROFILE('*') OBJTYPE(QMGR) PRINCIPAL('app') AUTHADD(ALL)
-SET AUTHREC PROFILE('*') OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD(ALL)
+* Donner tous les droits à mqm sur le QMGR et les queues
+SET AUTHREC PROFILE('*') OBJTYPE(QMGR)  PRINCIPAL('mqm') AUTHADD(ALL)
+SET AUTHREC PROFILE('*') OBJTYPE(QUEUE) PRINCIPAL('mqm') AUTHADD(ALL)
 
--v /opt/ibmmq/config/99-custom.mqsc:/etc/mqm/99-custom.mqsc
-
-- name: Create MQSC config directory
-  ansible.builtin.file:
-    path: /opt/ibmmq/config
-    state: directory
-    owner: '1001'
-    group: '0'
-    mode: '0770'
-
-- name: Deploy MQSC configuration file
-  ansible.builtin.template:
-    src: 99-custom.mqsc.j2
-    dest: /opt/ibmmq/config/99-custom.mqsc
-    owner: '1001'
-    group: '0'
-    mode: '0660'
-
-* ---------------------------------------------------------------
-ALTER QMGR CHLAUTH(DISABLED)
-ALTER QMGR CONNAUTH(' ')
-REFRESH SECURITY TYPE(CONNAUTH)
-
-* ---------------------------------------------------------------
-* Création du channel applicatif
-* Exemple : DEV.APP.SVRCONN / QA.APP.SVRCONN
-* ---------------------------------------------------------------
-DEFINE CHANNEL('{{ mq_channel }}') CHLTYPE(SVRCONN) TRPTYPE(TCP) +
-       MCAUSER('app') REPLACE
-
-* ---------------------------------------------------------------
-* Droits (Permissions MQ)
-* Permet à 'app' (ou tout client MQ sans auth) d'utiliser toutes les queues
-* ---------------------------------------------------------------
-SET AUTHREC PROFILE('*') OBJTYPE(QMGR) PRINCIPAL('app') AUTHADD(ALL)
-SET AUTHREC PROFILE('*') OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD(ALL)
-
-* ---------------------------------------------------------------
-* Fin du fichier MQSC
-* ---------------------------------------------------------------
-
-- name: Create MQSC config directory
-  ansible.builtin.file:
-    path: /opt/ibmmq/config
-    state: directory
-    owner: '1001'
-    group: '0'
-    mode: '0770'
-
-- name: Deploy MQSC configuration file
-  ansible.builtin.template:
-    src: config.mqsc.j2
-    dest: /opt/ibmmq/config/config.mqsc
-    owner: '1001'
-    group: '0'
-    mode: '0660'
+* Vérifier le résultat
+DISPLAY QMGR CHLAUTH
+DISPLAY QMGR CONNAUTH
+DISPLAY CHANNEL(DEV.APP.SVRCONN)
