@@ -1,6 +1,1 @@
-- name: Fetch Oracle update log into artifacts/
-  ansible.builtin.fetch:
-    src: "/opt/cats/log/{{ oracle_log_file }}"
-    dest: "{{ lookup('env','CI_PROJECT_DIR') }}/artifacts/"
-    flat: true
-  become: true
+DEFINE CHANNEL('{{ cats_env }}.APP.SVRCONN') CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('admin') REPLACE
