@@ -1,1 +1,16 @@
-DEFINE CHANNEL('{{ cats_env }}.APP.SVRCONN') CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('admin') REPLACE
+ibmmq_queues:
+  - name: "{{ cats_env }}.SA.MCCP.TO.CATS.POSITION"
+    maxdepth: 5000
+    maxmsgl: 4194304
+    
+  - name: "{{ cats_env }}.SA.MCCP.TO.CATS.PAYMENT"
+    maxdepth: 5000
+    maxmsgl: 4194304
+    
+  - name: "{{ cats_env }}.SA.MCCP.TO.CATS.SETTSEC"
+    maxdepth: 5000
+    maxmsgl: 4194304
+    
+  - name: "{{ cats_env }}.SA.CATS.TO.CONCORDE.CLIENT"
+    maxdepth: 5000
+    maxmsgl: 4194304
