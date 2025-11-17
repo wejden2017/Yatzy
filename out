@@ -1,57 +1,29 @@
-SET SERVEROUTPUT ON;
+* ---------------------------------------------------------------
+* Fichier MQSC généré automatiquement par Ansible
+* ---------------------------------------------------------------
 
-BEGIN
-    FOR rec IN (SELECT DIRECTORY_NAME, DIRECTORY_PATH 
-                FROM DBA_DIRECTORIES 
-                WHERE DIRECTORY_NAME = 'DATA_APF') LOOP
-        DBMS_OUTPUT.PUT_LINE('Directory: ' || rec.DIRECTORY_NAME);
-        DBMS_OUTPUT.PUT_LINE('Path: ' || rec.DIRECTORY_PATH);
-    END LOOP;
-END;
-/
+* ---------------------------------------------------------------
+* Désactivation de la sécurité (CHLAUTH + CONNAUTH)
+* DEV et QA uniquement !
+* ---------------------------------------------------------------
+ALTER QMGR CHLAUTH(DISABLED)
+ALTER QMGR CONNAUTH(' ')
+REFRESH SECURITY TYPE(CONNAUTH)
 
+* ---------------------------------------------------------------
+* Création du channel applicatif
+* Exemple : DEV.APP.SVRCONN / QA.APP.SVRCONN
+* ---------------------------------------------------------------
+DEFINE CHANNEL('{{ mq_channel }}') CHLTYPE(SVRCONN) TRPTYPE(TCP) +
+       MCAUSER('app') REPLACE
 
+* ---------------------------------------------------------------
+* Droits (Permissions MQ)
+* Permet à 'app' (ou tout client MQ sans auth) d'utiliser toutes les queues
+* ---------------------------------------------------------------
+SET AUTHREC PROFILE('*') OBJTYPE(QMGR) PRINCIPAL('app') AUTHADD(ALL)
+SET AUTHREC PROFILE('*') OBJTYPE(QUEUE) PRINCIPAL('app') AUTHADD(ALL)
 
-SET SERVEROUTPUT ON;
-
-DECLARE
-    v_exists BOOLEAN;
-    v_length NUMBER;
-    v_blocksize NUMBER;
-BEGIN
-    UTL_FILE.FGETATTR('DATA_APF', 'itf_svgrm.txt', v_exists, v_length, v_blocksize);
-    
-    IF v_exists THEN
-        DBMS_OUTPUT.PUT_LINE('✓ Fichier trouvé!');
-        DBMS_OUTPUT.PUT_LINE('  Taille: ' || v_length);
-    ELSE
-        DBMS_OUTPUT.PUT_LINE('✗ Fichier non trouvé par Oracle');
-    END IF;
-EXCEPTION
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('✗ ERREUR: ' || SQLCODE || ' - ' || SQLERRM);
-END;
-/
-
-sqlplus / as sysdba
-
-SQL> ALTER SESSION SET CONTAINER = CATSOAPDB1;
-
-SQL> -- Supprimer l'ancien directory
-SQL> DROP DIRECTORY DATA_APF;
-
-SQL> -- Recréer le directory
-SQL> CREATE DIRECTORY DATA_APF AS '/shared-folder/cats/data/apf';
-
-SQL> -- Redonner les permissions à LUCA
-SQL> GRANT READ, WRITE ON DIRECTORY DATA_APF TO LUCA;
-
-SQL> -- Vérifier
-SQL> SELECT * FROM DBA_DIRECTORIES WHERE DIRECTORY_NAME = 'DATA_APF';
-
-SQL> EXIT;
-
-Quand Oracle accède au FSx via NFS avec `sec=sys` :
-- ✅ **UID transmis** : 54321 (oracle)
-- ✅ **GID primaire transmis** : 54321 (oinstall)  
-- ❌ **Groupes supplémentaires** : 4510(cats), 54322(dba), etc. → **PAS toujours pris en compte !**
+* ---------------------------------------------------------------
+* Fin du fichier MQSC
+* ---------------------------------------------------------------
