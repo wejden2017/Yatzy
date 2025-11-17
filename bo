@@ -2,15 +2,51 @@ ibmmq_queues:
   - name: "{{ cats_env }}.SA.MCCP.TO.CATS.POSITION"
     maxdepth: 5000
     maxmsgl: 4194304
+    expiry: 6048000    # 7 jours
     
   - name: "{{ cats_env }}.SA.MCCP.TO.CATS.PAYMENT"
     maxdepth: 5000
     maxmsgl: 4194304
+    expiry: 6048000    # 7 jours
     
   - name: "{{ cats_env }}.SA.MCCP.TO.CATS.SETTSEC"
     maxdepth: 5000
     maxmsgl: 4194304
+    expiry: 6048000    # 7 jours
     
   - name: "{{ cats_env }}.SA.CATS.TO.CONCORDE.CLIENT"
     maxdepth: 5000
     maxmsgl: 4194304
+    expiry: 6048000    # 7 jours
+
+
+* ------------------------------------------------------------------
+* Fichier MQSC généré automatiquement par Ansible
+* ------------------------------------------------------------------
+
+
+ALTER QMGR CHLAUTH(DISABLED)
+ALTER QMGR CONNAUTH(' ')
+REFRESH SECURITY TYPE(CONNAUTH)
+
+* Active le scan automatique des messages expirés une fois par jour
+ALTER QMGR EXPIRYINTERVAL(86400)
+
+DEFINE CHANNEL('{{ cats_env }}.APP.SVRCONN') CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('admin') REPLACE
+
+SET AUTHREC PROFILE('**') OBJTYPE(QMGR) PRINCIPAL('admin') AUTHADD(ALL)
+SET AUTHREC PROFILE('**') OBJTYPE(QUEUE) PRINCIPAL('admin') AUTHADD(ALL)
+
+REFRESH SECURITY TYPE(AUTHSERV)
+
+* ------------------------------------------------------------------
+* Création des queues avec expiration et suppression automatique
+* ------------------------------------------------------------------
+{% for queue in ibmmq_queues %}
+DEFINE QLOCAL('{{ queue.name }}') MAXDEPTH({{ queue.maxdepth }}) MAXMSGL({{ queue.maxmsgl }}) CAPEXPRY({{ queue.expiry }}) REPLACE
+{% endfor %}
+
+END
+* ------------------------------------------------------------------
+* Fin du fichier MQSC
+* ------------------------------------------------------------------
