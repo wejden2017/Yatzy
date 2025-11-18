@@ -38,3 +38,27 @@
     mode: '0640'
     force: yes
 
+
+- name: Wait for IBM MQ to be fully ready
+  ansible.builtin.command: >
+    docker exec {{ ibmmq_container_name }}
+    bash -c "while ! echo 'DISPLAY QMGR' | runmqsc {{ ibmmq_mq_name }} > /dev/null 2>&1; do sleep 2; done"
+  register: mq_ready
+  retries: 30
+  delay: 2
+  until: mq_ready.rc == 0
+  changed_when: false
+
+- name: Apply MQSC configuration to create queues
+  ansible.builtin.shell: >
+    docker exec {{ ibmmq_container_name }}
+    bash -c "runmqsc {{ ibmmq_mq_name }} < /etc/mqm/99-custom.mqsc"
+  register: mqsc_apply_result
+  changed_when: "'AMQ8006I' in mqsc_apply_result.stdout"
+  failed_when: 
+    - mqsc_apply_result.rc != 0
+    - "'AMQ8405W' not in mqsc_apply_result.stdout"
+
+- name: Display MQSC execution result
+  debug:
+    var: mqsc_apply_result.stdout_lines
