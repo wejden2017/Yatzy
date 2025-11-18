@@ -1,8 +1,9 @@
-- name: Apply MQSC configuration (create/update queues) on running QM
-  ansible.builtin.command: >
+- name: Apply MQSC configuration
+  command: >
     docker exec -i {{ ibmmq_container_name }}
     runmqsc {{ ibmmq_mq_name }}
   args:
     stdin: "{{ lookup('template', 'config.mqsc.j2') }}"
-  when: mq_exist.stdout != ""
-  changed_when: true
+  register: mqsc_result
+  failed_when: mqsc_result.rc not in [0, 10]   # 10 = warnings (ex: object exists)
+
