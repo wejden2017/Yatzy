@@ -7,3 +7,34 @@
   register: mqsc_result
   failed_when: mqsc_result.rc not in [0, 10]   # 10 = warnings (ex: object exists)
 
+---
+- name: Create MQSC config directory
+  ansible.builtin.file:
+    path: /opt/ibmmq/config
+    state: directory
+    owner: '1001'
+    group: '0'
+    mode: '0770'
+
+- name: Check if config.mqsc exists and its type
+  ansible.builtin.stat:
+    path: /opt/ibmmq/config/config.mqsc
+  register: config_mqsc_stat
+
+- name: Remove config.mqsc if it's a directory (cleanup)
+  ansible.builtin.file:
+    path: /opt/ibmmq/config/config.mqsc
+    state: absent
+  when: 
+    - config_mqsc_stat.stat.exists | default(false)
+    - config_mqsc_stat.stat.isdir | default(false)
+
+- name: Deploy MQSC configuration file
+  ansible.builtin.template:
+    src: config.mqsc.j2
+    dest: /opt/ibmmq/config/config.mqsc
+    owner: '1001'
+    group: '0'
+    mode: '0640'
+    force: yes
+
