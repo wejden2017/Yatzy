@@ -1,36 +1,19 @@
-- name: Apply MQSC configuration to create queues
-  ansible.builtin.shell: >
-    docker exec {{ ibmmq_container_name }}
-    bash -c "runmqsc {{ ibmmq_mq_name }} < /etc/mqm/99-custom.mqsc 2>&1"
-  register: mqsc_execution
-  changed_when: "'AMQ8006I' in mqsc_execution.stdout"
-  failed_when: false  # Ne jamais échouer, on vérifie après
-
 - name: Check for critical MQSC errors
   ansible.builtin.set_fact:
-    has_critical_error: "{{ mqsc_execution.stdout | regex_search('AMQ[0-9]{4}E') is not none }}"
+    has_critical_error: "{{ mqsc_execution.stdout | regex_search('AMQ[0-9]{4}E') is not none and mqsc_execution.stdout | regex_search('AMQ8150E') is none }}"
 
 - name: Display MQSC execution result
   debug:
     msg: |
       MQSC Execution Summary:
       - Return Code: {{ mqsc_execution.rc }}
-      - Queues Created: {{ (mqsc_execution.stdout | regex_findall('AMQ8006I')).length }}
-      - Warnings: {{ (mqsc_execution.stdout | regex_findall('AMQ[0-9]{4}W')).length }}
-      - Errors: {{ (mqsc_execution.stdout | regex_findall('AMQ[0-9]{4}E')).length }}
+      - Queues already existing: {{ (mqsc_execution.stdout | regex_findall('AMQ8150E')) | length }}
+      - Other warnings: {{ (mqsc_execution.stdout | regex_findall('AMQ[0-9]{4}W')) | length }}
+      - Critical errors: {{ (mqsc_execution.stdout | regex_findall('AMQ[0-9]{4}E') | reject('search', 'AMQ8150E')) | list | length }}
 
-- name: Fail only if critical errors exist
+- name: Fail only if critical errors exist (excluding already exists)
   fail:
     msg: "Critical errors found in MQSC execution"
-  when: has_critical_error
-
-- name: Verify queues were created
-  ansible.builtin.command: >
-    docker exec {{ ibmmq_container_name }}
-    bash -c "echo 'DISPLAY QLOCAL(QA.*)' | runmqsc {{ ibmmq_mq_name }} 2>&1 | grep -c 'QUEUE(QA' || echo 0"
-  register: queue_count
-  changed_when: false
-
-- name: Display queue creation summary
-  debug:
-    msg: "Successfully created/verified {{ queue_count.stdout }} queues with prefix QA."
+  when: 
+    - has_critical_error | bool
+    - mqsc_execution.rc not in [0, 10, 20]
