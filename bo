@@ -1,19 +1,16 @@
-- name: Check for critical MQSC errors
-  ansible.builtin.set_fact:
-    has_critical_error: "{{ mqsc_execution.stdout | regex_search('AMQ[0-9]{4}E') is not none and mqsc_execution.stdout | regex_search('AMQ8150E') is none }}"
-
-- name: Display MQSC execution result
-  debug:
-    msg: |
-      MQSC Execution Summary:
-      - Return Code: {{ mqsc_execution.rc }}
-      - Queues already existing: {{ (mqsc_execution.stdout | regex_findall('AMQ8150E')) | length }}
-      - Other warnings: {{ (mqsc_execution.stdout | regex_findall('AMQ[0-9]{4}W')) | length }}
-      - Critical errors: {{ (mqsc_execution.stdout | regex_findall('AMQ[0-9]{4}E') | reject('search', 'AMQ8150E')) | list | length }}
-
-- name: Fail only if critical errors exist (excluding already exists)
-  fail:
-    msg: "Critical errors found in MQSC execution"
+# 3. COPIER dans le conteneur SI il existe déjà et SI le fichier a changé
+- name: Copy updated MQSC file into running container
+  ansible.builtin.command: >
+    docker cp /opt/ibmmq/config/config.mqsc {{ ibmmq_container_name }}:/etc/mqm/99-custom.mqsc
   when: 
-    - has_critical_error | bool
-    - mqsc_execution.rc not in [0, 10, 20]
+    - mq_exist.stdout != ""
+    - mqsc_template_updated.changed
+  changed_when: true
+
+# 4. CORRIGER les permissions dans le conteneur
+- name: Set correct permissions in container
+  ansible.builtin.command: >
+    docker exec {{ ibmmq_container_name }}
+    chown 1001:0 /etc/mqm/99-custom.mqsc
+  when: mq_exist.stdout != ""
+  changed_when: false
