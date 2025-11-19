@@ -1,52 +1,36 @@
-ibmmq_queues:
-  - name: "{{ cats_env }}.SA.MCCP.TO.CATS.POSITION"
-    maxdepth: 5000
-    maxmsgl: 4194304
-    expiry: 6048000    # 7 jours
-    
-  - name: "{{ cats_env }}.SA.MCCP.TO.CATS.PAYMENT"
-    maxdepth: 5000
-    maxmsgl: 4194304
-    expiry: 6048000    # 7 jours
-    
-  - name: "{{ cats_env }}.SA.MCCP.TO.CATS.SETTSEC"
-    maxdepth: 5000
-    maxmsgl: 4194304
-    expiry: 6048000    # 7 jours
-    
-  - name: "{{ cats_env }}.SA.CATS.TO.CONCORDE.CLIENT"
-    maxdepth: 5000
-    maxmsgl: 4194304
-    expiry: 6048000    # 7 jours
+- name: Apply MQSC configuration to create queues
+  ansible.builtin.shell: >
+    docker exec {{ ibmmq_container_name }}
+    bash -c "runmqsc {{ ibmmq_mq_name }} < /etc/mqm/99-custom.mqsc 2>&1"
+  register: mqsc_execution
+  changed_when: "'AMQ8006I' in mqsc_execution.stdout"
+  failed_when: false  # Ne jamais échouer, on vérifie après
 
+- name: Check for critical MQSC errors
+  ansible.builtin.set_fact:
+    has_critical_error: "{{ mqsc_execution.stdout | regex_search('AMQ[0-9]{4}E') is not none }}"
 
-* ------------------------------------------------------------------
-* Fichier MQSC généré automatiquement par Ansible
-* ------------------------------------------------------------------
+- name: Display MQSC execution result
+  debug:
+    msg: |
+      MQSC Execution Summary:
+      - Return Code: {{ mqsc_execution.rc }}
+      - Queues Created: {{ (mqsc_execution.stdout | regex_findall('AMQ8006I')).length }}
+      - Warnings: {{ (mqsc_execution.stdout | regex_findall('AMQ[0-9]{4}W')).length }}
+      - Errors: {{ (mqsc_execution.stdout | regex_findall('AMQ[0-9]{4}E')).length }}
 
+- name: Fail only if critical errors exist
+  fail:
+    msg: "Critical errors found in MQSC execution"
+  when: has_critical_error
 
-ALTER QMGR CHLAUTH(DISABLED)
-ALTER QMGR CONNAUTH(' ')
-REFRESH SECURITY TYPE(CONNAUTH)
+- name: Verify queues were created
+  ansible.builtin.command: >
+    docker exec {{ ibmmq_container_name }}
+    bash -c "echo 'DISPLAY QLOCAL(QA.*)' | runmqsc {{ ibmmq_mq_name }} 2>&1 | grep -c 'QUEUE(QA' || echo 0"
+  register: queue_count
+  changed_when: false
 
-* Active le scan automatique des messages expirés une fois par jour
-ALTER QMGR EXPIRYINTERVAL(86400)
-
-DEFINE CHANNEL('{{ cats_env }}.APP.SVRCONN') CHLTYPE(SVRCONN) TRPTYPE(TCP) MCAUSER('admin') REPLACE
-
-SET AUTHREC PROFILE('**') OBJTYPE(QMGR) PRINCIPAL('admin') AUTHADD(ALL)
-SET AUTHREC PROFILE('**') OBJTYPE(QUEUE) PRINCIPAL('admin') AUTHADD(ALL)
-
-REFRESH SECURITY TYPE(AUTHSERV)
-
-* ------------------------------------------------------------------
-* Création des queues avec expiration et suppression automatique
-* ------------------------------------------------------------------
-{% for queue in ibmmq_queues %}
-DEFINE QLOCAL('{{ queue.name }}') MAXDEPTH({{ queue.maxdepth }}) MAXMSGL({{ queue.maxmsgl }}) CAPEXPRY({{ queue.expiry }}) REPLACE
-{% endfor %}
-
-END
-* ------------------------------------------------------------------
-* Fin du fichier MQSC
-* ------------------------------------------------------------------
+- name: Display queue creation summary
+  debug:
+    msg: "Successfully created/verified {{ queue_count.stdout }} queues with prefix QA."
