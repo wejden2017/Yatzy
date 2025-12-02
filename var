@@ -1,100 +1,143 @@
--- =====================================================
--- Create/Update user & grant DEV access to LUCA*
--- Env: {{ lookup('env','ENV') | upper }}
--- User: {{ item.login | upper }}
--- =====================================================
-
-SET_DEFINE OFF_
-SET_SERVEROUTPUT ON SIZE UNLIMITED_
-SET_FEEDBACK OFF_
-SET_VERIFY OFF_
-SET_HEADING OFF_
-SET_ECHO OFF_
-    WHENEVER SQLERROR EXIT SQL.SQLCODE_
-
-DECLARE
-    v_user   VARCHAR2(128) := UPPER('{{ item.login }}');
-    v_pwd    VARCHAR2(512) := '{{ item.password | default(_default_password) }}';
-    v_cnt    INTEGER := 0;
-BEGIN
-    SELECT COUNT(*) INTO v_cnt FROM dba_users WHERE username = v_user;
+# ==========================================
+    # SETUP: Créer le rôle DEV_ROLE
+    # ==========================================
+    - name: Render role creation script
+      template:
+        src: create_role.sql.j2
+        dest: "/tmp/create_role_{{ lookup('env', 'ENV') }}.sql"
+        mode: "0640"
+      tags: [setup, role]
     
-    IF v_cnt = 0 THEN
-        DBMS_OUTPUT.PUT_LINE('Creating user '||v_user||' ...');
-        EXECUTE IMMEDIATE
-            ' CREATE USER '||v_user||
-            ' IDENTIFIED BY "'||REPLACE(v_pwd,'''','''''')||'"'||
-            ' DEFAULT TABLESPACE CATS_DATA '||
-            ' TEMPORARY TABLESPACE TEMP '||
-            ' QUOTA 2G ON CATS_DATA ' ||
-            ' PASSWORD EXPIRE ';
-    ELSE
-        DBMS_OUTPUT.PUT_LINE('User '||v_user||' already exists; skipping CREATE ; reset password');
-        EXECUTE IMMEDIATE 'ALTER USER '||v_user||' IDENTIFIED BY "'||REPLACE(v_pwd,'''','''''')||'"'||'';
-    END IF;
+    - name: Create role {{ oracle_role_name }}
+      shell: |
+        set -eo pipefail
+        {{ _ora_sqlplus }} -L -s /nolog <<'SQL'
+        WHENEVER OSERROR EXIT 1
+        CONNECT {{ oracle_connect.username }}/{{ oracle_connect.password }}@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
+        SET SERVEROUTPUT ON SIZE UNLIMITED
+        SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+        SPOOL /tmp/create_role.log
+        @/tmp/create_role_{{ lookup('env', 'ENV') }}.sql
+        SPOOL OFF
+        EXIT
+        SQL
+      args:
+        executable: /bin/bash
+      environment:
+        ORACLE_HOME: "{{ oracle_home }}"
+        LD_LIBRARY_PATH: "{{ oracle_home }}/lib"
+        PATH: "{{ oracle_home }}/bin:{{ ansible_env.PATH | default('') }}"
+      register: create_role
+      changed_when: "'created' in (create_role.stdout | default('') | lower)"
+      failed_when:
+        - create_role.rc != 0
+        - "'ORA-01921' not in (create_role.stdout | default('') | lower)"
+      tags: [setup, role]
     
-    EXECUTE IMMEDIATE 'ALTER USER '||v_user||' ACCOUNT UNLOCK';
-END;
-/
-
--- =====================================================
--- Créer le rôle {{ oracle_role_name }} s'il n'existe pas
--- =====================================================
-DECLARE
-    v_cnt INTEGER := 0;
-BEGIN
-    SELECT COUNT(*) INTO v_cnt FROM dba_roles WHERE role = '{{ oracle_role_name }}';
-    IF v_cnt = 0 THEN
-        DBMS_OUTPUT.PUT_LINE('Creating role {{ oracle_role_name }}...');
-        EXECUTE IMMEDIATE 'CREATE ROLE {{ oracle_role_name }}';
-    ELSE
-        DBMS_OUTPUT.PUT_LINE('Role {{ oracle_role_name }} already exists.');
-    END IF;
+    - name: Display role creation result
+      debug:
+        msg: "{{ lookup('file', '/tmp/create_role.log') }}"
+      when: ansible_verbosity | int >= 1
+      tags: [setup, role]
     
-    -- Accorder les privilèges au rôle (idempotent)
-    FOR g IN (
-        SELECT 'GRANT CREATE SESSION TO {{ oracle_role_name }}' AS stmt FROM dual UNION ALL
-        SELECT 'GRANT CREATE ANY TABLE TO {{ oracle_role_name }}' FROM dual UNION ALL
-        SELECT 'GRANT CREATE ANY VIEW TO {{ oracle_role_name }}' FROM dual UNION ALL
-        SELECT 'GRANT CREATE ANY SEQUENCE TO {{ oracle_role_name }}' FROM dual UNION ALL
-        SELECT 'GRANT CREATE ANY PROCEDURE TO {{ oracle_role_name }}' FROM dual
-    ) LOOP
-        BEGIN
-            EXECUTE IMMEDIATE g.stmt;
-        EXCEPTION
-            WHEN OTHERS THEN
-                IF SQLCODE NOT IN (-1927, -1920, -1919) THEN
-                    DBMS_OUTPUT.PUT_LINE('Grant to role failed: '||g.stmt||' -> '||SQLERRM);
-                    RAISE;
-                END IF;
-        END;
-    END LOOP;
-END;
-/
-
--- =====================================================
--- Appeler la procédure pour accorder les accès aux schémas
--- =====================================================
-{% for s in (item.schemas | default([])) %}
-BEGIN
-    DBMS_OUTPUT.PUT_LINE('Calling SYS.GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA for {{ s }} ...');
-    SYS.GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA(p_schema_name => '{{ s }}', p_role_name => '{{ oracle_role_name }}');
-EXCEPTION
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('ERROR calling SYS.GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA(''{{ s }}''):  '||SQLERRM);
-        RAISE;
-END;
-/
-{% endfor %}
-
--- =====================================================
--- Accorder le rôle {{ oracle_role_name }} à l'utilisateur
--- =====================================================
-BEGIN
-    EXECUTE IMMEDIATE 'GRANT {{ oracle_role_name }} TO {{ item.login | upper }}';
-    EXECUTE IMMEDIATE 'ALTER USER {{ item.login | upper }} DEFAULT ROLE {{ oracle_role_name }}';
-    DBMS_OUTPUT.PUT_LINE('{{ oracle_role_name }} granted & set as default for {{ item.login | upper }}.');
-END;
-/
-
-PROMPT Done for {{ item.login | upper }}
+    # ==========================================
+    # SETUP: Créer la procédure GRANT_ACCESS_TO_SCHEMA
+    # ==========================================
+    - name: Render procedure script
+      template:
+        src: grant_access_to_schema.sql.j2
+        dest: "/tmp/grant_access_procedure.sql"
+        mode: "0640"
+      tags: [setup, procedure]
+    
+    - name: Create GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA procedure
+      shell: |
+        set -eo pipefail
+        {{ _ora_sqlplus }} -L -s /nolog <<'SQL'
+        WHENEVER OSERROR EXIT 1
+        WHENEVER SQLERROR EXIT SQL.SQLCODE
+        CONNECT {{ oracle_connect.username }}/{{ oracle_connect.password }}@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
+        SET SERVEROUTPUT ON SIZE UNLIMITED
+        SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+        SPOOL /tmp/create_procedure.log
+        @/tmp/grant_access_procedure.sql
+        SPOOL OFF
+        EXIT
+        SQL
+      args:
+        executable: /bin/bash
+      environment:
+        ORACLE_HOME: "{{ oracle_home }}"
+        LD_LIBRARY_PATH: "{{ oracle_home }}/lib"
+        PATH: "{{ oracle_home }}/bin:{{ ansible_env.PATH | default('') }}"
+      register: create_procedure
+      changed_when: create_procedure.rc == 0
+      failed_when: create_procedure.rc != 0
+      tags: [setup, procedure]
+    
+    - name: Display procedure creation result
+      debug:
+        msg: "{{ lookup('file', '/tmp/create_procedure.log') }}"
+      when: ansible_verbosity | int >= 1
+      tags: [setup, procedure]
+    
+    # ==========================================
+    # SETUP: Extraire tous les schémas uniques
+    # ==========================================
+    - name: Extract all unique schemas from users
+      set_fact:
+        _all_schemas: "{{ _users | selectattr('schemas', 'defined') | map(attribute='schemas') | flatten | unique | list }}"
+      tags: [setup, triggers]
+    
+    - name: Display schemas to configure
+      debug:
+        msg: "Configuring DDL triggers for schemas: {{ _all_schemas }}"
+      tags: [setup, triggers]
+    
+    # ==========================================
+    # SETUP: Créer les triggers DDL pour chaque schéma
+    # ==========================================
+    - name: Render DDL trigger for each schema
+      template:
+        src: auto_grant_trigger.sql.j2
+        dest: "/tmp/auto_grant_trigger_{{ item }}.sql"
+        mode: "0640"
+      loop: "{{ _all_schemas }}"
+      loop_control:
+        loop_var: schema_name
+      tags: [setup, triggers]
+    
+    - name: Create DDL triggers for schemas
+      shell: |
+        set -eo pipefail
+        {{ _ora_sqlplus }} -L -s /nolog <<'SQL'
+        WHENEVER OSERROR EXIT 1
+        WHENEVER SQLERROR EXIT SQL.SQLCODE
+        CONNECT {{ oracle_connect.username }}/{{ oracle_connect.password }}@//{{ oracle_connect.host }}:{{ oracle_connect.port }}/{{ oracle_connect.service }}
+        SET SERVEROUTPUT ON SIZE UNLIMITED
+        SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+        SPOOL /tmp/create_trigger_{{ item }}.log
+        @/tmp/auto_grant_trigger_{{ item }}.sql
+        SPOOL OFF
+        EXIT
+        SQL
+      args:
+        executable: /bin/bash
+      environment:
+        ORACLE_HOME: "{{ oracle_home }}"
+        LD_LIBRARY_PATH: "{{ oracle_home }}/lib"
+        PATH: "{{ oracle_home }}/bin:{{ ansible_env.PATH | default('') }}"
+      loop: "{{ _all_schemas }}"
+      loop_control:
+        loop_var: schema_name
+      register: create_triggers
+      changed_when: create_triggers.rc == 0
+      failed_when: create_triggers.rc != 0
+      tags: [setup, triggers]
+    
+    - name: Display trigger creation result
+      debug:
+        msg: "{{ lookup('file', '/tmp/create_trigger_' ~ item ~ '.log') }}"
+      loop: "{{ _all_schemas }}"
+      when: ansible_verbosity | int >= 1
+      tags: [setup, triggers]
