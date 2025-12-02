@@ -1,28 +1,14 @@
-all:
-  children:
-    oracle_servers:
-      hosts:
-        oracle_dev:
-          ansible_host: <IP_PUBLIQUE_DE_TON_EC2>  # Ex: 54.123.45.67
-          ansible_user: ec2-user
-          ansible_ssh_private_key_file: /home/zied.ouertani/.ssh/dev_ec2_keypair.pem
-          ansible_ssh_common_args: '-o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null'
-          ansible_python_interpreter: /usr/bin/python3
-      
-      vars:
-        # Variables depuis common.yml
-        oracle_role_name: "DEV_ROLE"
-        oracle_home: "/u01/app/oracle/product/19.0.0.0/dbhome_1"
-        
-        oracle_service_map:
-          dev: "CATSDEVPDB1"
-          qa: "CATSQAPDB1"
-          uat: "CATSUATPDB1"
-        
-        oracle_connect:
-          host: "{{ ansible_host }}"
-          port: 1521
-          service: "{{ oracle_service_map[lookup('env', 'ENV')] }}"
-          username: "system"
-          password: "{{ lookup('env', 'SYSDBA_PASSWORD') }}"
-          use_sysdba: false
+cd ~/cats-db-user-admin/
+
+export SYSDBA_PASSWORD="ton_mot_de_passe"
+
+# Test connexion
+ansible -i inventory/local_dev.yml oracle_servers -m ping
+
+# Lancer le playbook
+ansible-playbook \
+  -i inventory/local_dev.yml \
+  playbooks/manage_db_users.yml \
+  -e ENV=dev \
+  --tags role \
+  -vv
