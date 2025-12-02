@@ -1,68 +1,72 @@
 -- =====================================================
--- Procédure: GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA
--- Description: Accorde tous les privilèges sur les objets 
---              EXISTANTS d'un schéma au rôle {{ oracle_role_name }}
+-- Trigger DDL: AUTO_GRANT_{{ schema_name | upper }}_TO_{{ oracle_role_name }}
+-- Schéma: {{ schema_name | upper }}
+-- Description: Accorde automatiquement les privilèges {{ oracle_role_name }}
+--              lors de la création d'objets dans le schéma {{ schema_name | upper }}
 -- =====================================================
 
-CREATE OR REPLACE PROCEDURE GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA(
-    p_schema_name VARCHAR2,
-    p_role_name VARCHAR2 DEFAULT '{{ oracle_role_name }}'
-) AS
-    v_sql VARCHAR2(4000);
+CREATE OR REPLACE TRIGGER SYS.AUTO_GRANT_{{ schema_name | upper }}_TO_{{ oracle_role_name }}
+AFTER CREATE ON {{ schema_name | upper }}.SCHEMA
+DECLARE
+    v_obj_type VARCHAR2(30);
+    v_obj_name VARCHAR2(128);
+    v_sql VARCHAR2(1000);
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('Calling SYS.GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA for ' || p_schema_name || ' ...');
+    -- Récupérer le type et le nom de l'objet créé
+    v_obj_type := ora_dict_obj_type;
+    v_obj_name := ora_dict_obj_name;
     
-    -- Tables
-    FOR rec IN (SELECT table_name FROM all_tables WHERE owner = UPPER(p_schema_name)) LOOP
-        BEGIN
-            v_sql := 'GRANT ALL PRIVILEGES ON ' || p_schema_name || '.' || rec.table_name || ' TO ' || p_role_name;
+    BEGIN
+        -- Tables : GRANT ALL PRIVILEGES
+        IF v_obj_type = 'TABLE' THEN
+            v_sql := 'GRANT ALL PRIVILEGES ON {{ schema_name | upper }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
             EXECUTE IMMEDIATE v_sql;
-            DBMS_OUTPUT.PUT_LINE(' Table: ' || rec.table_name);
-        EXCEPTION
-            WHEN OTHERS THEN
-                DBMS_OUTPUT.PUT_LINE(' Erreur table ' || rec.table_name || ': ' || SQLERRM);
-        END;
-    END LOOP;
-    
-    -- Vues
-    FOR rec IN (SELECT view_name FROM all_views WHERE owner = UPPER(p_schema_name)) LOOP
-        BEGIN
-            v_sql := 'GRANT SELECT ON ' || p_schema_name || '.' || rec.view_name || ' TO ' || p_role_name;
+            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT] Table ' || v_obj_name || ' -> {{ oracle_role_name }}');
+        
+        -- Vues : GRANT SELECT
+        ELSIF v_obj_type = 'VIEW' THEN
+            v_sql := 'GRANT SELECT ON {{ schema_name | upper }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
             EXECUTE IMMEDIATE v_sql;
-            DBMS_OUTPUT.PUT_LINE('Vue: ' || rec.view_name);
-        EXCEPTION
-            WHEN OTHERS THEN
-                DBMS_OUTPUT.PUT_LINE(' error vue ' || rec.view_name || ': ' || SQLERRM);
-        END;
-    END LOOP;
-    
-    -- Sequences
-    FOR rec IN (SELECT sequence_name FROM all_sequences WHERE sequence_owner = UPPER(p_schema_name)) LOOP
-        BEGIN
-            v_sql := 'GRANT SELECT, ALTER ON ' || p_schema_name || '.' || rec.sequence_name || ' TO ' || p_role_name;
+            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT] View ' || v_obj_name || ' -> {{ oracle_role_name }}');
+        
+        -- Sequences : GRANT SELECT, ALTER
+        ELSIF v_obj_type = 'SEQUENCE' THEN
+            v_sql := 'GRANT SELECT, ALTER ON {{ schema_name | upper }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
             EXECUTE IMMEDIATE v_sql;
-            DBMS_OUTPUT.PUT_LINE('Sequence: ' || rec.sequence_name);
-        EXCEPTION
-            WHEN OTHERS THEN
-                DBMS_OUTPUT.PUT_LINE(' error sequence ' || rec.sequence_name || ': ' || SQLERRM);
-        END;
-    END LOOP;
-    
-    -- Procedures, Functions, Packages, Types
-    FOR rec IN (SELECT object_name, object_type FROM all_objects
-                WHERE owner = UPPER(p_schema_name)
-                AND object_type IN ('PROCEDURE', 'FUNCTION', 'PACKAGE', 'TYPE')) LOOP
-        BEGIN
-            v_sql := 'GRANT EXECUTE ON ' || p_schema_name || '.' || rec.object_name || ' TO ' || p_role_name;
+            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT] Sequence ' || v_obj_name || ' -> {{ oracle_role_name }}');
+        
+        -- Procedures, Functions, Packages, Types : GRANT EXECUTE
+        ELSIF v_obj_type IN ('PROCEDURE', 'FUNCTION', 'PACKAGE', 'TYPE') THEN
+            v_sql := 'GRANT EXECUTE ON {{ schema_name | upper }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
             EXECUTE IMMEDIATE v_sql;
-            DBMS_OUTPUT.PUT_LINE(' ' || rec.object_type || ': ' || rec.object_name);
-        EXCEPTION
-            WHEN OTHERS THEN
-                DBMS_OUTPUT.PUT_LINE(' error ' || rec.object_type || ' ' || rec.object_name || ': ' || SQLERRM);
-        END;
-    END LOOP;
-    
-    DBMS_OUTPUT.PUT_LINE('.');
-    DBMS_OUTPUT.PUT_LINE('==> Privileges accordes sur le schema ' || p_schema_name);
-END GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA;
+            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT] ' || v_obj_type || ' ' || v_obj_name || ' -> {{ oracle_role_name }}');
+        
+        -- Autres types d'objets : ignorer silencieusement
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT] Object type ' || v_obj_type || ' ignored');
+        END IF;
+        
+    EXCEPTION
+        WHEN OTHERS THEN
+            -- Logger l'erreur mais ne pas bloquer la création de l'objet
+            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT ERROR] ' || v_obj_type || ' ' || v_obj_name || ': ' || SQLERRM);
+    END;
+END;
 /
+```
+
+---
+
+## 🔍 Comment ça fonctionne ?
+
+### Déclenchement automatique
+```
+user2 se connecte
+    ↓
+user2 exécute: CREATE TABLE SCHEMA_A.NEW_TABLE (id NUMBER);
+    ↓
+✨ TRIGGER se déclenche automatiquement !
+    ↓
+GRANT ALL PRIVILEGES ON SCHEMA_A.NEW_TABLE TO DEV_ROLE;
+    ↓
+user1 (qui a DEV_ROLE) peut immédiatement accéder à NEW_TABLE ✅
