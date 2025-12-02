@@ -1,72 +1,100 @@
 -- =====================================================
--- Trigger DDL: AUTO_GRANT_{{ schema_name | upper }}_TO_{{ oracle_role_name }}
--- Schéma: {{ schema_name | upper }}
--- Description: Accorde automatiquement les privilèges {{ oracle_role_name }}
---              lors de la création d'objets dans le schéma {{ schema_name | upper }}
+-- Create/Update user & grant DEV access to LUCA*
+-- Env: {{ lookup('env','ENV') | upper }}
+-- User: {{ item.login | upper }}
 -- =====================================================
 
-CREATE OR REPLACE TRIGGER SYS.AUTO_GRANT_{{ schema_name | upper }}_TO_{{ oracle_role_name }}
-AFTER CREATE ON {{ schema_name | upper }}.SCHEMA
+SET_DEFINE OFF_
+SET_SERVEROUTPUT ON SIZE UNLIMITED_
+SET_FEEDBACK OFF_
+SET_VERIFY OFF_
+SET_HEADING OFF_
+SET_ECHO OFF_
+    WHENEVER SQLERROR EXIT SQL.SQLCODE_
+
 DECLARE
-    v_obj_type VARCHAR2(30);
-    v_obj_name VARCHAR2(128);
-    v_sql VARCHAR2(1000);
+    v_user   VARCHAR2(128) := UPPER('{{ item.login }}');
+    v_pwd    VARCHAR2(512) := '{{ item.password | default(_default_password) }}';
+    v_cnt    INTEGER := 0;
 BEGIN
-    -- Récupérer le type et le nom de l'objet créé
-    v_obj_type := ora_dict_obj_type;
-    v_obj_name := ora_dict_obj_name;
+    SELECT COUNT(*) INTO v_cnt FROM dba_users WHERE username = v_user;
     
-    BEGIN
-        -- Tables : GRANT ALL PRIVILEGES
-        IF v_obj_type = 'TABLE' THEN
-            v_sql := 'GRANT ALL PRIVILEGES ON {{ schema_name | upper }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            EXECUTE IMMEDIATE v_sql;
-            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT] Table ' || v_obj_name || ' -> {{ oracle_role_name }}');
-        
-        -- Vues : GRANT SELECT
-        ELSIF v_obj_type = 'VIEW' THEN
-            v_sql := 'GRANT SELECT ON {{ schema_name | upper }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            EXECUTE IMMEDIATE v_sql;
-            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT] View ' || v_obj_name || ' -> {{ oracle_role_name }}');
-        
-        -- Sequences : GRANT SELECT, ALTER
-        ELSIF v_obj_type = 'SEQUENCE' THEN
-            v_sql := 'GRANT SELECT, ALTER ON {{ schema_name | upper }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            EXECUTE IMMEDIATE v_sql;
-            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT] Sequence ' || v_obj_name || ' -> {{ oracle_role_name }}');
-        
-        -- Procedures, Functions, Packages, Types : GRANT EXECUTE
-        ELSIF v_obj_type IN ('PROCEDURE', 'FUNCTION', 'PACKAGE', 'TYPE') THEN
-            v_sql := 'GRANT EXECUTE ON {{ schema_name | upper }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            EXECUTE IMMEDIATE v_sql;
-            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT] ' || v_obj_type || ' ' || v_obj_name || ' -> {{ oracle_role_name }}');
-        
-        -- Autres types d'objets : ignorer silencieusement
-        ELSE
-            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT] Object type ' || v_obj_type || ' ignored');
-        END IF;
-        
-    EXCEPTION
-        WHEN OTHERS THEN
-            -- Logger l'erreur mais ne pas bloquer la création de l'objet
-            DBMS_OUTPUT.PUT_LINE('[AUTO-GRANT ERROR] ' || v_obj_type || ' ' || v_obj_name || ': ' || SQLERRM);
-    END;
+    IF v_cnt = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('Creating user '||v_user||' ...');
+        EXECUTE IMMEDIATE
+            ' CREATE USER '||v_user||
+            ' IDENTIFIED BY "'||REPLACE(v_pwd,'''','''''')||'"'||
+            ' DEFAULT TABLESPACE CATS_DATA '||
+            ' TEMPORARY TABLESPACE TEMP '||
+            ' QUOTA 2G ON CATS_DATA ' ||
+            ' PASSWORD EXPIRE ';
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('User '||v_user||' already exists; skipping CREATE ; reset password');
+        EXECUTE IMMEDIATE 'ALTER USER '||v_user||' IDENTIFIED BY "'||REPLACE(v_pwd,'''','''''')||'"'||'';
+    END IF;
+    
+    EXECUTE IMMEDIATE 'ALTER USER '||v_user||' ACCOUNT UNLOCK';
 END;
 /
-```
 
----
+-- =====================================================
+-- Créer le rôle {{ oracle_role_name }} s'il n'existe pas
+-- =====================================================
+DECLARE
+    v_cnt INTEGER := 0;
+BEGIN
+    SELECT COUNT(*) INTO v_cnt FROM dba_roles WHERE role = '{{ oracle_role_name }}';
+    IF v_cnt = 0 THEN
+        DBMS_OUTPUT.PUT_LINE('Creating role {{ oracle_role_name }}...');
+        EXECUTE IMMEDIATE 'CREATE ROLE {{ oracle_role_name }}';
+    ELSE
+        DBMS_OUTPUT.PUT_LINE('Role {{ oracle_role_name }} already exists.');
+    END IF;
+    
+    -- Accorder les privilèges au rôle (idempotent)
+    FOR g IN (
+        SELECT 'GRANT CREATE SESSION TO {{ oracle_role_name }}' AS stmt FROM dual UNION ALL
+        SELECT 'GRANT CREATE ANY TABLE TO {{ oracle_role_name }}' FROM dual UNION ALL
+        SELECT 'GRANT CREATE ANY VIEW TO {{ oracle_role_name }}' FROM dual UNION ALL
+        SELECT 'GRANT CREATE ANY SEQUENCE TO {{ oracle_role_name }}' FROM dual UNION ALL
+        SELECT 'GRANT CREATE ANY PROCEDURE TO {{ oracle_role_name }}' FROM dual
+    ) LOOP
+        BEGIN
+            EXECUTE IMMEDIATE g.stmt;
+        EXCEPTION
+            WHEN OTHERS THEN
+                IF SQLCODE NOT IN (-1927, -1920, -1919) THEN
+                    DBMS_OUTPUT.PUT_LINE('Grant to role failed: '||g.stmt||' -> '||SQLERRM);
+                    RAISE;
+                END IF;
+        END;
+    END LOOP;
+END;
+/
 
-## 🔍 Comment ça fonctionne ?
+-- =====================================================
+-- Appeler la procédure pour accorder les accès aux schémas
+-- =====================================================
+{% for s in (item.schemas | default([])) %}
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('Calling SYS.GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA for {{ s }} ...');
+    SYS.GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA(p_schema_name => '{{ s }}', p_role_name => '{{ oracle_role_name }}');
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('ERROR calling SYS.GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA(''{{ s }}''):  '||SQLERRM);
+        RAISE;
+END;
+/
+{% endfor %}
 
-### Déclenchement automatique
-```
-user2 se connecte
-    ↓
-user2 exécute: CREATE TABLE SCHEMA_A.NEW_TABLE (id NUMBER);
-    ↓
-✨ TRIGGER se déclenche automatiquement !
-    ↓
-GRANT ALL PRIVILEGES ON SCHEMA_A.NEW_TABLE TO DEV_ROLE;
-    ↓
-user1 (qui a DEV_ROLE) peut immédiatement accéder à NEW_TABLE ✅
+-- =====================================================
+-- Accorder le rôle {{ oracle_role_name }} à l'utilisateur
+-- =====================================================
+BEGIN
+    EXECUTE IMMEDIATE 'GRANT {{ oracle_role_name }} TO {{ item.login | upper }}';
+    EXECUTE IMMEDIATE 'ALTER USER {{ item.login | upper }} DEFAULT ROLE {{ oracle_role_name }}';
+    DBMS_OUTPUT.PUT_LINE('{{ oracle_role_name }} granted & set as default for {{ item.login | upper }}.');
+END;
+/
+
+PROMPT Done for {{ item.login | upper }}
