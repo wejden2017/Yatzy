@@ -1,57 +1,68 @@
 -- =====================================================
--- Création du rôle DEV_ROLE
+-- Procédure: GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA
+-- Description: Accorde tous les privilèges sur les objets 
+--              EXISTANTS d'un schéma au rôle {{ oracle_role_name }}
 -- =====================================================
 
-SET SERVEROUTPUT ON SIZE UNLIMITED
-SET FEEDBACK OFF
-SET VERIFY OFF
-SET ECHO OFF
-WHENEVER SQLERROR CONTINUE
-
--- Étape 1: Créer le rôle s'il n'existe pas
-DECLARE
-    v_count NUMBER;
+CREATE OR REPLACE PROCEDURE GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA(
+    p_schema_name VARCHAR2,
+    p_role_name VARCHAR2 DEFAULT '{{ oracle_role_name }}'
+) AS
+    v_sql VARCHAR2(4000);
 BEGIN
-    SELECT COUNT(*) INTO v_count
-    FROM dba_roles
-    WHERE role = 'DEV_ROLE';
+    DBMS_OUTPUT.PUT_LINE('Calling SYS.GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA for ' || p_schema_name || ' ...');
     
-    IF v_count = 0 THEN
-        EXECUTE IMMEDIATE 'CREATE ROLE DEV_ROLE';
-        DBMS_OUTPUT.PUT_LINE('[CREATE] Role DEV_ROLE created');
-    ELSE
-        DBMS_OUTPUT.PUT_LINE('[EXISTS] Role DEV_ROLE already exists');
-    END IF;
-END;
+    -- Tables
+    FOR rec IN (SELECT table_name FROM all_tables WHERE owner = UPPER(p_schema_name)) LOOP
+        BEGIN
+            v_sql := 'GRANT ALL PRIVILEGES ON ' || p_schema_name || '.' || rec.table_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE(' Table: ' || rec.table_name);
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE(' Erreur table ' || rec.table_name || ': ' || SQLERRM);
+        END;
+    END LOOP;
+    
+    -- Vues
+    FOR rec IN (SELECT view_name FROM all_views WHERE owner = UPPER(p_schema_name)) LOOP
+        BEGIN
+            v_sql := 'GRANT SELECT ON ' || p_schema_name || '.' || rec.view_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('Vue: ' || rec.view_name);
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE(' error vue ' || rec.view_name || ': ' || SQLERRM);
+        END;
+    END LOOP;
+    
+    -- Sequences
+    FOR rec IN (SELECT sequence_name FROM all_sequences WHERE sequence_owner = UPPER(p_schema_name)) LOOP
+        BEGIN
+            v_sql := 'GRANT SELECT, ALTER ON ' || p_schema_name || '.' || rec.sequence_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('Sequence: ' || rec.sequence_name);
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE(' error sequence ' || rec.sequence_name || ': ' || SQLERRM);
+        END;
+    END LOOP;
+    
+    -- Procedures, Functions, Packages, Types
+    FOR rec IN (SELECT object_name, object_type FROM all_objects
+                WHERE owner = UPPER(p_schema_name)
+                AND object_type IN ('PROCEDURE', 'FUNCTION', 'PACKAGE', 'TYPE')) LOOP
+        BEGIN
+            v_sql := 'GRANT EXECUTE ON ' || p_schema_name || '.' || rec.object_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE(' ' || rec.object_type || ': ' || rec.object_name);
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE(' error ' || rec.object_type || ' ' || rec.object_name || ': ' || SQLERRM);
+        END;
+    END LOOP;
+    
+    DBMS_OUTPUT.PUT_LINE('.');
+    DBMS_OUTPUT.PUT_LINE('==> Privileges accordes sur le schema ' || p_schema_name);
+END GRANT_{{ oracle_role_name }}_ACCESS_TO_SCHEMA;
 /
-
-WHENEVER SQLERROR CONTINUE
-
-DBMS_OUTPUT.PUT_LINE('[GRANTS] Applying privileges to DEV_ROLE...');
-
-GRANT CREATE SESSION TO DEV_ROLE;
-GRANT CONNECT TO DEV_ROLE;
-GRANT RESOURCE TO DEV_ROLE;
-GRANT CREATE TABLE TO DEV_ROLE;
-GRANT CREATE VIEW TO DEV_ROLE;
-GRANT CREATE PROCEDURE TO DEV_ROLE;
-GRANT CREATE SEQUENCE TO DEV_ROLE;
-GRANT CREATE SYNONYM TO DEV_ROLE;
-GRANT CREATE TRIGGER TO DEV_ROLE;
-GRANT CREATE TYPE TO DEV_ROLE;
-GRANT CREATE MATERIALIZED VIEW TO DEV_ROLE;
-GRANT CREATE DATABASE LINK TO DEV_ROLE;
-GRANT SELECT_CATALOG_ROLE TO DEV_ROLE;
-GRANT SELECT ANY DICTIONARY TO DEV_ROLE;
-GRANT ANALYZE ANY TO DEV_ROLE;
-
-GRANT SELECT ON V_$SESSION TO DEV_ROLE;
-GRANT SELECT ON V_$SQL TO DEV_ROLE;
-GRANT SELECT ON V_$SQL_PLAN TO DEV_ROLE;
-GRANT SELECT ON V_$SQLAREA TO DEV_ROLE;
-GRANT SELECT ON V_$PARAMETER TO DEV_ROLE;
-
-DBMS_OUTPUT.PUT_LINE('[SUCCESS] All privileges applied to DEV_ROLE');
-
-COMMIT;
-
