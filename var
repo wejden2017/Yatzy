@@ -1,5 +1,11 @@
-- name: Set users and password facts
-  set_fact:
-    _users: "{{ users | default([]) }}"  # Utiliser directement 'users' au lieu de 'env_cfg.users'
-    _default_password: "{{ default_password | default('ChangeMe1234!') }}"  # Idem
-  tags: [always]
+ansible-playbook \
+  -i inventory/aws_ec2_inventory.py \
+  playbooks/manage_db_users.yml \
+  --vault-password-file=.vault_pass.txt \
+  -e ENV=dev \
+  -e SYSDBA_PASSWORD='ton_mot_de_passe_ici' \
+  -e ansible_ssh_private_key_file='/home/zied.ouertani@aws/.ssh/dev_ec2_keypair.pem' \
+  -e ansible_ssh_common_args='-o StrictHostKeyChecking=no' \
+  -e ansible_python_interpreter='/usr/bin/python3' \
+  --tags role \
+  -vv
