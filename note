@@ -1,31 +1,63 @@
-SET SERVEROUTPUT ON;
+CREATE TABLE LUCA.EMPLOYES_TEST (
+    id NUMBER PRIMARY KEY,
+    nom VARCHAR2(100) NOT NULL,
+    prenom VARCHAR2(100) NOT NULL,
+    email VARCHAR2(200),
+    date_embauche DATE DEFAULT SYSDATE,
+    salaire NUMBER(10,2)
+);
 
-DECLARE
-    v_file      UTL_FILE.FILE_TYPE;
-    v_line      VARCHAR2(32767);
-    v_directory VARCHAR2(100) := 'DATA_APF';
-    v_filename  VARCHAR2(100) := 'itf_svgrm.txt';
-BEGIN
-    DBMS_OUTPUT.PUT_LINE('=== TEST LECTURE FICHIER ===');
-    DBMS_OUTPUT.PUT_LINE('Directory: ' || v_directory);
-    DBMS_OUTPUT.PUT_LINE('Fichier: ' || v_filename);
-    DBMS_OUTPUT.PUT_LINE('----------------------------');
-    
-    v_file := UTL_FILE.FOPEN(v_directory, v_filename, 'R', 32767);
-    DBMS_OUTPUT.PUT_LINE('✓ Fichier ouvert avec succès');
-    
-    UTL_FILE.GET_LINE(v_file, v_line);
-    DBMS_OUTPUT.PUT_LINE('✓ Première ligne lue: ' || SUBSTR(v_line, 1, 100));
-    
-    UTL_FILE.FCLOSE(v_file);
-    DBMS_OUTPUT.PUT_LINE('✓ Fichier fermé');
-    DBMS_OUTPUT.PUT_LINE('=== TEST REUSSI ===');
-    
-EXCEPTION
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('✗ ERREUR: ' || SQLCODE || ' - ' || SQLERRM);
-        IF UTL_FILE.IS_OPEN(v_file) THEN
-            UTL_FILE.FCLOSE(v_file);
-        END IF;
-END;
-/
+INSERT INTO LUCA.EMPLOYES_TEST (id, nom, prenom, email, salaire) 
+VALUES (1, 'DUPONT', 'Jean', 'jean.dupont@example.com', 45000);
+
+INSERT INTO LUCA.EMPLOYES_TEST (id, nom, prenom, email, salaire) 
+VALUES (2, 'MARTIN', 'Sophie', 'sophie.martin@example.com', 52000);
+
+INSERT INTO LUCA.EMPLOYES_TEST (id, nom, prenom, email, salaire) 
+VALUES (3, 'DURAND', 'Pierre', 'pierre.durand@example.com', 48000);
+
+COMMIT;
+
+CREATE VIEW LUCA.VUE_EMPLOYES_SENIORS AS
+SELECT id, nom, prenom, email, salaire
+FROM LUCA.EMPLOYES_TEST
+WHERE salaire > 45000;
+
+-- Lister les tables
+SELECT * FROM LUCA.EMPLOYES_TEST;
+
+-- Lister via la vue
+SELECT * FROM LUCA.VUE_EMPLOYES_SENIORS;
+
+avec salma :
+
+SELECT * FROM LUCA.EMPLOYES_TEST;
+SELECT * FROM LUCA.VUE_EMPLOYES_SENIORS;
+
+INSERT INTO LUCA.EMPLOYES_TEST (id, nom, prenom, email, salaire) 
+VALUES (4, 'BERNARD', 'Marie', 'marie.bernard@example.com', 55000);
+COMMIT;
+
+-- ✅ UPDATE devrait FONCTIONNER
+UPDATE LUCA.EMPLOYES_TEST 
+SET salaire = 50000 
+WHERE id = 1;
+COMMIT;
+
+-- ✅ DELETE devrait FONCTIONNER
+DELETE FROM LUCA.EMPLOYES_TEST WHERE id = 4;
+COMMIT;
+
+test jerome :
+
+SELECT * FROM LUCA.EMPLOYES_TEST;
+SELECT * FROM LUCA.VUE_EMPLOYES_SENIORS;
+
+avec sysdba :
+
+SELECT grantee, table_name, privilege, grantable
+FROM dba_tab_privs 
+WHERE table_name IN ('EMPLOYES_TEST', 'VUE_EMPLOYES_SENIORS')
+  AND owner = 'LUCA'
+  AND grantee = 'QA_ROLE'
+ORDER BY table_name, privilege;
