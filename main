@@ -30,3 +30,23 @@ GRANT DROP ANY TABLE TO SEYDOU;
 GRANT DROP ANY VIEW TO SEYDOU;
 
 COMMIT;
+
+CREATE TABLE LUCA.EMPLOYES_TEST (
+    id NUMBER PRIMARY KEY,
+    nom VARCHAR2(100) NOT NULL,
+    prenom VARCHAR2(100) NOT NULL,
+    email VARCHAR2(200),
+    date_embauche DATE DEFAULT SYSDATE,
+    salaire NUMBER(10,2)
+);
+
+SELECT owner, trigger_name, trigger_type, triggering_event, status
+FROM dba_triggers
+WHERE base_object_type = 'SCHEMA'
+  AND triggering_event LIKE '%DDL%'
+ORDER BY owner, trigger_name;
+
+SELECT * FROM dba_policies;
+
+-- Vérifier Oracle Label Security
+SELECT * FROM dba_sa_users WHERE user_name = 'SEYDOU';
