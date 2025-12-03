@@ -1,6 +1,10 @@
--- Vérifier que QA_ROLE a bien CREATE ANY TABLE
-SELECT grantee, privilege 
-FROM dba_sys_privs 
-WHERE grantee = 'QA_ROLE' 
-  AND privilege LIKE '%ANY%'
-ORDER BY privilege;
+-- Vérifier si LUCA est un utilisateur/schéma
+SELECT username, default_tablespace, account_status 
+FROM dba_users 
+WHERE username = 'LUCA';
+```
+
+**Résultat attendu** :
+```
+USERNAME  DEFAULT_TABLESPACE  ACCOUNT_STATUS
+LUCA      CATS_DATA          OPEN (ou LOCKED)
