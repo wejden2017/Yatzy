@@ -8,3 +8,9 @@ WHERE username = 'LUCA';
 ```
 USERNAME  DEFAULT_TABLESPACE  ACCOUNT_STATUS
 LUCA      CATS_DATA          OPEN (ou LOCKED)
+
+SELECT username, tablespace_name, max_bytes 
+FROM dba_ts_quotas 
+WHERE username = 'LUCA';
+
+ALTER USER LUCA QUOTA UNLIMITED ON CATS_DATA;
