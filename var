@@ -1,14 +1,5 @@
-cd ~/cats-db-user-admin/
-
-export SYSDBA_PASSWORD="ton_mot_de_passe"
-
-# Test connexion
-ansible -i inventory/local_dev.yml oracle_servers -m ping
-
-# Lancer le playbook
-ansible-playbook \
-  -i inventory/local_dev.yml \
-  playbooks/manage_db_users.yml \
-  -e ENV=dev \
-  --tags role \
-  -vv
+- name: Set users and password facts
+  set_fact:
+    _users: "{{ users | default([]) }}"
+    _default_password: "{{ default_password | default('ChangeMe1234!') }}"
+  tags: [always]
