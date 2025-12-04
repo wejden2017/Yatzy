@@ -48,3 +48,14 @@ FROM dba_ts_quotas
 WHERE username = 'LUCA'
 ORDER BY tablespace_name;
 
+-- 1) Voir les rôles actifs
+SELECT * 
+FROM session_roles
+ORDER BY role;
+
+-- 2) Voir les privilèges système actifs
+SELECT privilege
+FROM session_privs
+ORDER BY privilege;
+
+
