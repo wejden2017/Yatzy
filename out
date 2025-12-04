@@ -11,3 +11,10 @@ SELECT column_name
    AND table_name = 'GV_$SESSION' 
    AND column_name IN ('PROXY_USER', 'PROXY_USERID', 'CLIENT_IDENTIFIER', 'EXTERNAL_NAME')
 ORDER BY column_name;
+
+
+-- Voir si l'utilisateur est configuré comme proxy
+SELECT * FROM dba_proxies WHERE proxy = UPPER('{{ item.login }}');
+
+-- Ou
+SELECT * FROM proxy_users WHERE client = UPPER('{{ item.login }}');
