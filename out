@@ -3,3 +3,11 @@ SELECT column_name
  WHERE owner = 'SYS' 
    AND table_name = 'GV_$SESSION' 
    AND column_name = 'PROXY_USER';
+
+
+SELECT column_name 
+  FROM dba_tab_columns 
+ WHERE owner = 'SYS' 
+   AND table_name = 'GV_$SESSION' 
+   AND column_name IN ('PROXY_USER', 'PROXY_USERID', 'CLIENT_IDENTIFIER', 'EXTERNAL_NAME')
+ORDER BY column_name;
