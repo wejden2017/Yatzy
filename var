@@ -30,6 +30,13 @@ EXCEPTION WHEN OTHERS THEN NULL;
 END;
 /
 
-DBMS_OUTPUT.PUT_LINE('Dropping user '||v_user||' CASCADE ...');
-EXECUTE IMMEDIATE 'DROP USER '||v_user||' CASCADE';
-DBMS_OUTPUT.PUT_LINE('User '||v_user||' dropped.');
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('Dropping user '||v_user||' CASCADE ...');
+    EXECUTE IMMEDIATE 'DROP USER '||v_user||' CASCADE';
+    DBMS_OUTPUT.PUT_LINE('User '||v_user||' dropped.');
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('ERROR dropping '||v_user||' : '||SQLERRM);
+        RAISE;
+END;
+/
