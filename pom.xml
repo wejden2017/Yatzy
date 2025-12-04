@@ -1,26 +1,68 @@
-* ----------------------------------------------------------
-* Fichier MQSC généré automatiquement par Ansible
-* ----------------------------------------------------------
+SET DEFINE OFF
+SET SERVEROUTPUT ON SIZE UNLIMITED
+SET FEEDBACK OFF
+SET VERIFY OFF
+SET HEADING OFF
+SET ECHO OFF
+WHENEVER SQLERROR EXIT SQL.SQLCODE
 
-* 1) Désactiver la sécurité par tables de canaux + CONNAUTH
-ALTER QMGR CHLAUTH(DISABLED)
-ALTER QMGR CONNAUTH(' ')
-REFRESH SECURITY TYPE(CONNAUTH)
+DECLARE
+  v_user    VARCHAR2(128) := UPPER('{{ item.login }}');
+  v_pwd     VARCHAR2(512) := '{{ item.password | default(_default_password) }}';
+  v_action  VARCHAR2(30)  := LOWER('{{ item.action | default("create") }}');
+  v_cnt     INTEGER := 0;
+BEGIN
+  SELECT COUNT(*)
+    INTO v_cnt
+    FROM dba_users
+   WHERE username = v_user;
 
-* 2) Configurer le channel applicatif et forcer l’utilisateur MQ
-ALTER CHANNEL('{{ mq_channel }}') CHLTYPE(SVRCONN) TRPTYPE(TCP) +
-    MCAUSER('{{ mq_mcauser }}') REPLACE
+  IF v_cnt = 0 THEN
+    -- =====================================================
+    --  User n'existe pas encore
+    -- =====================================================
+    IF v_action IN ('create','reset-password','unlock','') THEN
+      DBMS_OUTPUT.PUT_LINE('Creating user '||v_user||' ...');
 
-* (optionnel, purement pour debug)
-* DISPLAY CHANNEL('{{ mq_channel }}') MCAUSER
+      EXECUTE IMMEDIATE
+            'CREATE USER '||v_user||
+            ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'
+            || ' DEFAULT TABLESPACE USERS'
+            || ' TEMPORARY TABLESPACE TEMP'
+            || ' ACCOUNT UNLOCK';
 
-* 3) Donner tous les droits MQ à l’utilisateur applicatif
-SET AUTHREC PROFILE('**') OBJTYPE(QMGR)  PRINCIPAL('{{ mq_mcauser }}') AUTHADD(ALL)
-SET AUTHREC PROFILE('**') OBJTYPE(QUEUE) PRINCIPAL('{{ mq_mcauser }}') AUTHADD(ALL)
+    ELSIF v_action = 'lock' THEN
+      DBMS_OUTPUT.PUT_LINE('User '||v_user||' does not exist; nothing to lock.');
+      RETURN;
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Unknown action '||v_action||' for new user '||v_user||'; doing nothing.');
+      RETURN;
+    END IF;
 
-* 4) Rafraîchir le cache de sécu
-REFRESH SECURITY TYPE(AUTHSERV)
+  ELSE
+    -- =====================================================
+    --  User existe déjà
+    -- =====================================================
+    IF v_action IN ('create','reset-password','') THEN
+      DBMS_OUTPUT.PUT_LINE('User '||v_user||' exists; resetting password ...');
+      EXECUTE IMMEDIATE
+            'ALTER USER '||v_user||
+            ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'
+            || ' ACCOUNT UNLOCK';
 
-* ----------------------------------------------------------
-* Fin du fichier MQSC
-* ----------------------------------------------------------
+    ELSIF v_action = 'lock' THEN
+      DBMS_OUTPUT.PUT_LINE('Locking user '||v_user||' ...');
+      EXECUTE IMMEDIATE 'ALTER USER '||v_user||' ACCOUNT LOCK';
+
+    ELSIF v_action = 'unlock' THEN
+      DBMS_OUTPUT.PUT_LINE('Unlocking user '||v_user||' ...');
+      EXECUTE IMMEDIATE 'ALTER USER '||v_user||' ACCOUNT UNLOCK';
+
+    ELSE
+      DBMS_OUTPUT.PUT_LINE('Unknown action '||v_action||' for existing user '||v_user||'; doing nothing.');
+    END IF;
+  END IF;
+
+  -- =====================================================
+  --  Grant CREATE SESSION (idempotent)
+  -- ======================================
