@@ -184,3 +184,17 @@ SELECT * FROM LUCA.TEST_AUTO_GRANT;
 
 INSERT INTO LUCA.TEST_AUTO_GRANT VALUES (1, 'Test');
 -- ✅ Devrait fonctionner !
+
+SELECT 
+    u.username,
+    r.granted_role,
+    r.admin_option,
+    r.default_role,
+    u.account_status,
+    u.created
+FROM dba_users u
+LEFT JOIN dba_role_privs r ON u.username = r.grantee
+WHERE u.username IN ('SEYDOU', 'SALMA', 'JEROME')
+  OR u.username LIKE '%QLCH%'
+  OR u.username LIKE 'DEVLCH%'
+ORDER BY u.username, r.granted_role;
