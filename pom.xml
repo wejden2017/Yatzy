@@ -17,38 +17,44 @@ BEGIN
     FROM dba_users
    WHERE username = v_user;
 
+  -------------------------------------------------------------------------
+  -- USER DOES NOT EXIST
+  -------------------------------------------------------------------------
   IF v_cnt = 0 THEN
-    -- =====================================================
-    --  User n'existe pas encore
-    -- =====================================================
+
     IF v_action IN ('create','reset-password','unlock','') THEN
       DBMS_OUTPUT.PUT_LINE('Creating user '||v_user||' ...');
 
       EXECUTE IMMEDIATE
             'CREATE USER '||v_user||
-            ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'
-            || ' DEFAULT TABLESPACE USERS'
-            || ' TEMPORARY TABLESPACE TEMP'
-            || ' ACCOUNT UNLOCK';
+            ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'||
+            ' DEFAULT TABLESPACE USERS'||
+            ' TEMPORARY TABLESPACE TEMP'||
+            ' QUOTA 2G ON USERS'||
+            ' PASSWORD EXPIRE'||
+            ' ACCOUNT UNLOCK';
 
     ELSIF v_action = 'lock' THEN
       DBMS_OUTPUT.PUT_LINE('User '||v_user||' does not exist; nothing to lock.');
       RETURN;
+
     ELSE
-      DBMS_OUTPUT.PUT_LINE('Unknown action '||v_action||' for new user '||v_user||'; doing nothing.');
+      DBMS_OUTPUT.PUT_LINE('Unknown action '||v_action||' for new user '||v_user||'; skipping.');
       RETURN;
     END IF;
 
+  -------------------------------------------------------------------------
+  -- USER EXISTS ALREADY
+  -------------------------------------------------------------------------
   ELSE
-    -- =====================================================
-    --  User existe déjà
-    -- =====================================================
+
     IF v_action IN ('create','reset-password','') THEN
-      DBMS_OUTPUT.PUT_LINE('User '||v_user||' exists; resetting password ...');
+      DBMS_OUTPUT.PUT_LINE('User exists; resetting password ...');
       EXECUTE IMMEDIATE
             'ALTER USER '||v_user||
-            ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'
-            || ' ACCOUNT UNLOCK';
+            ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'||
+            ' PASSWORD EXPIRE'||
+            ' ACCOUNT UNLOCK';
 
     ELSIF v_action = 'lock' THEN
       DBMS_OUTPUT.PUT_LINE('Locking user '||v_user||' ...');
@@ -59,10 +65,57 @@ BEGIN
       EXECUTE IMMEDIATE 'ALTER USER '||v_user||' ACCOUNT UNLOCK';
 
     ELSE
-      DBMS_OUTPUT.PUT_LINE('Unknown action '||v_action||' for existing user '||v_user||'; doing nothing.');
+      DBMS_OUTPUT.PUT_LINE('Unknown action '||v_action||' for existing user; skipping.');
     END IF;
+
   END IF;
 
-  -- =====================================================
-  --  Grant CREATE SESSION (idempotent)
-  -- ======================================
+
+  -------------------------------------------------------------------------
+  -- ALWAYS GRANT CREATE SESSION
+  -------------------------------------------------------------------------
+  BEGIN
+    EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO '||v_user;
+  EXCEPTION
+    WHEN OTHERS THEN
+      IF SQLCODE NOT IN (-1927,-1919) THEN
+        DBMS_OUTPUT.PUT_LINE('Error granting CREATE SESSION: '||SQLERRM);
+        RAISE;
+      END IF;
+  END;
+
+END;
+/
+PROMPT User {{ item.login | upper }} processed (action={{ item.action | default("create") }}).
+/
+
+-------------------------------------------------------------------------------
+-- CONFIGURE PROXY LOGIN: user nominatifs → LUCAx schemas
+-------------------------------------------------------------------------------
+
+{% for s in item.schemas | default([]) %}
+DECLARE
+  v_user   VARCHAR2(128) := UPPER('{{ item.login }}');
+  v_schema VARCHAR2(128) := UPPER('{{ s }}');
+  v_cnt    NUMBER;
+BEGIN
+  SELECT COUNT(*)
+    INTO v_cnt
+    FROM dba_proxies
+   WHERE client = v_user
+     AND proxy  = v_schema;
+
+  IF v_cnt = 0 THEN
+    DBMS_OUTPUT.PUT_LINE('Granting CONNECT THROUGH '||v_user||' on schema '||v_schema||' ...');
+    EXECUTE IMMEDIATE
+          'ALTER USER '||v_schema||
+          ' GRANT CONNECT THROUGH '||v_user;
+  ELSE
+    DBMS_OUTPUT.PUT_LINE('Proxy already exists for '||v_user||' -> '||v_schema||'; skipping.');
+  END IF;
+END;
+/
+{% endfor %}
+
+PROMPT Done for {{ item.login | upper }}
+/
