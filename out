@@ -1,52 +1,5 @@
-sql-- USERQALCH
-DROP USER USERQALCH CASCADE;
-sql-- USERDEVLCH1
-DROP USER USERDEVLCH1 CASCADE;
-sql-- USERDEVLCH2
-DROP USER USERDEVLCH2 CASCADE;
-Si tu as d'autres utilisateurs (DEVLCH3, DEVLCH4, DEVLCH5), fais pareil :
-sqlDROP USER DEVLCH3 CASCADE;
-DROP USER DEVLCH4 CASCADE;
-DROP USER DEVLCH5 CASCADE;
-
-2. Supprimer les triggers DDL
-sql-- Lister d'abord les triggers pour voir ce qu'il y a
-SELECT owner, trigger_name 
-FROM dba_triggers 
-WHERE trigger_name LIKE 'AUTO_GRANT%';
-Puis supprimer chacun :
-sqlDROP TRIGGER SYS.AUTO_GRANT_LUCA_TO_QA_ROLE;
-sqlDROP TRIGGER SYS.AUTO_GRANT_LUCA_TO_DEV_ROLE;
-Si tu as d'autres triggers (LUCA1, LUCA2, etc.) :
-sqlDROP TRIGGER SYS.AUTO_GRANT_LUCA1_TO_QA_ROLE;
-DROP TRIGGER SYS.AUTO_GRANT_LUCA2_TO_QA_ROLE;
-
-3. Supprimer les procédures
-sql-- Lister d'abord
-SELECT owner, object_name 
-FROM dba_objects 
-WHERE object_name LIKE 'GRANT_%_ACCESS_TO_SCHEMA';
-Puis supprimer :
-sqlDROP PROCEDURE SYS.GRANT_QA_ROLE_ACCESS_TO_SCHEMA;
-sqlDROP PROCEDURE SYS.GRANT_DEV_ROLE_ACCESS_TO_SCHEMA;
-sqlDROP PROCEDURE SYS.GRANT_UAT_ROLE_ACCESS_TO_SCHEMA;
-
-4. Supprimer les rôles
-sqlDROP ROLE QA_ROLE;
-sqlDROP ROLE DEV_ROLE;
-sqlDROP ROLE UAT_ROLE;
-
-5. Supprimer la table de test (si elle existe)
-sqlDROP TABLE LUCA.TEST_AUTO_GRANT_QA PURGE;
-
-6. Vérification finale
-sql-- Vérifier qu'il ne reste rien
-SELECT 'User' AS type, username AS name FROM dba_users WHERE username LIKE '%QLCH%' OR username LIKE '%DEVLCH%'
-UNION ALL
-SELECT 'Trigger', trigger_name FROM dba_triggers WHERE trigger_name LIKE 'AUTO_GRANT%'
-UNION ALL
-SELECT 'Procedure', object_name FROM dba_objects WHERE object_name LIKE 'GRANT_%_ACCESS_TO_SCHEMA'
-UNION ALL
-SELECT 'Role', role FROM dba_roles WHERE role IN ('DEV_ROLE', 'QA_ROLE', 'UAT_ROLE');
-
--- Devrait retourner 0 ligne
+SELECT column_name 
+  FROM dba_tab_columns 
+ WHERE owner = 'SYS' 
+   AND table_name = 'GV_$SESSION' 
+   AND column_name = 'PROXY_USER';
