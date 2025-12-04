@@ -1,62 +1,16 @@
-  SELECT COUNT(*)
-    INTO v_cnt
-    FROM dba_users
-   WHERE username = v_user;
-
-  -------------------------------------------------------------------------
-  -- USER DOES NOT EXIST
-  -------------------------------------------------------------------------
-  IF v_cnt = 0 THEN
-
-    IF v_action IN ('create','reset-password','unlock','') THEN
-      DBMS_OUTPUT.PUT_LINE('Creating user '||v_user||' ...');
-
+  FOR s IN (
+    SELECT sid, serial#, inst_id
+      FROM gv$session
+     WHERE (username = v_user OR proxy_user = v_user)
+       AND type = 'USER'
+       AND username IS NOT NULL
+  ) LOOP
+    BEGIN
+      DBMS_OUTPUT.PUT_LINE('Killing session '||s.sid||','||s.serial#||' @ '||s.inst_id||' ...');
       EXECUTE IMMEDIATE
-            'CREATE USER '||v_user||
-            ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'||
-            ' DEFAULT TABLESPACE USERS'||
-            ' TEMPORARY TABLESPACE TEMP'||
-            ' QUOTA 2G ON USERS'||
-            ' PASSWORD EXPIRE'||
-            ' ACCOUNT UNLOCK';
-
-    ELSIF v_action = 'lock' THEN
-      DBMS_OUTPUT.PUT_LINE('User '||v_user||' does not exist; nothing to lock.');
-      RETURN;
-
-    ELSE
-      DBMS_OUTPUT.PUT_LINE('Unknown action '||v_action||' for new user '||v_user||'; skipping.');
-      RETURN;
-    END IF;
-
-  -------------------------------------------------------------------------
-  -- USER EXISTS ALREADY
-  -------------------------------------------------------------------------
-  ELSE
-
-    IF v_action IN ('create','') THEN
-      -- 👉 nouveau comportement : on ne change rien
-      DBMS_OUTPUT.PUT_LINE('User '||v_user||' already exists; no change for action '
-                           ||v_action||'.');
-
-    ELSIF v_action = 'reset-password' THEN
-      DBMS_OUTPUT.PUT_LINE('Resetting password for user '||v_user||' ...');
-      EXECUTE IMMEDIATE
-            'ALTER USER '||v_user||
-            ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'||
-            ' PASSWORD EXPIRE'||
-            ' ACCOUNT UNLOCK';
-
-    ELSIF v_action = 'lock' THEN
-      DBMS_OUTPUT.PUT_LINE('Locking user '||v_user||' ...');
-      EXECUTE IMMEDIATE 'ALTER USER '||v_user||' ACCOUNT LOCK';
-
-    ELSIF v_action = 'unlock' THEN
-      DBMS_OUTPUT.PUT_LINE('Unlocking user '||v_user||' ...');
-      EXECUTE IMMEDIATE 'ALTER USER '||v_user||' ACCOUNT UNLOCK';
-
-    ELSE
-      DBMS_OUTPUT.PUT_LINE('Unknown action '||v_action||' for existing user '||v_user||'; skipping.');
-    END IF;
-
-  END IF;
+        'ALTER SYSTEM KILL SESSION '''||s.sid||','||s.serial#||','||s.inst_id||''' IMMEDIATE';
+    EXCEPTION
+      WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('Could not kill session '||s.sid||','||s.serial#||' : '||SQLERRM);
+    END;
+  END LOOP;
