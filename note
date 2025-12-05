@@ -1,37 +1,13 @@
--- ================================================
--- Create READ-ONLY user with ANY privileges
--- User: READUSER
--- Auto-access to NEW tables/views/procedures
--- Password: Test123!
--- ================================================
-
 DECLARE
-  v_user   VARCHAR2(128) := 'READUSER';
+  v_user VARCHAR2(128) := UPPER('{{ item.login }}');
   v_exists NUMBER := 0;
 BEGIN
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  DBMS_OUTPUT.PUT_LINE('Creating READ-ONLY user: READUSER');
-  DBMS_OUTPUT.PUT_LINE('With automatic access to NEW objects');
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  DBMS_OUTPUT.PUT_LINE('');
-  
-  -- STEP 1: Vérifier si l'utilisateur existe
-  DBMS_OUTPUT.PUT_LINE('STEP 1: Check if user exists');
   SELECT COUNT(*) INTO v_exists FROM dba_users WHERE username = v_user;
   
   IF v_exists = 0 THEN
-    DBMS_OUTPUT.PUT_LINE('User ' || v_user || ' does not exist. Creating...');
-    EXECUTE IMMEDIATE 'CREATE USER ' || v_user || ' IDENTIFIED BY "Test123!"';
-    DBMS_OUTPUT.PUT_LINE('✓ User ' || v_user || ' created successfully.');
-  ELSE
-    DBMS_OUTPUT.PUT_LINE('User ' || v_user || ' already exists. Reconfiguring privileges...');
+    EXECUTE IMMEDIATE 'CREATE USER ' || v_user || ' IDENTIFIED BY "{{ item.password | default("ChangeMe123!") }}"';
   END IF;
-  DBMS_OUTPUT.PUT_LINE('');
   
-  -- STEP 2: Révoquer TOUS les privilèges existants
-  DBMS_OUTPUT.PUT_LINE('STEP 2: Revoke all existing privileges');
-  
-  -- Révoquer privilèges système
   FOR r IN (SELECT privilege FROM dba_sys_privs WHERE grantee = v_user) LOOP
     BEGIN
       EXECUTE IMMEDIATE 'REVOKE ' || r.privilege || ' FROM ' || v_user;
@@ -39,7 +15,6 @@ BEGIN
     END;
   END LOOP;
   
-  -- Révoquer rôles
   FOR r IN (SELECT granted_role FROM dba_role_privs WHERE grantee = v_user) LOOP
     BEGIN
       EXECUTE IMMEDIATE 'REVOKE ' || r.granted_role || ' FROM ' || v_user;
@@ -47,67 +22,8 @@ BEGIN
     END;
   END LOOP;
   
-  -- Révoquer privilèges objet existants (pour nettoyer)
-  FOR r IN (
-    SELECT owner, table_name, privilege
-    FROM dba_tab_privs 
-    WHERE grantee = v_user
-  ) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'REVOKE ' || r.privilege || ' ON ' || r.owner || '.' || r.table_name || ' FROM ' || v_user;
-    EXCEPTION WHEN OTHERS THEN NULL;
-    END;
-  END LOOP;
-  
-  DBMS_OUTPUT.PUT_LINE('✓ Revoked all existing privileges.');
-  DBMS_OUTPUT.PUT_LINE('');
-  
-  -- STEP 3: Grant privilèges READ-ONLY globaux (ANY)
-  DBMS_OUTPUT.PUT_LINE('STEP 3: Grant global READ-ONLY privileges');
-  
   EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO ' || v_user;
-  DBMS_OUTPUT.PUT_LINE('  ✓ CREATE SESSION');
-  
   EXECUTE IMMEDIATE 'GRANT SELECT ANY TABLE TO ' || v_user;
-  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT ANY TABLE (includes views)');
-  
   EXECUTE IMMEDIATE 'GRANT SELECT ANY SEQUENCE TO ' || v_user;
-  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT ANY SEQUENCE');
-  
   EXECUTE IMMEDIATE 'GRANT EXECUTE ANY PROCEDURE TO ' || v_user;
-  DBMS_OUTPUT.PUT_LINE('  ✓ EXECUTE ANY PROCEDURE (includes functions/packages)');
-  
-  DBMS_OUTPUT.PUT_LINE('');
-  
-  -- Résumé final
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  DBMS_OUTPUT.PUT_LINE('CONFIGURATION COMPLETE!');
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  DBMS_OUTPUT.PUT_LINE('User: READUSER');
-  DBMS_OUTPUT.PUT_LINE('Password: Test123!');
-  DBMS_OUTPUT.PUT_LINE('');
-  DBMS_OUTPUT.PUT_LINE('GRANTED PRIVILEGES (GLOBAL):');
-  DBMS_OUTPUT.PUT_LINE('  ✓ CREATE SESSION');
-  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT ANY TABLE (all schemas, all tables/views)');
-  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT ANY SEQUENCE (all schemas, all sequences)');
-  DBMS_OUTPUT.PUT_LINE('  ✓ EXECUTE ANY PROCEDURE (all schemas, all procedures/functions)');
-  DBMS_OUTPUT.PUT_LINE('');
-  DBMS_OUTPUT.PUT_LINE('AUTOMATIC ACCESS:');
-  DBMS_OUTPUT.PUT_LINE('  ✓ NEW tables created = automatic SELECT access');
-  DBMS_OUTPUT.PUT_LINE('  ✓ NEW views created = automatic SELECT access');
-  DBMS_OUTPUT.PUT_LINE('  ✓ NEW sequences created = automatic SELECT access');
-  DBMS_OUTPUT.PUT_LINE('  ✓ NEW procedures created = automatic EXECUTE access');
-  DBMS_OUTPUT.PUT_LINE('');
-  DBMS_OUTPUT.PUT_LINE('RESTRICTIONS:');
-  DBMS_OUTPUT.PUT_LINE('  ✗ NO INSERT/UPDATE/DELETE');
-  DBMS_OUTPUT.PUT_LINE('  ✗ NO CREATE/DROP/ALTER');
-  DBMS_OUTPUT.PUT_LINE('  ✗ NO TRUNCATE');
-  DBMS_OUTPUT.PUT_LINE('  ✗ NO GRANT');
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  
-EXCEPTION
-  WHEN OTHERS THEN
-    DBMS_OUTPUT.PUT_LINE('');
-    DBMS_OUTPUT.PUT_LINE('ERROR: ' || SQLERRM);
-    RAISE;
 END;
