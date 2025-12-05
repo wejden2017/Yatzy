@@ -14,3 +14,20 @@ ORDER BY owner, table_name;
 SELECT granted_role 
 FROM dba_role_privs 
 WHERE grantee = 'JEROME';
+
+-- Connecte-toi en jerome[luca] puis exécute :
+SELECT sys_context('USERENV', 'SESSION_USER') AS session_user,
+       sys_context('USERENV', 'PROXY_USER') AS proxy_user,
+       sys_context('USERENV', 'CURRENT_SCHEMA') AS current_schema
+FROM dual;
+
+-- Privilèges système de LUCA
+SELECT privilege 
+FROM dba_sys_privs 
+WHERE grantee = 'LUCA'
+ORDER BY privilege;
+
+-- Rôles de LUCA
+SELECT granted_role 
+FROM dba_role_privs 
+WHERE grantee = 'LUCA';
