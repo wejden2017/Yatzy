@@ -1,6 +1,116 @@
-SELECT column_name 
-FROM dba_tab_columns 
-WHERE owner = 'SYS' 
-  AND table_name = 'GV_$SESSION'
-  AND column_name LIKE '%PROXY%'
-ORDER BY column_name;
+-- ================================================
+-- Drop user
+-- Env : {{ lookup('env','ENV') | upper }}
+-- User: {{ item.login | upper }}
+-- ================================================
+SET SERVEROUTPUT ON SIZE UNLIMITED
+SET FEEDBACK OFF
+SET VERIFY OFF
+SET HEADING OFF
+SET ECHO OFF
+WHENEVER SQLERROR EXIT SQL.SQLCODE
+
+DECLARE
+  v_user          VARCHAR2(128) := UPPER('{{ item.login }}');
+  v_exists        NUMBER := 0;
+  v_count         NUMBER := 0;
+  v_client_schema VARCHAR2(128);
+BEGIN
+  -- 1) Vérifier que le user existe
+  SELECT COUNT(*)
+  INTO   v_exists
+  FROM   dba_users
+  WHERE  username = v_user;
+  
+  IF v_exists = 0 THEN
+    DBMS_OUTPUT.PUT_LINE('User '||v_user||' does not exist; nothing to do.');
+    RETURN;
+  END IF;
+  
+  DBMS_OUTPUT.PUT_LINE('User '||v_user||' exists.');
+  
+  -- 2) Tuer les sessions directes de l'utilisateur
+  DBMS_OUTPUT.PUT_LINE('Killing direct sessions for '||v_user||'...');
+  FOR s IN (
+    SELECT sid, serial#, inst_id
+    FROM   gv$session
+    WHERE  username = v_user
+      AND  type = 'USER'
+  )
+  LOOP
+    BEGIN
+      v_count := v_count + 1;
+      DBMS_OUTPUT.PUT_LINE('  Killing '||s.sid||','||s.serial#||'@'||s.inst_id);
+      EXECUTE IMMEDIATE
+        'ALTER SYSTEM KILL SESSION '''||s.sid||','||s.serial#||',@'||s.inst_id||''' IMMEDIATE';
+    EXCEPTION
+      WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('  WARNING: '||SQLERRM);
+    END;
+  END LOOP;
+  
+  -- 3) Vérifier si l'utilisateur a des relations PROXY et tuer les sessions des schémas CLIENT
+  FOR px IN (
+    SELECT DISTINCT client
+    FROM   proxy_users
+    WHERE  proxy = v_user
+  )
+  LOOP
+    v_client_schema := px.client;
+    DBMS_OUTPUT.PUT_LINE('User '||v_user||' is PROXY on schema '||v_client_schema);
+    DBMS_OUTPUT.PUT_LINE('WARNING: Killing ALL sessions on '||v_client_schema||'...');
+    
+    FOR s IN (
+      SELECT sid, serial#, inst_id, osuser, machine
+      FROM   gv$session
+      WHERE  username = v_client_schema
+        AND  type = 'USER'
+    )
+    LOOP
+      BEGIN
+        v_count := v_count + 1;
+        DBMS_OUTPUT.PUT_LINE(
+          '  Killing '||s.sid||','||s.serial#||'@'||s.inst_id||
+          ' (OS:'||s.osuser||', Machine:'||s.machine||')'
+        );
+        EXECUTE IMMEDIATE
+          'ALTER SYSTEM KILL SESSION '''||s.sid||','||s.serial#||',@'||s.inst_id||''' IMMEDIATE';
+      EXCEPTION
+        WHEN OTHERS THEN
+          DBMS_OUTPUT.PUT_LINE('  WARNING: '||SQLERRM);
+      END;
+    END LOOP;
+  END LOOP;
+  
+  IF v_count = 0 THEN
+    DBMS_OUTPUT.PUT_LINE('No sessions to kill.');
+  ELSE
+    DBMS_OUTPUT.PUT_LINE('Total sessions killed: '||v_count);
+    DBMS_OUTPUT.PUT_LINE('Waiting 3 seconds for cleanup...');
+    BEGIN
+      DBMS_LOCK.SLEEP(3);
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+  END IF;
+  
+  -- 4) Drop de l'utilisateur
+  BEGIN
+    DBMS_OUTPUT.PUT_LINE('Dropping user '||v_user||' CASCADE...');
+    EXECUTE IMMEDIATE 'DROP USER '||v_user||' CASCADE';
+    DBMS_OUTPUT.PUT_LINE('User '||v_user||' dropped successfully.');
+  EXCEPTION
+    WHEN OTHERS THEN
+      IF SQLCODE = -1940 THEN
+        DBMS_OUTPUT.PUT_LINE(
+          'ERROR: User '||v_user||' is still connected (ORA-01940).'
+        );
+        DBMS_OUTPUT.PUT_LINE('Some sessions may still be active. Please retry.');
+      ELSE
+        DBMS_OUTPUT.PUT_LINE('ERROR: '||SQLERRM);
+      END IF;
+      RAISE;
+  END;
+END;
+/
+PROMPT Done for {{ item.login | upper }}
+/
