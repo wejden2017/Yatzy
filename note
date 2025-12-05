@@ -1,30 +1,59 @@
-DECLARE
-  v_user VARCHAR2(128) := UPPER('{{ item.login }}');
-  v_exists NUMBER := 0;
-BEGIN
-  SELECT COUNT(*) INTO v_exists FROM dba_users WHERE username = v_user;
-  
-  IF v_exists = 0 THEN
-    EXECUTE IMMEDIATE 'CREATE USER ' || v_user || ' IDENTIFIED BY "{{ item.password | default("ChangeMe123!") }}"';
-  END IF;
-  
-  FOR r IN (SELECT privilege FROM dba_sys_privs WHERE grantee = v_user) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'REVOKE ' || r.privilege || ' FROM ' || v_user;
-    EXCEPTION WHEN OTHERS THEN NULL;
-    END;
-  END LOOP;
-  
-  FOR r IN (SELECT granted_role FROM dba_role_privs WHERE grantee = v_user) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'REVOKE ' || r.granted_role || ' FROM ' || v_user;
-    EXCEPTION WHEN OTHERS THEN NULL;
-    END;
-  END LOOP;
-  
-  EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO ' || v_user;
-  EXECUTE IMMEDIATE 'GRANT SELECT ANY TABLE TO ' || v_user;
-  EXECUTE IMMEDIATE 'GRANT SELECT ANY SEQUENCE TO ' || v_user;
-  EXECUTE IMMEDIATE 'GRANT EXECUTE ANY PROCEDURE TO ' || v_user;
-END;
-/
+# ================================================
+# Render SQL for UAT READ-ONLY users
+# ================================================
+- name: Render SQL for READ-ONLY users UAT
+  template:
+    src: user_readonly_uat.sql.j2
+    dest: "/tmp/create_readonly_user_{{ item.login }}.sql"
+    mode: "0640"
+  loop: "{{ _users }}"
+  loop_control:
+    label: "{{ item.login }}"
+  when:
+    - (item.action | default('create') | lower) != 'delete'
+    - lookup('env', 'ENV') | upper == 'UAT'
+  become: true
+  become_user: oracle
+  tags: [users, create]
+
+# ================================================
+# Apply SQL for UAT READ-ONLY users
+# ================================================
+- name: Apply SQL for READ-ONLY users UAT
+  shell: |
+    set -eo pipefail
+    {{ _ora_sqlplus }} <<'SQL'
+    WHENEVER OSERROR EXIT 1
+    WHENEVER SQLERROR EXIT SQL.SQLCODE
+    SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
+    SET SERVEROUTPUT ON SIZE UNLIMITED
+    SPOOL /tmp/ansible_create_readonly_user_{{ item.login }}.log
+    @/tmp/create_readonly_user_{{ item.login }}.sql
+    SPOOL OFF
+    EXIT
+    SQL
+  args:
+    executable: /bin/bash
+  environment:
+    ORACLE_HOME: "{{ oracle_home }}"
+    LD_LIBRARY_PATH: "{{ oracle_home }}/lib"
+    PATH: "{{ oracle_home }}/bin:{{ ansible_env.PATH | default('') }}"
+  register: apply_readonly_user
+  changed_when: >
+    apply_readonly_user.rc == 0 and
+    ('ORA-00955' not in (apply_readonly_user.stdout | default(''))) and
+    ('ORA-01920' not in (apply_readonly_user.stdout | default('')))
+  failed_when: >
+    apply_readonly_user.rc != 0 and
+    ('ORA-00955' not in (apply_readonly_user.stdout | default(''))) and
+    ('ORA-01920' not in (apply_readonly_user.stdout | default('')))
+  no_log: false
+  loop: "{{ _users }}"
+  loop_control:
+    label: "{{ item.login }}"
+  become: true
+  become_user: oracle
+  when:
+    - (item.action | default('create') | lower) != 'delete'
+    - lookup('env', 'ENV') | upper == 'UAT'
+  tags: [users, create]
