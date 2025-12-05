@@ -1,164 +1,53 @@
-# ============================================
-# DEV Environment - User Management
-# ============================================
+DECLARE
+  v_user    VARCHAR2(128) := UPPER('{{ item.login }}');
+  v_exists  NUMBER := 0;
+BEGIN
+  SELECT COUNT(*)
+    INTO v_exists
+    FROM dba_users
+   WHERE username = v_user;
 
-default_password: "ChangeMe1234!"
+  IF v_exists = 0 THEN
+    DBMS_OUTPUT.PUT_LINE('User '||v_user||' does not exist; nothing to drop.');
+    RETURN;
+  END IF;
 
-users:
-  - login: "zouertani"
-    roles: ["DEV_ROLE"]
-    action: "create"
-    schemas: ["LUCA", "LUCA3"]
+  DBMS_OUTPUT.PUT_LINE('User '||v_user||' exists; searching sessions to kill...');
 
-  - login: "dev_alice"
-    roles: ["DEV_ROLE"]
-    action: "create"
-    schemas: ["LUCA", "LUCA1", "LUCA2"]
+  FOR s IN (
+    SELECT sid, serial#, inst_id
+      FROM gv$session
+     WHERE username = v_user
+       AND type = 'USER'
+       AND username IS NOT NULL
+  ) LOOP
+    BEGIN
+      DBMS_OUTPUT.PUT_LINE(
+        'Killing session '||s.sid||','||s.serial#||' @ '||s.inst_id||'...'
+      );
+      EXECUTE IMMEDIATE
+        'ALTER SYSTEM KILL SESSION '''||s.sid||','||s.serial#||
+        ',@'||s.inst_id||''' IMMEDIATE';
+    EXCEPTION
+      WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE(
+          'Could not kill session '||s.sid||','||s.serial#||' : '||SQLERRM
+        );
+    END;
+  END LOOP;
 
-  - login: "toto"
-    action: "delete"
-```
+  BEGIN
+    DBMS_LOCK.SLEEP(1);
+  EXCEPTION
+    WHEN OTHERS THEN NULL;
+  END;
 
----
-
-### **`roles/oracle_user_admin/tasks/main.yml`**
-
-*(Fichier déjà fourni précédemment - version sans Docker)*
-
----
-
-### **`roles/oracle_user_admin/templates/user_present.sql.j2`**
-
-*(Fichier déjà fourni précédemment)*
-
----
-
-### **`roles/oracle_user_admin/templates/drop_user.sql.j2`**
-
-*(Fichier déjà fourni précédemment)*
-
----
-
-### **`.gitignore`**
-```
-# Ansible
-*.retry
-.vault_pass
-ssh_key.pem
-vault-service.env
-vault-secrets.env
-
-# Python
-__pycache__/
-*.py[cod]
-*$py.class
-*.so
-.Python
-
-# Environments
-.env
-.venv
-env/
-venv/
-
-# IDE
-.idea/
-.vscode/
-*.swp
-*.swo
-
-# OS
-.DS_Store
-Thumbs.db
-
-# Logs
-*.log
-/tmp/
-README.md
-markdown
-# 🗄️ Oracle User Administration - CATS DB Admin
-
-Gestion automatisée des utilisateurs Oracle via GitLab CI/CD et Ansible.
-
-## 📋 Fonctionnalités
-
-- ✅ Création/Suppression d'utilisateurs
-- ✅ Attribution de rôles (DEV_ROLE, BA_ROLE, etc.)
-- ✅ Accès granulaire aux schémas
-- ✅ Lock/Unlock de comptes
-- ✅ Reset de mots de passe
-- ✅ Multi-environnements (DEV, QA, UAT)
-- ✅ Pipeline GitLab CI/CD automatique
-- ✅ Authentification AWS + Vault
-
-## 🏗️ Architecture
-```
-GitLab Merge Request
-         ↓
-   Pipeline CI/CD
-         ↓
-   AWS Auth + Vault (récupération secrets)
-         ↓
-   Inventory dynamique (scan EC2)
-         ↓
-   Ansible Playbook
-         ↓
-   Génération SQL
-         ↓
-   Exécution sur Oracle 19c Enterprise
-```
-
-## 🚀 Utilisation
-
-### 1️⃣ Ajouter un utilisateur
-
-Modifier `env/users_env_dev.yml` :
-```yaml
-users:
-  - login: "nouveau_dev"
-    roles: ["DEV_ROLE"]
-    action: "create"
-    schemas: ["LUCA", "LUCA3"]
-```
-
-### 2️⃣ Commit et Push
-```bash
-git checkout -b feature/add-user-nouveau-dev
-git add env/users_env_dev.yml
-git commit -m "feat: add nouveau_dev user"
-git push origin feature/add-user-nouveau-dev
-```
-
-### 3️⃣ Créer un Merge Request vers `dev`
-
-- Pipeline de validation s'exécute automatiquement
-- Après merge : pipeline d'application s'exécute automatiquement
-
-## 📦 Prérequis
-
-- EC2 avec Oracle 19c Enterprise
-- Tag EC2 : `Role=CATS-DATABASE`
-- Secrets dans Vault :
-  - `EC2_KEY_PAIR`
-  - `SYSDBA_PASSWORD`
-  - `VAULT_PASSWORD`
-
-## 🔧 Configuration
-
-Voir `inventory/common.yml` pour la configuration Oracle.
-
-## 📞 Support
-
-Pour toute question, contactez l'équipe DevOps.
-
-_____________________________________________________________________
-✅ Checklist finale
- Tous les fichiers créés
- inventory/aws_ec2_inventory.py exécutable (chmod +x)
- ORACLE_HOME correct dans common.yml
- Tags EC2 configurés : Role=CATS-DATABASE
- Secrets dans Vault (3 environnements)
- Branches GitLab : dev, qa, uat
-Voilà ! Votre projet est 100% prêt ! 🚀💪
-
-
+  DBMS_OUTPUT.PUT_LINE('Dropping user '||v_user||' CASCADE ...');
+  EXECUTE IMMEDIATE 'DROP USER '||v_user||' CASCADE';
+  DBMS_OUTPUT.PUT_LINE('User '||v_user||' dropped.');
+EXCEPTION
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('ERROR dropping '||v_user||' : '||SQLERRM);
+    RAISE;
+END;
+/
