@@ -1,121 +1,16 @@
-SET DEFINE OFF
-SET SERVEROUTPUT ON SIZE UNLIMITED
-SET FEEDBACK OFF
-SET VERIFY OFF
-SET HEADING OFF
-SET ECHO OFF
-WHENEVER SQLERROR EXIT SQL.SQLCODE
+-- Privilèges système de jerome
+SELECT privilege 
+FROM dba_sys_privs 
+WHERE grantee = 'JEROME'
+ORDER BY privilege;
 
-DECLARE
-  v_user    VARCHAR2(128) := UPPER('{{ item.login }}');
-  v_pwd     VARCHAR2(512) := '{{ item.password | default(_default_password) }}';
-  v_action  VARCHAR2(30)  := LOWER('{{ item.action | default("create") }}');
-  v_cnt     INTEGER := 0;
-BEGIN
-  SELECT COUNT(*)
-    INTO v_cnt
-    FROM dba_users
-   WHERE username = v_user;
+-- Privilèges sur objets de jerome
+SELECT owner, table_name, privilege 
+FROM dba_tab_privs 
+WHERE grantee = 'JEROME'
+ORDER BY owner, table_name;
 
-  -------------------------------------------------------------------------
-  -- USER DOES NOT EXIST
-  -------------------------------------------------------------------------
-  IF v_cnt = 0 THEN
-
-    IF v_action IN ('create','reset-password','unlock','') THEN
-      DBMS_OUTPUT.PUT_LINE('Creating user '||v_user||' ...');
-
-      EXECUTE IMMEDIATE
-            'CREATE USER '||v_user||
-            ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'||
-            ' DEFAULT TABLESPACE USERS'||
-            ' TEMPORARY TABLESPACE TEMP'||
-            ' QUOTA 2G ON USERS'||
-            ' PASSWORD EXPIRE'||
-            ' ACCOUNT UNLOCK';
-
-    ELSIF v_action = 'lock' THEN
-      DBMS_OUTPUT.PUT_LINE('User '||v_user||' does not exist; nothing to lock.');
-      RETURN;
-
-    ELSE
-      DBMS_OUTPUT.PUT_LINE('Unknown action '||v_action||' for new user '||v_user||'; skipping.');
-      RETURN;
-    END IF;
-
-  -------------------------------------------------------------------------
-  -- USER EXISTS ALREADY
-  -------------------------------------------------------------------------
-  ELSE
-
-    IF v_action IN ('create','reset-password','') THEN
-      DBMS_OUTPUT.PUT_LINE('User exists; resetting password ...');
-      EXECUTE IMMEDIATE
-            'ALTER USER '||v_user||
-            ' IDENTIFIED BY "'||REPLACE(v_pwd,'"','""')||'"'||
-            ' PASSWORD EXPIRE'||
-            ' ACCOUNT UNLOCK';
-
-    ELSIF v_action = 'lock' THEN
-      DBMS_OUTPUT.PUT_LINE('Locking user '||v_user||' ...');
-      EXECUTE IMMEDIATE 'ALTER USER '||v_user||' ACCOUNT LOCK';
-
-    ELSIF v_action = 'unlock' THEN
-      DBMS_OUTPUT.PUT_LINE('Unlocking user '||v_user||' ...');
-      EXECUTE IMMEDIATE 'ALTER USER '||v_user||' ACCOUNT UNLOCK';
-
-    ELSE
-      DBMS_OUTPUT.PUT_LINE('Unknown action '||v_action||' for existing user; skipping.');
-    END IF;
-
-  END IF;
-
-
-  -------------------------------------------------------------------------
-  -- ALWAYS GRANT CREATE SESSION
-  -------------------------------------------------------------------------
-  BEGIN
-    EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO '||v_user;
-  EXCEPTION
-    WHEN OTHERS THEN
-      IF SQLCODE NOT IN (-1927,-1919) THEN
-        DBMS_OUTPUT.PUT_LINE('Error granting CREATE SESSION: '||SQLERRM);
-        RAISE;
-      END IF;
-  END;
-
-END;
-/
-PROMPT User {{ item.login | upper }} processed (action={{ item.action | default("create") }}).
-/
-
--------------------------------------------------------------------------------
--- CONFIGURE PROXY LOGIN: user nominatifs → LUCAx schemas
--------------------------------------------------------------------------------
-
-{% for s in item.schemas | default([]) %}
-DECLARE
-  v_user   VARCHAR2(128) := UPPER('{{ item.login }}');
-  v_schema VARCHAR2(128) := UPPER('{{ s }}');
-  v_cnt    NUMBER;
-BEGIN
-  SELECT COUNT(*)
-    INTO v_cnt
-    FROM dba_proxies
-   WHERE client = v_user
-     AND proxy  = v_schema;
-
-  IF v_cnt = 0 THEN
-    DBMS_OUTPUT.PUT_LINE('Granting CONNECT THROUGH '||v_user||' on schema '||v_schema||' ...');
-    EXECUTE IMMEDIATE
-          'ALTER USER '||v_schema||
-          ' GRANT CONNECT THROUGH '||v_user;
-  ELSE
-    DBMS_OUTPUT.PUT_LINE('Proxy already exists for '||v_user||' -> '||v_schema||'; skipping.');
-  END IF;
-END;
-/
-{% endfor %}
-
-PROMPT Done for {{ item.login | upper }}
-/
+-- Rôles de jerome
+SELECT granted_role 
+FROM dba_role_privs 
+WHERE grantee = 'JEROME';
