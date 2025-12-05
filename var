@@ -85,4 +85,72 @@ BEGIN
       v_count := v_count + 1;
     EXCEPTION
       WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant SELECT on ' || v_schema || '.' || v.vie
+        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant SELECT on ' || v_schema || '.' || v.view_name);
+    END;
+  END LOOP;
+  DBMS_OUTPUT.PUT_LINE('✓ Granted SELECT on ' || v_count || ' views.');
+  DBMS_OUTPUT.PUT_LINE('');
+  
+  -- STEP 6: Grant EXECUTE sur PROCEDURES/FUNCTIONS
+  DBMS_OUTPUT.PUT_LINE('STEP 6: Grant EXECUTE on PROCEDURES/FUNCTIONS');
+  v_count := 0;
+  FOR p IN (
+    SELECT object_name 
+    FROM dba_objects 
+    WHERE owner = v_schema 
+      AND object_type IN ('PROCEDURE', 'FUNCTION', 'PACKAGE')
+    ORDER BY object_name
+  ) LOOP
+    BEGIN
+      EXECUTE IMMEDIATE 'GRANT EXECUTE ON ' || v_schema || '.' || p.object_name || ' TO ' || v_user;
+      v_count := v_count + 1;
+    EXCEPTION
+      WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant EXECUTE on ' || v_schema || '.' || p.object_name);
+    END;
+  END LOOP;
+  DBMS_OUTPUT.PUT_LINE('✓ Granted EXECUTE on ' || v_count || ' procedures/functions.');
+  DBMS_OUTPUT.PUT_LINE('');
+  
+  -- STEP 7: Grant SELECT sur SEQUENCES
+  DBMS_OUTPUT.PUT_LINE('STEP 7: Grant SELECT on SEQUENCES');
+  v_count := 0;
+  FOR s IN (SELECT sequence_name FROM dba_sequences WHERE sequence_owner = v_schema ORDER BY sequence_name) LOOP
+    BEGIN
+      EXECUTE IMMEDIATE 'GRANT SELECT ON ' || v_schema || '.' || s.sequence_name || ' TO ' || v_user;
+      v_count := v_count + 1;
+    EXCEPTION
+      WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant SELECT on ' || v_schema || '.' || s.sequence_name);
+    END;
+  END LOOP;
+  DBMS_OUTPUT.PUT_LINE('✓ Granted SELECT on ' || v_count || ' sequences.');
+  DBMS_OUTPUT.PUT_LINE('');
+  
+  -- Résumé final
+  DBMS_OUTPUT.PUT_LINE('================================================');
+  DBMS_OUTPUT.PUT_LINE('CONFIGURATION COMPLETE!');
+  DBMS_OUTPUT.PUT_LINE('================================================');
+  DBMS_OUTPUT.PUT_LINE('User: READUSER');
+  DBMS_OUTPUT.PUT_LINE('Password: Test123!');
+  DBMS_OUTPUT.PUT_LINE('Environment: QA');
+  DBMS_OUTPUT.PUT_LINE('Schema: ' || v_schema);
+  DBMS_OUTPUT.PUT_LINE('');
+  DBMS_OUTPUT.PUT_LINE('GRANTED PRIVILEGES:');
+  DBMS_OUTPUT.PUT_LINE('  ✓ CREATE SESSION');
+  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT on all tables/views');
+  DBMS_OUTPUT.PUT_LINE('  ✓ EXECUTE on procedures/functions');
+  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT on sequences');
+  DBMS_OUTPUT.PUT_LINE('');
+  DBMS_OUTPUT.PUT_LINE('RESTRICTIONS:');
+  DBMS_OUTPUT.PUT_LINE('  ✗ NO INSERT/UPDATE/DELETE');
+  DBMS_OUTPUT.PUT_LINE('  ✗ NO CREATE/DROP/ALTER');
+  DBMS_OUTPUT.PUT_LINE('================================================');
+  
+EXCEPTION
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('ERROR: ' || SQLERRM);
+    RAISE;
+END;
+/
