@@ -1,8 +1,8 @@
--- =========================================================
--- Drop user (nominatif uniquement)
--- Env  : {{ lookup('env','ENV') | upper }}
--- User : {{ item.login | upper }}
--- =========================================================
+-- =================================================
+-- Drop user (direct + proxy sessions)
+-- Env : {{ lookup('env','ENV') | upper }}
+-- User: {{ item.login | upper }}
+-- =================================================
 
 SET SERVEROUTPUT ON SIZE UNLIMITED
 SET FEEDBACK OFF
@@ -15,70 +15,69 @@ DECLARE
   v_user    VARCHAR2(128) := UPPER('{{ item.login }}');
   v_exists  NUMBER := 0;
 BEGIN
-  -- Vérifier si l'utilisateur existe
-  SELECT COUNT(*) INTO v_exists
-  FROM dba_users
-  WHERE username = v_user;
+  -- 1) Vérifier que le user existe
+  SELECT COUNT(*)
+  INTO   v_exists
+  FROM   dba_users
+  WHERE  username = v_user;
 
   IF v_exists = 0 THEN
-    DBMS_OUTPUT.PUT_LINE('User ' || v_user || ' does not exist; nothing to drop.');
+    DBMS_OUTPUT.PUT_LINE('User '||v_user||' does not exist; nothing to drop.');
     RETURN;
   END IF;
 
-  DBMS_OUTPUT.PUT_LINE('User ' || v_user || ' exists; searching sessions to kill...');
+  DBMS_OUTPUT.PUT_LINE('User '||v_user||' exists; killing direct and proxy sessions...');
 
-  -- Tuer toutes les sessions de ce user (connexion directe)
+  -- 2) Tuer les sessions directes ET proxy LUCA[USER]
   FOR s IN (
-    SELECT sid, serial#, inst_id
-    FROM   gv$session
-    WHERE  username = v_user
-    AND    type = 'USER'
-    AND    username IS NOT NULL
-  ) LOOP
+    SELECT s.sid, s.serial#, s.inst_id
+    FROM   gv$session s
+           LEFT JOIN dba_users u
+             ON u.user# = s.proxy_user#
+    WHERE  (s.username = v_user)   -- connexion directe en tant que USER
+       OR  (u.username = v_user)   -- connexion proxy LUCA[USER]
+  )
+  LOOP
     BEGIN
-      DBMS_OUTPUT.PUT_LINE(
-        'Killing session ' || s.sid || ',' || s.serial# || ' @ ' || s.inst_id || ' ...'
-      );
-
+      DBMS_OUTPUT.PUT_LINE('Killing session '||s.sid||','||s.serial#||' @ '||s.inst_id||' ...');
       EXECUTE IMMEDIATE
-        'ALTER SYSTEM KILL SESSION ''' ||
-          s.sid || ',' || s.serial# || ',@' || s.inst_id || ''' IMMEDIATE';
-
+        'ALTER SYSTEM KILL SESSION '''||s.sid||','||s.serial#||',@'||s.inst_id||''' IMMEDIATE';
     EXCEPTION
       WHEN OTHERS THEN
         DBMS_OUTPUT.PUT_LINE(
-          'Could not kill session ' || s.sid || ',' || s.serial# || ' @ ' || s.inst_id ||
-          ' : ' || SQLERRM
+          'Could not kill session '||s.sid||','||s.serial#||' : '||SQLERRM
         );
+        -- on log, mais on ne bloque pas le reste
     END;
   END LOOP;
 
-  -- Petite pause pour laisser Oracle nettoyer les sessions tuées
+  -- petite pause pour laisser Oracle nettoyer les sessions
   BEGIN
     DBMS_LOCK.SLEEP(1);
   EXCEPTION
     WHEN OTHERS THEN NULL;
   END;
 
-  -- Tentative de DROP
-  DBMS_OUTPUT.PUT_LINE('Dropping user ' || v_user || ' CASCADE ...');
-
+  -- 3) Drop du user
   BEGIN
-    EXECUTE IMMEDIATE 'DROP USER ' || v_user || ' CASCADE';
-    DBMS_OUTPUT.PUT_LINE('User ' || v_user || ' dropped.');
+    DBMS_OUTPUT.PUT_LINE('Dropping user '||v_user||' CASCADE ...');
+    EXECUTE IMMEDIATE 'DROP USER '||v_user||' CASCADE';
+    DBMS_OUTPUT.PUT_LINE('User '||v_user||' dropped.');
   EXCEPTION
     WHEN OTHERS THEN
       IF SQLCODE = -1940 THEN
-        -- User encore connecté (possiblement via un proxy ou autre cas particulier)
         DBMS_OUTPUT.PUT_LINE(
-          'ERROR dropping ' || v_user ||
-          ' : user is still connected (ORA-01940). Please disconnect remaining sessions (direct or proxy) and rerun.'
+          'ERROR dropping '||v_user||
+          ' : user is still connected (ORA-01940). '||
+          'Please disconnect remaining sessions (direct or proxy) and rerun.'
         );
       ELSE
-        DBMS_OUTPUT.PUT_LINE('ERROR dropping ' || v_user || ' : ' || SQLERRM);
+        DBMS_OUTPUT.PUT_LINE(
+          'ERROR dropping '||v_user||' : '||SQLERRM
+        );
       END IF;
       RAISE;
   END;
-
 END;
 /
+PROMPT Done for {{ item.login | upper }}
