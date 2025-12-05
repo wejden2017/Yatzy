@@ -1,63 +1,113 @@
-CREATE TABLE LUCA.EMPLOYES_TEST (
-    id NUMBER PRIMARY KEY,
-    nom VARCHAR2(100) NOT NULL,
-    prenom VARCHAR2(100) NOT NULL,
-    email VARCHAR2(200),
-    date_embauche DATE DEFAULT SYSDATE,
-    salaire NUMBER(10,2)
-);
+-- ================================================
+-- Create READ-ONLY user with ANY privileges
+-- User: READUSER
+-- Auto-access to NEW tables/views/procedures
+-- Password: Test123!
+-- ================================================
 
-INSERT INTO LUCA.EMPLOYES_TEST (id, nom, prenom, email, salaire) 
-VALUES (1, 'DUPONT', 'Jean', 'jean.dupont@example.com', 45000);
-
-INSERT INTO LUCA.EMPLOYES_TEST (id, nom, prenom, email, salaire) 
-VALUES (2, 'MARTIN', 'Sophie', 'sophie.martin@example.com', 52000);
-
-INSERT INTO LUCA.EMPLOYES_TEST (id, nom, prenom, email, salaire) 
-VALUES (3, 'DURAND', 'Pierre', 'pierre.durand@example.com', 48000);
-
-COMMIT;
-
-CREATE VIEW LUCA.VUE_EMPLOYES_SENIORS AS
-SELECT id, nom, prenom, email, salaire
-FROM LUCA.EMPLOYES_TEST
-WHERE salaire > 45000;
-
--- Lister les tables
-SELECT * FROM LUCA.EMPLOYES_TEST;
-
--- Lister via la vue
-SELECT * FROM LUCA.VUE_EMPLOYES_SENIORS;
-
-avec salma :
-
-SELECT * FROM LUCA.EMPLOYES_TEST;
-SELECT * FROM LUCA.VUE_EMPLOYES_SENIORS;
-
-INSERT INTO LUCA.EMPLOYES_TEST (id, nom, prenom, email, salaire) 
-VALUES (4, 'BERNARD', 'Marie', 'marie.bernard@example.com', 55000);
-COMMIT;
-
--- ✅ UPDATE devrait FONCTIONNER
-UPDATE LUCA.EMPLOYES_TEST 
-SET salaire = 50000 
-WHERE id = 1;
-COMMIT;
-
--- ✅ DELETE devrait FONCTIONNER
-DELETE FROM LUCA.EMPLOYES_TEST WHERE id = 4;
-COMMIT;
-
-test jerome :
-
-SELECT * FROM LUCA.EMPLOYES_TEST;
-SELECT * FROM LUCA.VUE_EMPLOYES_SENIORS;
-
-avec sysdba :
-
-SELECT grantee, table_name, privilege, grantable
-FROM dba_tab_privs 
-WHERE table_name IN ('EMPLOYES_TEST', 'VUE_EMPLOYES_SENIORS')
-  AND owner = 'LUCA'
-  AND grantee = 'QA_ROLE'
-ORDER BY table_name, privilege;
+DECLARE
+  v_user   VARCHAR2(128) := 'READUSER';
+  v_exists NUMBER := 0;
+BEGIN
+  DBMS_OUTPUT.PUT_LINE('================================================');
+  DBMS_OUTPUT.PUT_LINE('Creating READ-ONLY user: READUSER');
+  DBMS_OUTPUT.PUT_LINE('With automatic access to NEW objects');
+  DBMS_OUTPUT.PUT_LINE('================================================');
+  DBMS_OUTPUT.PUT_LINE('');
+  
+  -- STEP 1: Vérifier si l'utilisateur existe
+  DBMS_OUTPUT.PUT_LINE('STEP 1: Check if user exists');
+  SELECT COUNT(*) INTO v_exists FROM dba_users WHERE username = v_user;
+  
+  IF v_exists = 0 THEN
+    DBMS_OUTPUT.PUT_LINE('User ' || v_user || ' does not exist. Creating...');
+    EXECUTE IMMEDIATE 'CREATE USER ' || v_user || ' IDENTIFIED BY "Test123!"';
+    DBMS_OUTPUT.PUT_LINE('✓ User ' || v_user || ' created successfully.');
+  ELSE
+    DBMS_OUTPUT.PUT_LINE('User ' || v_user || ' already exists. Reconfiguring privileges...');
+  END IF;
+  DBMS_OUTPUT.PUT_LINE('');
+  
+  -- STEP 2: Révoquer TOUS les privilèges existants
+  DBMS_OUTPUT.PUT_LINE('STEP 2: Revoke all existing privileges');
+  
+  -- Révoquer privilèges système
+  FOR r IN (SELECT privilege FROM dba_sys_privs WHERE grantee = v_user) LOOP
+    BEGIN
+      EXECUTE IMMEDIATE 'REVOKE ' || r.privilege || ' FROM ' || v_user;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+  END LOOP;
+  
+  -- Révoquer rôles
+  FOR r IN (SELECT granted_role FROM dba_role_privs WHERE grantee = v_user) LOOP
+    BEGIN
+      EXECUTE IMMEDIATE 'REVOKE ' || r.granted_role || ' FROM ' || v_user;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+  END LOOP;
+  
+  -- Révoquer privilèges objet existants (pour nettoyer)
+  FOR r IN (
+    SELECT owner, table_name, privilege
+    FROM dba_tab_privs 
+    WHERE grantee = v_user
+  ) LOOP
+    BEGIN
+      EXECUTE IMMEDIATE 'REVOKE ' || r.privilege || ' ON ' || r.owner || '.' || r.table_name || ' FROM ' || v_user;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+  END LOOP;
+  
+  DBMS_OUTPUT.PUT_LINE('✓ Revoked all existing privileges.');
+  DBMS_OUTPUT.PUT_LINE('');
+  
+  -- STEP 3: Grant privilèges READ-ONLY globaux (ANY)
+  DBMS_OUTPUT.PUT_LINE('STEP 3: Grant global READ-ONLY privileges');
+  
+  EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO ' || v_user;
+  DBMS_OUTPUT.PUT_LINE('  ✓ CREATE SESSION');
+  
+  EXECUTE IMMEDIATE 'GRANT SELECT ANY TABLE TO ' || v_user;
+  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT ANY TABLE (includes views)');
+  
+  EXECUTE IMMEDIATE 'GRANT SELECT ANY SEQUENCE TO ' || v_user;
+  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT ANY SEQUENCE');
+  
+  EXECUTE IMMEDIATE 'GRANT EXECUTE ANY PROCEDURE TO ' || v_user;
+  DBMS_OUTPUT.PUT_LINE('  ✓ EXECUTE ANY PROCEDURE (includes functions/packages)');
+  
+  DBMS_OUTPUT.PUT_LINE('');
+  
+  -- Résumé final
+  DBMS_OUTPUT.PUT_LINE('================================================');
+  DBMS_OUTPUT.PUT_LINE('CONFIGURATION COMPLETE!');
+  DBMS_OUTPUT.PUT_LINE('================================================');
+  DBMS_OUTPUT.PUT_LINE('User: READUSER');
+  DBMS_OUTPUT.PUT_LINE('Password: Test123!');
+  DBMS_OUTPUT.PUT_LINE('');
+  DBMS_OUTPUT.PUT_LINE('GRANTED PRIVILEGES (GLOBAL):');
+  DBMS_OUTPUT.PUT_LINE('  ✓ CREATE SESSION');
+  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT ANY TABLE (all schemas, all tables/views)');
+  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT ANY SEQUENCE (all schemas, all sequences)');
+  DBMS_OUTPUT.PUT_LINE('  ✓ EXECUTE ANY PROCEDURE (all schemas, all procedures/functions)');
+  DBMS_OUTPUT.PUT_LINE('');
+  DBMS_OUTPUT.PUT_LINE('AUTOMATIC ACCESS:');
+  DBMS_OUTPUT.PUT_LINE('  ✓ NEW tables created = automatic SELECT access');
+  DBMS_OUTPUT.PUT_LINE('  ✓ NEW views created = automatic SELECT access');
+  DBMS_OUTPUT.PUT_LINE('  ✓ NEW sequences created = automatic SELECT access');
+  DBMS_OUTPUT.PUT_LINE('  ✓ NEW procedures created = automatic EXECUTE access');
+  DBMS_OUTPUT.PUT_LINE('');
+  DBMS_OUTPUT.PUT_LINE('RESTRICTIONS:');
+  DBMS_OUTPUT.PUT_LINE('  ✗ NO INSERT/UPDATE/DELETE');
+  DBMS_OUTPUT.PUT_LINE('  ✗ NO CREATE/DROP/ALTER');
+  DBMS_OUTPUT.PUT_LINE('  ✗ NO TRUNCATE');
+  DBMS_OUTPUT.PUT_LINE('  ✗ NO GRANT');
+  DBMS_OUTPUT.PUT_LINE('================================================');
+  
+EXCEPTION
+  WHEN OTHERS THEN
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('ERROR: ' || SQLERRM);
+    RAISE;
+END;
