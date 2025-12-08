@@ -687,3 +687,85 @@ FROM user_triggers
 WHERE trigger_name = 'TRG_AUTO_GRANT_QA_ON_CREATE';
 -- Résultat attendu: STATUS = 'ENABLED'
 
+
+-- ============================================================================
+-- TRIGGER AUTO-GRANT AVEC DBMS_JOB (solution au deadlock)
+-- À exécuter en tant que: LUCA
+-- ============================================================================
+
+CONNECT luca/password@VOTRE_TNS
+
+-- Supprimer l'ancien trigger
+DROP TRIGGER LUCA.TRG_AUTO_GRANT_QA_ON_CREATE;
+
+-- Créer le trigger avec job différé
+CREATE OR REPLACE TRIGGER LUCA.TRG_AUTO_GRANT_QA_ON_CREATE
+AFTER CREATE ON LUCA.SCHEMA
+DECLARE
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    
+    v_obj_type VARCHAR2(50);
+    v_obj_name VARCHAR2(128);
+    v_job_id   NUMBER;
+    v_sql      VARCHAR2(4000);
+BEGIN
+    v_obj_type := ORA_DICT_OBJ_TYPE;
+    v_obj_name := ORA_DICT_OBJ_NAME;
+    
+    DBMS_OUTPUT.PUT_LINE('🔔 Nouvel objet créé: ' || v_obj_type || ' ' || v_obj_name);
+    
+    -- Construire la commande GRANT selon le type d'objet
+    CASE v_obj_type
+        WHEN 'TABLE' THEN
+            v_sql := 'GRANT ALL PRIVILEGES ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            
+        WHEN 'VIEW' THEN
+            v_sql := 'GRANT SELECT ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            
+        WHEN 'MATERIALIZED VIEW' THEN
+            v_sql := 'GRANT SELECT ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            
+        WHEN 'SEQUENCE' THEN
+            v_sql := 'GRANT SELECT, ALTER ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            
+        WHEN 'PROCEDURE' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            
+        WHEN 'FUNCTION' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            
+        WHEN 'PACKAGE' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            
+        WHEN 'TYPE' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            
+        ELSE
+            v_sql := NULL;
+    END CASE;
+    
+    -- Si un GRANT est nécessaire, créer un job pour l'exécuter dans 2 secondes
+    IF v_sql IS NOT NULL THEN
+        DBMS_JOB.SUBMIT(
+            job       => v_job_id,
+            what      => 'BEGIN EXECUTE IMMEDIATE ''' || v_sql || '''; END;',
+            next_date => SYSDATE + (2/86400),  -- +2 secondes
+            interval  => NULL  -- Job one-time
+        );
+        
+        COMMIT;  -- Nécessaire pour valider le job
+        
+        DBMS_OUTPUT.PUT_LINE('✓ Job ' || v_job_id || ' créé pour GRANT sur ' || v_obj_name);
+    END IF;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('✗ Erreur: ' || SQLERRM);
+        ROLLBACK;
+END TRG_AUTO_GRANT_QA_ON_CREATE;
+/
+
+-- ✅ VÉRIFIER
+SELECT trigger_name, status 
+FROM user_triggers 
+WHERE trigger_name = 'TRG_AUTO_GRANT_QA_ON_CREATE';
