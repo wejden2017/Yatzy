@@ -551,4 +551,48 @@ WHERE owner = 'SYS'
   AND name = 'TRG_BLOCK_DROP_EXCEPT_LUCA'
 ORDER BY sequence;
 
+-- ============================================================================
+-- TRIGGER CORRIGÉ - Version sans / à l'intérieur
+-- À exécuter en tant que: SYS as SYSDBA
+-- ============================================================================
+
+CONNECT sys/password@VOTRE_TNS AS SYSDBA
+
+-- Supprimer l'ancien trigger invalide
+DROP TRIGGER SYS.TRG_BLOCK_DROP_EXCEPT_LUCA;
+
+-- Créer le trigger corrigé (ATTENTION: pas de / dans le code)
+CREATE OR REPLACE TRIGGER SYS.TRG_BLOCK_DROP_EXCEPT_LUCA
+BEFORE DROP ON DATABASE
+DECLARE
+    v_schema      VARCHAR2(128);
+    v_username    VARCHAR2(128);
+    v_object_name VARCHAR2(128);
+    v_object_type VARCHAR2(50);
+BEGIN
+    v_schema      := SYS.DICTIONARY_OBJ_OWNER;
+    v_username    := SYS.LOGIN_USER;
+    v_object_name := SYS.DICTIONARY_OBJ_NAME;
+    v_object_type := SYS.DICTIONARY_OBJ_TYPE;
+    
+    IF v_username IN ('SYS', 'SYSTEM') THEN
+        RETURN;
+    END IF;
+    
+    IF v_schema != 'LUCA' THEN
+        RAISE_APPLICATION_ERROR(-20001,
+            'SECURITE: DROP interdit sur le schema ' || v_schema || '. ' ||
+            'Vous ne pouvez DROP que sur LUCA. ' ||
+            '(User: ' || v_username || ', Objet: ' || v_object_type || ' ' || v_object_name || ')');
+    END IF;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE = -20001 THEN
+            RAISE;
+        ELSE
+            NULL;
+        END IF;
+END TRG_BLOCK_DROP_EXCEPT_LUCA;
+
 
