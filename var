@@ -89,3 +89,460 @@ GRANT SELECT ON V_$SQL TO QA_ROLE_ZOI;
 GRANT SELECT ON V_$SQL_PLAN TO QA_ROLE_ZOI;
 GRANT SELECT ON V_$SQLAREA TO QA_ROLE_ZOI;
 GRANT SELECT ON V_$PARAMETER TO QA_ROLE_ZOI;
+
+
+
+CREATE OR REPLACE PROCEDURE LUCA.GRANT_QA_ROLE_ZOI_ACCESS_TO_SCHEMA(
+    p_schema_name VARCHAR2 DEFAULT 'LUCA',
+    p_role_name   VARCHAR2 DEFAULT 'QA_ROLE_ZOI'
+) AS
+    v_sql VARCHAR2(4000);
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    DBMS_OUTPUT.PUT_LINE('Début des GRANT pour ' || p_role_name || ' sur schéma ' || p_schema_name);
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    
+    -- ===== TABLES =====
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('--- TABLES ---');
+    FOR rec IN (SELECT table_name FROM all_tables WHERE owner = UPPER(p_schema_name)) LOOP
+        BEGIN
+            v_sql := 'GRANT ALL PRIVILEGES ON ' || p_schema_name || '.' || rec.table_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ Table: ' || rec.table_name);
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE('✗ Erreur table ' || rec.table_name || ': ' || SQLERRM);
+        END;
+    END LOOP;
+    
+    -- ===== VUES =====
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('--- VUES ---');
+    FOR rec IN (SELECT view_name FROM all_views WHERE owner = UPPER(p_schema_name)) LOOP
+        BEGIN
+            v_sql := 'GRANT SELECT ON ' || p_schema_name || '.' || rec.view_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ Vue: ' || rec.view_name);
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE('✗ Erreur vue ' || rec.view_name || ': ' || SQLERRM);
+        END;
+    END LOOP;
+    
+    -- ===== SEQUENCES =====
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('--- SEQUENCES ---');
+    FOR rec IN (SELECT sequence_name FROM all_sequences WHERE sequence_owner = UPPER(p_schema_name)) LOOP
+        BEGIN
+            v_sql := 'GRANT SELECT, ALTER ON ' || p_schema_name || '.' || rec.sequence_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ Sequence: ' || rec.sequence_name);
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE('✗ Erreur sequence ' || rec.sequence_name || ': ' || SQLERRM);
+        END;
+    END LOOP;
+    
+    -- ===== PROCEDURES, FUNCTIONS, PACKAGES, TYPES =====
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('--- PROCEDURES/FUNCTIONS/PACKAGES/TYPES ---');
+    FOR rec IN (SELECT object_name, object_type FROM all_objects
+                WHERE owner = UPPER(p_schema_name)
+                  AND object_type IN ('PROCEDURE', 'FUNCTION', 'PACKAGE', 'TYPE')) LOOP
+        BEGIN
+            v_sql := 'GRANT EXECUTE ON ' || p_schema_name || '.' || rec.object_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ ' || rec.object_type || ': ' || rec.object_name);
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE('✗ Erreur ' || rec.object_type || ' ' || rec.object_name || ': ' || SQLERRM);
+        END;
+    END LOOP;
+    
+    -- ===== MATERIALIZED VIEWS =====
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('--- MATERIALIZED VIEWS ---');
+    FOR rec IN (SELECT mview_name FROM all_mviews WHERE owner = UPPER(p_schema_name)) LOOP
+        BEGIN
+            v_sql := 'GRANT SELECT ON ' || p_schema_name || '.' || rec.mview_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ MView: ' || rec.mview_name);
+        EXCEPTION
+            WHEN OTHERS THEN
+                DBMS_OUTPUT.PUT_LINE('✗ Erreur mview ' || rec.mview_name || ': ' || SQLERRM);
+        END;
+    END LOOP;
+    
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    DBMS_OUTPUT.PUT_LINE('✅ Privilèges accordés avec succès sur le schéma ' || p_schema_name);
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    
+END GRANT_QA_ROLE_ZOI_ACCESS_TO_SCHEMA;
+/
+
+-- ✅ VALIDATION ÉTAPE 3
+SELECT object_name, object_type, status 
+FROM user_objects 
+WHERE object_name = 'GRANT_QA_ROLE_ZOI_ACCESS_TO_SCHEMA';
+-- Résultat attendu: 1 ligne avec STATUS = 'VALID'
+
+ÉTAPE 4 : Créer le user ZOUERTANI et lui affecter le rôle
+À exécuter en tant que : SYS ou SYSDBA
+sql-- ============================================================================
+-- ÉTAPE 4 : CRÉATION DU USER ZOUERTANI
+-- Connexion: SYS as SYSDBA
+-- ============================================================================
+
+CONNECT sys/password@VOTRE_TNS AS SYSDBA
+
+-- Créer le user
+CREATE USER zouertani 
+IDENTIFIED BY "MotDePasse123!" 
+DEFAULT TABLESPACE USERS 
+TEMPORARY TABLESPACE TEMP
+QUOTA UNLIMITED ON USERS;
+
+-- Affecter le rôle
+GRANT QA_ROLE_ZOI TO zouertani;
+
+-- Rôle par défaut
+ALTER USER zouertani DEFAULT ROLE QA_ROLE_ZOI;
+
+-- ✅ VALIDATION ÉTAPE 4
+SELECT username, account_status, default_tablespace 
+FROM dba_users 
+WHERE username = 'ZOUERTANI';
+-- Résultat attendu: 1 ligne avec ACCOUNT_STATUS = 'OPEN'
+
+SELECT grantee, granted_role 
+FROM dba_role_privs 
+WHERE grantee = 'ZOUERTANI';
+-- Résultat attendu: 1 ligne avec GRANTED_ROLE = 'QA_ROLE_ZOI'
+
+ÉTAPE 5 : Exécuter la procédure pour donner les grants sur objets existants
+À exécuter en tant que : LUCA
+sql-- ============================================================================
+-- ÉTAPE 5 : EXÉCUTION DE LA PROCÉDURE DE GRANT
+-- Connexion: LUCA
+-- ============================================================================
+
+CONNECT luca/password@VOTRE_TNS
+
+SET SERVEROUTPUT ON SIZE UNLIMITED
+
+-- Exécuter la procédure
+EXEC LUCA.GRANT_QA_ROLE_ZOI_ACCESS_TO_SCHEMA('LUCA', 'QA_ROLE_ZOI');
+
+-- ✅ VALIDATION ÉTAPE 5
+-- Vérifier que le rôle a bien les privilèges sur les objets de LUCA
+SELECT table_name, privilege 
+FROM dba_tab_privs 
+WHERE grantee = 'QA_ROLE_ZOI' AND owner = 'LUCA'
+ORDER BY table_name, privilege;
+-- Résultat attendu: Liste des objets avec leurs privilèges
+
+ÉTAPE 6 : TESTS COMPLETS
+Test 6A : Créer une table de test avec LUCA
+sql-- ============================================================================
+-- TEST 6A : CRÉATION TABLE AVEC LUCA
+-- Connexion: LUCA
+-- ============================================================================
+
+CONNECT luca/password@VOTRE_TNS
+
+-- Créer une table de test
+CREATE TABLE LUCA.TEST_DROP_TABLE (
+    id NUMBER PRIMARY KEY,
+    nom VARCHAR2(100),
+    date_creation DATE DEFAULT SYSDATE
+);
+
+-- Insérer des données
+INSERT INTO LUCA.TEST_DROP_TABLE VALUES (1, 'Test 1', SYSDATE);
+INSERT INTO LUCA.TEST_DROP_TABLE VALUES (2, 'Test 2', SYSDATE);
+COMMIT;
+
+-- ✅ VALIDATION 6A
+SELECT * FROM LUCA.TEST_DROP_TABLE;
+-- Résultat attendu: 2 lignes
+Test 6B : Vérifier que ZOUERTANI peut voir la table
+sql-- ============================================================================
+-- TEST 6B : SELECT AVEC ZOUERTANI
+-- Connexion: ZOUERTANI
+-- ============================================================================
+
+CONNECT zouertani/MotDePasse123!@VOTRE_TNS
+
+-- ⚠️ IMPORTANT : La table vient d'être créée, elle n'aura pas les grants automatiques
+-- car on n'a pas encore créé le trigger DDL !
+-- Pour ce test, on doit exécuter manuellement le grant
+
+-- Retourner en LUCA pour donner les grants
+CONNECT luca/password@VOTRE_TNS
+
+GRANT ALL PRIVILEGES ON LUCA.TEST_DROP_TABLE TO QA_ROLE_ZOI;
+
+-- Revenir en ZOUERTANI
+CONNECT zouertani/MotDePasse123!@VOTRE_TNS
+
+-- ✅ VALIDATION 6B
+SELECT * FROM LUCA.TEST_DROP_TABLE;
+-- Résultat attendu: 2 lignes
+
+-- Test INSERT
+INSERT INTO LUCA.TEST_DROP_TABLE VALUES (3, 'Test par ZOUERTANI', SYSDATE);
+COMMIT;
+
+SELECT * FROM LUCA.TEST_DROP_TABLE;
+-- Résultat attendu: 3 lignes
+Test 6C : Modifier la structure de la table (ALTER)
+sql-- ============================================================================
+-- TEST 6C : ALTER TABLE AVEC ZOUERTANI
+-- Connexion: ZOUERTANI
+-- ============================================================================
+
+CONNECT zouertani/MotDePasse123!@VOTRE_TNS
+
+-- Ajouter une colonne
+ALTER TABLE LUCA.TEST_DROP_TABLE ADD (email VARCHAR2(100));
+
+-- ✅ VALIDATION 6C
+DESC LUCA.TEST_DROP_TABLE
+-- Résultat attendu: La colonne 'email' doit apparaître
+
+-- Test UPDATE
+UPDATE LUCA.TEST_DROP_TABLE SET email = 'test@example.com' WHERE id = 1;
+COMMIT;
+
+SELECT * FROM LUCA.TEST_DROP_TABLE WHERE id = 1;
+-- Résultat attendu: email = 'test@example.com'
+Test 6D : Supprimer la table (DROP) - LE TEST CRUCIAL
+sql-- ============================================================================
+-- TEST 6D : DROP TABLE SUR LUCA (DOIT RÉUSSIR)
+-- Connexion: ZOUERTANI
+-- ============================================================================
+
+CONNECT zouertani/MotDePasse123!@VOTRE_TNS
+
+-- Tenter de DROP la table de LUCA - DOIT RÉUSSIR
+DROP TABLE LUCA.TEST_DROP_TABLE PURGE;
+
+-- ✅ VALIDATION 6D
+SELECT table_name FROM all_tables WHERE owner = 'LUCA' AND table_name = 'TEST_DROP_TABLE';
+-- Résultat attendu: Aucune ligne (la table est supprimée)
+
+DBMS_OUTPUT.PUT_LINE('✅ TEST RÉUSSI : DROP sur LUCA autorisé');
+Test 6E : Tenter de DROP une table SYS (DOIT ÊTRE BLOQUÉ)
+sql-- ============================================================================
+-- TEST 6E : DROP TABLE SUR SYS (DOIT ÊTRE BLOQUÉ PAR LE TRIGGER)
+-- Connexion: ZOUERTANI
+-- ============================================================================
+
+CONNECT zouertani/MotDePasse123!@VOTRE_TNS
+
+-- Créer d'abord une petite table de test dans le schéma SYSTEM pour le test
+-- (On ne peut pas créer dans SYS, donc on va tester avec SYSTEM)
+
+-- En tant que SYS, créer une table de test dans SYSTEM
+CONNECT sys/password@VOTRE_TNS AS SYSDBA
+
+CREATE TABLE SYSTEM.TEST_PROTECTION (id NUMBER);
+
+-- Retourner en ZOUERTANI
+CONNECT zouertani/MotDePasse123!@VOTRE_TNS
+
+-- Tenter de DROP cette table - DOIT ÊTRE BLOQUÉ
+DROP TABLE SYSTEM.TEST_PROTECTION;
+
+-- ❌ RÉSULTAT ATTENDU : 
+-- ORA-20001: ⛔ SÉCURITÉ : DROP interdit sur le schéma SYSTEM. 
+-- Vous ne pouvez DROP que sur LUCA. (User: ZOUERTANI, Objet: TABLE TEST_PROTECTION)
+
+-- Si vous voyez cette erreur, LE TEST EST RÉUSSI ! ✅
+
+-- Nettoyer en tant que SYS
+CONNECT sys/password@VOTRE_TNS AS SYSDBA
+DROP TABLE SYSTEM.TEST_PROTECTION PURGE;
+
+ÉTAPE 7 : Créer le trigger DDL pour auto-grant sur nouveaux objets
+À exécuter en tant que : LUCA
+sql-- ============================================================================
+-- ÉTAPE 7 : TRIGGER DDL AUTO-GRANT
+-- Connexion: LUCA
+-- ============================================================================
+
+CONNECT luca/password@VOTRE_TNS
+
+CREATE OR REPLACE TRIGGER LUCA.TRG_AUTO_GRANT_QA_ON_CREATE
+AFTER CREATE ON LUCA.SCHEMA
+DECLARE
+    v_obj_type VARCHAR2(50);
+    v_obj_name VARCHAR2(128);
+    v_sql      VARCHAR2(4000);
+BEGIN
+    v_obj_type := ORA_DICT_OBJ_TYPE;
+    v_obj_name := ORA_DICT_OBJ_NAME;
+    
+    DBMS_OUTPUT.PUT_LINE('🔔 Nouvel objet créé: ' || v_obj_type || ' ' || v_obj_name);
+    
+    CASE v_obj_type
+        
+        -- TABLES : ALL PRIVILEGES
+        WHEN 'TABLE' THEN
+            v_sql := 'GRANT ALL PRIVILEGES ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT ALL PRIVILEGES sur table ' || v_obj_name);
+            
+        -- VUES : SELECT
+        WHEN 'VIEW' THEN
+            v_sql := 'GRANT SELECT ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT SELECT sur vue ' || v_obj_name);
+            
+        -- MATERIALIZED VIEWS
+        WHEN 'MATERIALIZED VIEW' THEN
+            v_sql := 'GRANT SELECT ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT SELECT sur mview ' || v_obj_name);
+            
+        -- SEQUENCES
+        WHEN 'SEQUENCE' THEN
+            v_sql := 'GRANT SELECT, ALTER ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT SELECT, ALTER sur sequence ' || v_obj_name);
+            
+        -- PROCEDURES/FUNCTIONS/PACKAGES/TYPES
+        WHEN 'PROCEDURE' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT EXECUTE sur procedure ' || v_obj_name);
+            
+        WHEN 'FUNCTION' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT EXECUTE sur function ' || v_obj_name);
+            
+        WHEN 'PACKAGE' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT EXECUTE sur package ' || v_obj_name);
+            
+        WHEN 'TYPE' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT EXECUTE sur type ' || v_obj_name);
+            
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('ℹ Type ' || v_obj_type || ' ignoré');
+    END CASE;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('✗ Erreur auto-grant sur ' || v_obj_name || ': ' || SQLERRM);
+        NULL; -- Ne pas bloquer la création de l'objet
+END;
+/
+
+-- ✅ VALIDATION ÉTAPE 7
+SELECT trigger_name, status, trigger_type 
+FROM user_triggers 
+WHERE trigger_name = 'TRG_AUTO_GRANT_QA_ON_CREATE';
+-- Résultat attendu: 1 ligne avec STATUS = 'ENABLED'
+
+ÉTAPE 8 : Test du trigger DDL auto-grant
+sql-- ============================================================================
+-- TEST 8 : TRIGGER DDL AUTO-GRANT
+-- ============================================================================
+
+-- En tant que LUCA, créer une nouvelle table
+CONNECT luca/password@VOTRE_TNS
+
+SET SERVEROUTPUT ON SIZE UNLIMITED
+
+CREATE TABLE LUCA.TEST_AUTO_GRANT (
+    id NUMBER PRIMARY KEY,
+    description VARCHAR2(200)
+);
+
+-- Le trigger devrait afficher:
+-- 🔔 Nouvel objet créé: TABLE TEST_AUTO_GRANT
+-- ✓ GRANT ALL PRIVILEGES sur table TEST_AUTO_GRANT
+
+-- En tant que ZOUERTANI, vérifier l'accès immédiat
+CONNECT zouertani/MotDePasse123!@VOTRE_TNS
+
+-- ✅ VALIDATION 8A : SELECT doit fonctionner immédiatement
+SELECT * FROM LUCA.TEST_AUTO_GRANT;
+-- Résultat attendu: 0 lignes (table vide mais accessible)
+
+-- ✅ VALIDATION 8B : INSERT doit fonctionner
+INSERT INTO LUCA.TEST_AUTO_GRANT VALUES (1, 'Test auto-grant');
+COMMIT;
+
+-- ✅ VALIDATION 8C : UPDATE doit fonctionner
+UPDATE LUCA.TEST_AUTO_GRANT SET description = 'Modifié' WHERE id = 1;
+COMMIT;
+
+-- ✅ VALIDATION 8D : DELETE doit fonctionner
+DELETE FROM LUCA.TEST_AUTO_GRANT WHERE id = 1;
+COMMIT;
+
+-- ✅ VALIDATION 8E : ALTER doit fonctionner
+ALTER TABLE LUCA.TEST_AUTO_GRANT ADD (date_creation DATE);
+
+-- ✅ VALIDATION 8F : DROP doit fonctionner
+DROP TABLE LUCA.TEST_AUTO_GRANT PURGE;
+
+DBMS_OUTPUT.PUT_LINE('✅ TOUS LES TESTS AUTO-GRANT RÉUSSIS !');
+
+📋 CHECKLIST FINALE AVANT ANSIBLE
+Vérifiez que tous ces tests sont ✅ :
+sql-- ============================================================================
+-- CHECKLIST FINALE
+-- ============================================================================
+
+-- 1. Trigger de sécurité existe et est activé
+SELECT trigger_name, status FROM dba_triggers 
+WHERE trigger_name = 'TRG_BLOCK_DROP_EXCEPT_LUCA';
+-- ✅ Attendu: 1 ligne, STATUS = 'ENABLED'
+
+-- 2. Rôle QA_ROLE_ZOI existe
+SELECT role FROM dba_roles WHERE role = 'QA_ROLE_ZOI';
+-- ✅ Attendu: 1 ligne
+
+-- 3. Rôle a les privilèges DROP ANY TABLE
+SELECT privilege FROM dba_sys_privs 
+WHERE grantee = 'QA_ROLE_ZOI' AND privilege LIKE '%DROP%';
+-- ✅ Attendu: Plusieurs lignes dont 'DROP ANY TABLE'
+
+-- 4. User ZOUERTANI existe et a le rôle
+SELECT username, account_status FROM dba_users WHERE username = 'ZOUERTANI';
+SELECT grantee, granted_role FROM dba_role_privs WHERE grantee = 'ZOUERTANI';
+-- ✅ Attendu: ZOUERTANI avec rôle QA_ROLE_ZOI
+
+-- 5. Procédure GRANT existe et est valide
+SELECT object_name, status FROM dba_objects 
+WHERE owner = 'LUCA' AND object_name = 'GRANT_QA_ROLE_ZOI_ACCESS_TO_SCHEMA';
+-- ✅ Attendu: STATUS = 'VALID'
+
+-- 6. Trigger DDL existe et est activé
+SELECT trigger_name, status FROM dba_triggers 
+WHERE owner = 'LUCA' AND trigger_name = 'TRG_AUTO_GRANT_QA_ON_CREATE';
+-- ✅ Attendu: STATUS = 'ENABLED'
+
+-- 7. Test DROP sur LUCA réussit
+-- 8. Test DROP sur SYS/SYSTEM échoue avec ORA-20001
+-- 9. Test auto-grant sur nouveau objet réussit
+
+🚀 SI TOUS LES TESTS SONT ✅, VOUS POUVEZ PASSER À ANSIBLE !
+Résumé de ce qui fonctionne maintenant :
+
+✅ ZOUERTANI peut SELECT, INSERT, UPDATE, DELETE sur les tables de LUCA
+✅ ZOUERTANI peut ALTER les tables de LUCA
+✅ ZOUERTANI peut DROP les tables de LUCA
+✅ ZOUERTANI NE PEUT PAS DROP les tables de SYS/SYSTEM (bloqué par trigger)
+✅ Les nouveaux objets créés par LUCA reçoivent automatiquement les grants
+
+
