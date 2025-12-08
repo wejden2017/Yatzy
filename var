@@ -1,156 +1,45 @@
--- ================================================
--- Create READ-ONLY user on QA - DBeaver version
--- User: READUSER
--- Schema to read: LUCA
--- Password: Test123!
--- ================================================
+-- ============================================================================
+-- ÉTAPE 1 : TRIGGER DE SÉCURITÉ
+-- Connexion: SYS as SYSDBA
+-- ============================================================================
 
+CONNECT sys/password@VOTRE_TNS AS SYSDBA
+
+-- Créer le trigger qui autorise DROP uniquement sur LUCA
+CREATE OR REPLACE TRIGGER SYS.TRG_BLOCK_DROP_EXCEPT_LUCA
+BEFORE DROP ON DATABASE
 DECLARE
-  v_user   VARCHAR2(128) := 'READUSER';
-  v_schema VARCHAR2(128) := 'LUCA';
-  v_exists NUMBER := 0;
-  v_count  NUMBER := 0;
+    v_schema      VARCHAR2(128);
+    v_object_name VARCHAR2(128);
+    v_object_type VARCHAR2(50);
+    v_username    VARCHAR2(128);
 BEGIN
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  DBMS_OUTPUT.PUT_LINE('Creating READ-ONLY user: READUSER on QA');
-  DBMS_OUTPUT.PUT_LINE('Target schema: LUCA');
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  DBMS_OUTPUT.PUT_LINE('');
-  
-  -- STEP 1: Vérifier si l'utilisateur existe
-  DBMS_OUTPUT.PUT_LINE('STEP 1: Check if user exists');
-  SELECT COUNT(*) INTO v_exists FROM dba_users WHERE username = v_user;
-  
-  IF v_exists = 0 THEN
-    DBMS_OUTPUT.PUT_LINE('User ' || v_user || ' does not exist. Creating...');
-    EXECUTE IMMEDIATE 'CREATE USER ' || v_user || ' IDENTIFIED BY "Test123!"';
-    DBMS_OUTPUT.PUT_LINE('✓ User ' || v_user || ' created successfully.');
-  ELSE
-    DBMS_OUTPUT.PUT_LINE('User ' || v_user || ' already exists. Reconfiguring privileges...');
-  END IF;
-  DBMS_OUTPUT.PUT_LINE('');
-  
-  -- STEP 2: Révoquer TOUS les privilèges existants
-  DBMS_OUTPUT.PUT_LINE('STEP 2: Revoke all existing privileges');
-  v_count := 0;
-  
-  -- Révoquer privilèges système
-  FOR r IN (SELECT privilege FROM dba_sys_privs WHERE grantee = v_user) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'REVOKE ' || r.privilege || ' FROM ' || v_user;
-      v_count := v_count + 1;
-    EXCEPTION WHEN OTHERS THEN NULL;
-    END;
-  END LOOP;
-  
-  -- Révoquer rôles
-  FOR r IN (SELECT granted_role FROM dba_role_privs WHERE grantee = v_user) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'REVOKE ' || r.granted_role || ' FROM ' || v_user;
-      v_count := v_count + 1;
-    EXCEPTION WHEN OTHERS THEN NULL;
-    END;
-  END LOOP;
-  
-  DBMS_OUTPUT.PUT_LINE('✓ Revoked ' || v_count || ' privileges/roles.');
-  DBMS_OUTPUT.PUT_LINE('');
-  
-  -- STEP 3: Grant CREATE SESSION
-  DBMS_OUTPUT.PUT_LINE('STEP 3: Grant CREATE SESSION');
-  EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO ' || v_user;
-  DBMS_OUTPUT.PUT_LINE('✓ Granted CREATE SESSION');
-  DBMS_OUTPUT.PUT_LINE('');
-  
-  -- STEP 4: Grant SELECT sur toutes les TABLES
-  DBMS_OUTPUT.PUT_LINE('STEP 4: Grant SELECT on all TABLES of schema ' || v_schema);
-  v_count := 0;
-  FOR t IN (SELECT table_name FROM dba_tables WHERE owner = v_schema ORDER BY table_name) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'GRANT SELECT ON ' || v_schema || '.' || t.table_name || ' TO ' || v_user;
-      v_count := v_count + 1;
-    EXCEPTION
-      WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant SELECT on ' || v_schema || '.' || t.table_name);
-    END;
-  END LOOP;
-  DBMS_OUTPUT.PUT_LINE('✓ Granted SELECT on ' || v_count || ' tables.');
-  DBMS_OUTPUT.PUT_LINE('');
-  
-  -- STEP 5: Grant SELECT sur toutes les VUES
-  DBMS_OUTPUT.PUT_LINE('STEP 5: Grant SELECT on all VIEWS of schema ' || v_schema);
-  v_count := 0;
-  FOR v IN (SELECT view_name FROM dba_views WHERE owner = v_schema ORDER BY view_name) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'GRANT SELECT ON ' || v_schema || '.' || v.view_name || ' TO ' || v_user;
-      v_count := v_count + 1;
-    EXCEPTION
-      WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant SELECT on ' || v_schema || '.' || v.view_name);
-    END;
-  END LOOP;
-  DBMS_OUTPUT.PUT_LINE('✓ Granted SELECT on ' || v_count || ' views.');
-  DBMS_OUTPUT.PUT_LINE('');
-  
-  -- STEP 6: Grant EXECUTE sur PROCEDURES/FUNCTIONS
-  DBMS_OUTPUT.PUT_LINE('STEP 6: Grant EXECUTE on PROCEDURES/FUNCTIONS');
-  v_count := 0;
-  FOR p IN (
-    SELECT object_name 
-    FROM dba_objects 
-    WHERE owner = v_schema 
-      AND object_type IN ('PROCEDURE', 'FUNCTION', 'PACKAGE')
-    ORDER BY object_name
-  ) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'GRANT EXECUTE ON ' || v_schema || '.' || p.object_name || ' TO ' || v_user;
-      v_count := v_count + 1;
-    EXCEPTION
-      WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant EXECUTE on ' || v_schema || '.' || p.object_name);
-    END;
-  END LOOP;
-  DBMS_OUTPUT.PUT_LINE('✓ Granted EXECUTE on ' || v_count || ' procedures/functions.');
-  DBMS_OUTPUT.PUT_LINE('');
-  
-  -- STEP 7: Grant SELECT sur SEQUENCES
-  DBMS_OUTPUT.PUT_LINE('STEP 7: Grant SELECT on SEQUENCES');
-  v_count := 0;
-  FOR s IN (SELECT sequence_name FROM dba_sequences WHERE sequence_owner = v_schema ORDER BY sequence_name) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'GRANT SELECT ON ' || v_schema || '.' || s.sequence_name || ' TO ' || v_user;
-      v_count := v_count + 1;
-    EXCEPTION
-      WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant SELECT on ' || v_schema || '.' || s.sequence_name);
-    END;
-  END LOOP;
-  DBMS_OUTPUT.PUT_LINE('✓ Granted SELECT on ' || v_count || ' sequences.');
-  DBMS_OUTPUT.PUT_LINE('');
-  
-  -- Résumé final
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  DBMS_OUTPUT.PUT_LINE('CONFIGURATION COMPLETE!');
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  DBMS_OUTPUT.PUT_LINE('User: READUSER');
-  DBMS_OUTPUT.PUT_LINE('Password: Test123!');
-  DBMS_OUTPUT.PUT_LINE('Environment: QA');
-  DBMS_OUTPUT.PUT_LINE('Schema: ' || v_schema);
-  DBMS_OUTPUT.PUT_LINE('');
-  DBMS_OUTPUT.PUT_LINE('GRANTED PRIVILEGES:');
-  DBMS_OUTPUT.PUT_LINE('  ✓ CREATE SESSION');
-  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT on all tables/views');
-  DBMS_OUTPUT.PUT_LINE('  ✓ EXECUTE on procedures/functions');
-  DBMS_OUTPUT.PUT_LINE('  ✓ SELECT on sequences');
-  DBMS_OUTPUT.PUT_LINE('');
-  DBMS_OUTPUT.PUT_LINE('RESTRICTIONS:');
-  DBMS_OUTPUT.PUT_LINE('  ✗ NO INSERT/UPDATE/DELETE');
-  DBMS_OUTPUT.PUT_LINE('  ✗ NO CREATE/DROP/ALTER');
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  
+    v_schema      := ORA_DICT_OBJ_OWNER;
+    v_object_name := ORA_DICT_OBJ_NAME;
+    v_object_type := ORA_DICT_OBJ_TYPE;
+    v_username    := ORA_LOGIN_USER;
+    
+    -- Autoriser DROP uniquement sur le schéma LUCA
+    -- Exceptions: SYS et SYSTEM peuvent tout faire
+    IF v_username NOT IN ('SYS', 'SYSTEM') AND v_schema != 'LUCA' THEN
+        RAISE_APPLICATION_ERROR(-20001,
+            '⛔ SÉCURITÉ : DROP interdit sur le schéma ' || v_schema || '. ' ||
+            'Vous ne pouvez DROP que sur LUCA. ' ||
+            '(User: ' || v_username || ', Objet: ' || v_object_type || ' ' || v_object_name || ')');
+    END IF;
+    
+    -- Si le schéma est LUCA, autoriser l'opération
+    NULL;
+    
 EXCEPTION
-  WHEN OTHERS THEN
-    DBMS_OUTPUT.PUT_LINE('');
-    DBMS_OUTPUT.PUT_LINE('ERROR: ' || SQLERRM);
-    RAISE;
+    WHEN OTHERS THEN
+        RAISE;
 END;
 /
+
+-- ✅ VALIDATION ÉTAPE 1
+SELECT trigger_name, status, trigger_type 
+FROM dba_triggers 
+WHERE trigger_name = 'TRG_BLOCK_DROP_EXCEPT_LUCA';
+
+-- Résultat attendu: 1 ligne avec STATUS = 'ENABLED'
