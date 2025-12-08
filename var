@@ -596,3 +596,94 @@ EXCEPTION
 END TRG_BLOCK_DROP_EXCEPT_LUCA;
 
 
+
+🔧 SOLUTION : Utiliser PRAGMA AUTONOMOUS_TRANSACTION
+Le trigger doit s'exécuter dans une transaction autonome pour pouvoir faire des GRANT.
+Voici le trigger corrigé :
+sql-- ============================================================================
+-- TRIGGER AUTO-GRANT CORRIGÉ avec AUTONOMOUS_TRANSACTION
+-- À exécuter en tant que: LUCA
+-- ============================================================================
+
+CONNECT luca/password@VOTRE_TNS
+
+-- Supprimer l'ancien trigger
+DROP TRIGGER LUCA.TRG_AUTO_GRANT_QA_ON_CREATE;
+
+-- Créer le trigger avec transaction autonome
+CREATE OR REPLACE TRIGGER LUCA.TRG_AUTO_GRANT_QA_ON_CREATE
+AFTER CREATE ON LUCA.SCHEMA
+DECLARE
+    PRAGMA AUTONOMOUS_TRANSACTION;  -- ⭐ CRUCIAL !
+    
+    v_obj_type VARCHAR2(50);
+    v_obj_name VARCHAR2(128);
+    v_sql      VARCHAR2(4000);
+BEGIN
+    v_obj_type := ORA_DICT_OBJ_TYPE;
+    v_obj_name := ORA_DICT_OBJ_NAME;
+    
+    DBMS_OUTPUT.PUT_LINE('🔔 Nouvel objet créé: ' || v_obj_type || ' ' || v_obj_name);
+    
+    CASE v_obj_type
+        
+        WHEN 'TABLE' THEN
+            v_sql := 'GRANT ALL PRIVILEGES ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT ALL PRIVILEGES sur table ' || v_obj_name);
+            
+        WHEN 'VIEW' THEN
+            v_sql := 'GRANT SELECT ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT SELECT sur vue ' || v_obj_name);
+            
+        WHEN 'MATERIALIZED VIEW' THEN
+            v_sql := 'GRANT SELECT ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT SELECT sur mview ' || v_obj_name);
+            
+        WHEN 'SEQUENCE' THEN
+            v_sql := 'GRANT SELECT, ALTER ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT SELECT, ALTER sur sequence ' || v_obj_name);
+            
+        WHEN 'PROCEDURE' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT EXECUTE sur procedure ' || v_obj_name);
+            
+        WHEN 'FUNCTION' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT EXECUTE sur function ' || v_obj_name);
+            
+        WHEN 'PACKAGE' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT EXECUTE sur package ' || v_obj_name);
+            
+        WHEN 'TYPE' THEN
+            v_sql := 'GRANT EXECUTE ON LUCA.' || v_obj_name || ' TO QA_ROLE_ZOI';
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('✓ GRANT EXECUTE sur type ' || v_obj_name);
+            
+        ELSE
+            DBMS_OUTPUT.PUT_LINE('ℹ Type ' || v_obj_type || ' ignoré');
+    END CASE;
+    
+    COMMIT;  -- ⭐ IMPORTANT : Commiter la transaction autonome
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('✗ Erreur auto-grant sur ' || v_obj_name || ': ' || SQLERRM);
+        ROLLBACK;  -- Rollback en cas d'erreur
+        -- Ne pas propager l'erreur pour ne pas bloquer la création de l'objet
+END TRG_AUTO_GRANT_QA_ON_CREATE;
+/
+
+-- ✅ VÉRIFIER
+SELECT trigger_name, status 
+FROM user_triggers 
+WHERE trigger_name = 'TRG_AUTO_GRANT_QA_ON_CREATE';
+-- Résultat attendu: STATUS = 'ENABLED'
+
