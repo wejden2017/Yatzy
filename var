@@ -545,4 +545,10 @@ Résumé de ce qui fonctionne maintenant :
 ✅ ZOUERTANI NE PEUT PAS DROP les tables de SYS/SYSTEM (bloqué par trigger)
 ✅ Les nouveaux objets créés par LUCA reçoivent automatiquement les grants
 
+SELECT line, position, text
+FROM dba_errors
+WHERE owner = 'SYS' 
+  AND name = 'TRG_BLOCK_DROP_EXCEPT_LUCA'
+ORDER BY sequence;
+
 
