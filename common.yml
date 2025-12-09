@@ -1,1 +1,45 @@
-InterruptedException n’est plus gérée alors que watchService.take() peut la lever. Soit il faut rétablir un catch (InterruptedException), soit déclarer throws InterruptedException sur watchDirectory(). En l’état c’est bloquant.
+-- =============================================================================
+-- EXÉCUTION DES GRANTS POUR TOUS LES SCHÉMAS
+-- Rôle: {{ lookup('env', 'ENV') | upper }}_ROLE
+-- Schémas: {{ unique_schemas | join(', ') }}
+-- =============================================================================
+
+SET SERVEROUTPUT ON SIZE UNLIMITED
+SET HEADING OFF
+SET FEEDBACK OFF
+SET PAGES 0
+SET VERIFY OFF
+SET ECHO OFF
+
+WHENEVER SQLERROR EXIT 1
+
+PROMPT ========================================
+PROMPT Execution des grants sur tous les schemas
+PROMPT ========================================
+PROMPT
+
+{% for schema in unique_schemas %}
+-- =============================================================================
+-- Schéma: {{ schema }}
+-- =============================================================================
+
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('');
+    DBMS_OUTPUT.PUT_LINE('>>> Traitement schema {{ schema }}...');
+    SYS.GRANT_ROLE_ACCESS_TO_SCHEMA('{{ schema }}', '{{ lookup('env', 'ENV') | upper }}_ROLE');
+    DBMS_OUTPUT.PUT_LINE('');
+END;
+/
+
+{% endfor %}
+
+PROMPT
+PROMPT ========================================
+PROMPT [SUCCESS] Grants appliques sur {{ unique_schemas | length }} schemas
+PROMPT ========================================
+PROMPT
+
+COMMIT;
+/
+
+EXIT 0;
