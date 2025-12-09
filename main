@@ -1,52 +1,44 @@
--- Vérifier si LUCA est un utilisateur/schéma
-SELECT username, default_tablespace, account_status 
-FROM dba_users 
-WHERE username = 'LUCA';
-```
+-- =============================================================================
+-- TRIGGER DE SÉCURITÉ - Bloquer DROP hors des schémas autorisés
+-- Schémas autorisés: {{ schemas | join(', ') }}
+-- Stratégie: DROP + CREATE
+-- =============================================================================
 
-**Résultat attendu** :
-```
-USERNAME  DEFAULT_TABLESPACE  ACCOUNT_STATUS
-LUCA      CATS_DATA          OPEN (ou LOCKED)
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+    FROM dba_triggers
+    WHERE owner = 'SYS'
+      AND trigger_name = 'TRG_BLOCK_DROP_EXCEPT_LUCA';
+    
+    IF v_count > 0 THEN
+        EXECUTE IMMEDIATE 'DROP TRIGGER SYS.TRG_BLOCK_DROP_EXCEPT_LUCA';
+        DBMS_OUTPUT.PUT_LINE('[DROP] Trigger TRG_BLOCK_DROP_EXCEPT_LUCA dropped');
+    END IF;
+END;
+/
 
-SELECT username, tablespace_name, max_bytes 
-FROM dba_ts_quotas 
-WHERE username = 'LUCA';
+CREATE OR REPLACE TRIGGER SYS.TRG_BLOCK_DROP_EXCEPT_LUCA
+BEFORE DROP ON DATABASE
+DECLARE
+    v_schema   VARCHAR2(128);
+    v_username VARCHAR2(128);
+BEGIN
+    v_schema   := SYS.DICTIONARY_OBJ_OWNER;
+    v_username := SYS.LOGIN_USER;
+    
+    -- SYS et SYSTEM peuvent tout faire
+    IF v_username IN ('SYS', 'SYSTEM') THEN
+        RETURN;
+    END IF;
+    
+    -- Vérifier si le schéma est dans la liste autorisée
+    IF v_schema NOT IN ({% for schema in schemas %}'{{ schema | upper }}'{% if not loop.last %}, {% endif %}{% endfor %}) THEN
+        RAISE_APPLICATION_ERROR(-20001,
+            'SECURITE: DROP autorise uniquement sur schemas: {{ schemas | join(", ") }}');
+    END IF;
+END TRG_BLOCK_DROP_EXCEPT_LUCA;
+/
 
-ALTER USER LUCA QUOTA UNLIMITED ON CATS_DATA;
-
-
--- Se connecter en SYSDBA 
-CONNECT / AS SYSDBA
-
--- Accorder directement à SEYDOU (bypass le rôle)
-GRANT CREATE ANY TABLE TO SEYDOU;
-GRANT CREATE ANY VIEW TO SEYDOU;
-GRANT CREATE ANY PROCEDURE TO SEYDOU;
-GRANT CREATE ANY SEQUENCE TO SEYDOU;
-GRANT CREATE ANY TRIGGER TO SEYDOU;
-
-GRANT DROP ANY TABLE TO SEYDOU;
-GRANT DROP ANY VIEW TO SEYDOU;
-
-COMMIT;
-
-CREATE TABLE LUCA.EMPLOYES_TEST (
-    id NUMBER PRIMARY KEY,
-    nom VARCHAR2(100) NOT NULL,
-    prenom VARCHAR2(100) NOT NULL,
-    email VARCHAR2(200),
-    date_embauche DATE DEFAULT SYSDATE,
-    salaire NUMBER(10,2)
-);
-
-SELECT owner, trigger_name, trigger_type, triggering_event, status
-FROM dba_triggers
-WHERE base_object_type = 'SCHEMA'
-  AND triggering_event LIKE '%DDL%'
-ORDER BY owner, trigger_name;
-
-SELECT * FROM dba_policies;
-
--- Vérifier Oracle Label Security
-SELECT * FROM dba_sa_users WHERE user_name = 'SEYDOU';
+DBMS_OUTPUT.PUT_LINE('[CREATE] Trigger TRG_BLOCK_DROP_EXCEPT_LUCA created');
