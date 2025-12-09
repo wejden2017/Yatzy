@@ -1,7 +1,7 @@
 -- =============================================================================
 -- CRÉATION DU RÔLE {{ oracle_role_name }}
 -- Environnement: {{ oracle_environment }}
--- Généré automatiquement par Ansible
+-- Stratégie: DROP + CREATE (Infrastructure as Code)
 -- =============================================================================
 
 SET SERVEROUTPUT ON SIZE UNLIMITED;
@@ -14,16 +14,21 @@ WHENEVER SQLERROR CONTINUE;
 DECLARE
     v_count NUMBER;
 BEGIN
+    -- Vérifier si le rôle existe
     SELECT COUNT(*) INTO v_count
     FROM dba_roles
     WHERE role = '{{ oracle_role_name }}';
     
-    IF v_count = 0 THEN
-        EXECUTE IMMEDIATE 'CREATE ROLE {{ oracle_role_name }}';
-        DBMS_OUTPUT.PUT_LINE('[CREATE] Role {{ oracle_role_name }} created');
-    ELSE
-        DBMS_OUTPUT.PUT_LINE('[EXISTS] Role {{ oracle_role_name }} already exists');
+    -- Si le rôle existe, le dropper
+    IF v_count > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('[DROP] Dropping existing role {{ oracle_role_name }}');
+        EXECUTE IMMEDIATE 'DROP ROLE {{ oracle_role_name }}';
     END IF;
+    
+    -- Créer le rôle (toujours)
+    DBMS_OUTPUT.PUT_LINE('[CREATE] Creating role {{ oracle_role_name }}');
+    EXECUTE IMMEDIATE 'CREATE ROLE {{ oracle_role_name }}';
+    
 END;
 /
 
@@ -88,7 +93,7 @@ GRANT SELECT ON V_$SQLAREA TO {{ oracle_role_name }};
 GRANT SELECT ON V_$PARAMETER TO {{ oracle_role_name }};
 
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('[SUCCESS] All privileges applied to {{ oracle_role_name }}');
+    DBMS_OUTPUT.PUT_LINE('[SUCCESS] Role {{ oracle_role_name }} created with all privileges');
 END;
 /
 
