@@ -1,124 +1,26 @@
--- =============================================================================
--- TRIGGERS DDL AUTO-GRANT
--- Role: {{ oracle_role_name }}
--- Schémas: {{ schemas | join(', ') }}
--- Stratégie: DROP + CREATE
--- =============================================================================
-
-{% for schema in schemas %}
--- =============================================================================
--- Trigger pour le schéma {{ schema }}
--- =============================================================================
-
--- Donner le privilège CREATE JOB au schéma (si pas déjà présent)
-DECLARE
-    v_count NUMBER;
-BEGIN
-    SELECT COUNT(*) INTO v_count
-    FROM dba_sys_privs
-    WHERE grantee = '{{ schema | upper }}'
-      AND privilege = 'CREATE JOB';
+    - name: Render execute grants script
+      template:
+        src: templates/execute_grants_all_schemas.sql.j2
+        dest: "/tmp/execute_grants_{{ lookup('env', 'ENV') }}.sql"
+        mode: "0640"
+      run_once: true
+      tags: [grants]
     
-    IF v_count = 0 THEN
-        EXECUTE IMMEDIATE 'GRANT CREATE JOB TO {{ schema }}';
-        DBMS_OUTPUT.PUT_LINE('[GRANT] CREATE JOB granted to {{ schema }}');
-    END IF;
-END;
-/
-
--- Dropper le trigger s'il existe
-DECLARE
-    v_count NUMBER;
-BEGIN
-    SELECT COUNT(*) INTO v_count
-    FROM all_triggers
-    WHERE owner = '{{ schema | upper }}'
-      AND trigger_name = 'TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE';
+    - name: Execute grants for all schemas
+      shell: |
+        set -eo pipefail
+        sqlplus -s sys/{{ vault_sysdba_password }}@{{ oracle_connection_string }} as sysdba <<'SQL'
+        @/tmp/execute_grants_{{ lookup('env', 'ENV') }}.sql
+        SQL
+      args:
+        executable: /bin/bash
+      register: grants_result
+      run_once: true
+      changed_when: "'SUCCESS' in grants_result.stdout"
+      tags: [grants]
     
-    IF v_count > 0 THEN
-        EXECUTE IMMEDIATE 'DROP TRIGGER {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE';
-        DBMS_OUTPUT.PUT_LINE('[DROP] Trigger {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE dropped');
-    END IF;
-END;
-/
-
--- Créer le trigger
-CREATE TRIGGER {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE
-AFTER CREATE ON {{ schema }}.SCHEMA
-DECLARE
-    PRAGMA AUTONOMOUS_TRANSACTION;
-    
-    v_obj_type VARCHAR2(50);
-    v_obj_name VARCHAR2(128);
-    v_job_id   NUMBER;
-    v_sql      VARCHAR2(4000);
-BEGIN
-    v_obj_type := ORA_DICT_OBJ_TYPE;
-    v_obj_name := ORA_DICT_OBJ_NAME;
-    
-    DBMS_OUTPUT.PUT_LINE('🔔 New object created: ' || v_obj_type || ' ' || v_obj_name);
-    
-    -- Construire la commande GRANT selon le type d'objet
-    CASE v_obj_type
-        WHEN 'TABLE' THEN
-            {% if oracle_environment in ['DEV', 'QA'] %}
-            v_sql := 'GRANT ALL PRIVILEGES ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            {% else %}
-            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            {% endif %}
-            
-        WHEN 'VIEW' THEN
-            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            
-        WHEN 'MATERIALIZED VIEW' THEN
-            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            
-        WHEN 'SEQUENCE' THEN
-            {% if oracle_environment in ['DEV', 'QA'] %}
-            v_sql := 'GRANT SELECT, ALTER ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            {% else %}
-            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            {% endif %}
-            
-        {% if oracle_environment in ['DEV', 'QA'] %}
-        WHEN 'PROCEDURE' THEN
-            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            
-        WHEN 'FUNCTION' THEN
-            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            
-        WHEN 'PACKAGE' THEN
-            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-            
-        WHEN 'TYPE' THEN
-            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
-        {% endif %}
-            
-        ELSE
-            v_sql := NULL;
-    END CASE;
-    
-    -- Créer un job pour exécuter le GRANT dans 2 secondes
-    IF v_sql IS NOT NULL THEN
-        DBMS_JOB.SUBMIT(
-            job       => v_job_id,
-            what      => 'BEGIN EXECUTE IMMEDIATE ''' || v_sql || '''; END;',
-            next_date => SYSDATE + (2/86400),
-            interval  => NULL
-        );
-        
-        COMMIT;
-        
-        DBMS_OUTPUT.PUT_LINE('✓ Job ' || v_job_id || ' created for GRANT on ' || v_obj_name);
-    END IF;
-    
-EXCEPTION
-    WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('✗ Error: ' || SQLERRM);
-        ROLLBACK;
-END TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE;
-/
-
-DBMS_OUTPUT.PUT_LINE('[CREATE] Trigger {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE created');
-
-{% endfor %}
+    - name: Display grants result
+      debug:
+        msg: "{{ grants_result.stdout_lines }}"
+      run_once: true
+      tags: [grants]
