@@ -1,4 +1,15 @@
-Template : create_role.sql.j2 (CORRIGÉ)
+schemas:
+  - "LUCA"
+  - "LUCA2"
+  - "LUCA3"
+  - "LUCA4"
+  - "LUCA5"
+  - "LUCA6"
+  - "LUCA7"
+  - "LUCA8"
+  - "LUCA9"
+
+Template : create_role.sql.j2 (Rôles par schéma avec privilèges complets)
 -- =============================================================================
 -- CRÉATION DES RÔLES PAR SCHÉMA
 -- Environnement: {{ oracle_environment }}
@@ -33,12 +44,16 @@ BEGIN
 END;
 /
 
--- Privilèges de base
+-- ============================================================================
+-- PRIVILÈGES DE BASE
+-- ============================================================================
 GRANT CREATE SESSION TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT CONNECT TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT RESOURCE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 
--- Privilèges de création d'objets
+-- ============================================================================
+-- PRIVILÈGES DE CRÉATION D'OBJETS (dans leur propre schéma)
+-- ============================================================================
 GRANT CREATE TABLE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT CREATE VIEW TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT CREATE PROCEDURE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
@@ -49,8 +64,10 @@ GRANT CREATE TYPE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT CREATE MATERIALIZED VIEW TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT CREATE DATABASE LINK TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 
-{% if oracle_environment in ['DEV', 'QA'] %}
--- Privilèges DDL (DEV et QA uniquement)
+-- ============================================================================
+-- PRIVILÈGES DDL (protégés par le trigger de sécurité)
+-- Ces privilèges sont globaux MAIS le trigger vérifie les rôles actifs
+-- ============================================================================
 GRANT ALTER ANY TABLE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT DROP ANY TABLE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT ALTER ANY PROCEDURE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
@@ -62,23 +79,26 @@ GRANT DROP ANY TYPE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT DROP ANY MATERIALIZED VIEW TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT DROP ANY TRIGGER TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT TRUNCATE ANY TABLE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
-{% endif %}
 
--- Privilèges dictionnaire
+-- ============================================================================
+-- PRIVILÈGES DE CONSULTATION DU DICTIONNAIRE
+-- ============================================================================
 GRANT SELECT_CATALOG_ROLE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT SELECT ANY DICTIONARY TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT ANALYZE ANY TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 
--- Vues V$
+-- ============================================================================
+-- ACCÈS AUX VUES DYNAMIQUES V$
+-- ============================================================================
 GRANT SELECT ON V_$SESSION TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT SELECT ON V_$SQL TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT SELECT ON V_$SQL_PLAN TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT SELECT ON V_$SQLAREA TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 GRANT SELECT ON V_$PARAMETER TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 
--- ✅ DBMS_OUTPUT dans un bloc BEGIN/END
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('[SUCCESS] Role {{ oracle_role_prefix }}_{{ schema }}_ROLE created with all privileges');
+    DBMS_OUTPUT.PUT_LINE('[SUCCESS] Role {{ oracle_role_prefix }}_{{ schema }}_ROLE created with full privileges');
+    DBMS_OUTPUT.PUT_LINE('[INFO] DDL operations are protected by TRG_SECURITY_SCHEMA_ACCESS trigger');
 END;
 /
 
@@ -321,9 +341,10 @@ END;
 /
 
 {% endfor %}
- Template : security_system_object.sql.j2 (CORRIGÉ):
+Template : security_system_object.sql.j2 (TRIGGER RENFORCÉ)
 -- =============================================================================
--- TRIGGER DE SÉCURITÉ - Bloquer DROP hors schémas autorisés
+-- TRIGGER DE SÉCURITÉ RENFORCÉ
+-- Vérifie que le user a le rôle correspondant au schéma ciblé
 -- =============================================================================
 
 DECLARE
@@ -332,37 +353,105 @@ BEGIN
     SELECT COUNT(*) INTO v_count
     FROM dba_triggers
     WHERE owner = 'SYS'
-      AND trigger_name = 'TRG_BLOCK_DROP_EXCEPT_LUCA';
+      AND trigger_name = 'TRG_SECURITY_SCHEMA_ACCESS';
     
     IF v_count > 0 THEN
-        EXECUTE IMMEDIATE 'DROP TRIGGER SYS.TRG_BLOCK_DROP_EXCEPT_LUCA';
-        DBMS_OUTPUT.PUT_LINE('[DROP] Trigger TRG_BLOCK_DROP_EXCEPT_LUCA dropped');
+        EXECUTE IMMEDIATE 'DROP TRIGGER SYS.TRG_SECURITY_SCHEMA_ACCESS';
+        DBMS_OUTPUT.PUT_LINE('[DROP] Trigger TRG_SECURITY_SCHEMA_ACCESS dropped');
     END IF;
 END;
 /
 
-CREATE OR REPLACE TRIGGER SYS.TRG_BLOCK_DROP_EXCEPT_LUCA
-BEFORE DROP ON DATABASE
+CREATE OR REPLACE TRIGGER SYS.TRG_SECURITY_SCHEMA_ACCESS
+BEFORE DROP OR ALTER OR TRUNCATE ON DATABASE
 DECLARE
-    v_schema   VARCHAR2(128);
-    v_username VARCHAR2(128);
+    v_schema       VARCHAR2(128);
+    v_username     VARCHAR2(128);
+    v_object_name  VARCHAR2(128);
+    v_object_type  VARCHAR2(50);
+    v_required_role VARCHAR2(128);
+    v_has_role     NUMBER;
+    v_operation    VARCHAR2(50);
 BEGIN
-    v_schema   := SYS.DICTIONARY_OBJ_OWNER;
-    v_username := SYS.LOGIN_USER;
+    -- Récupérer les informations sur l'opération
+    v_schema       := SYS.DICTIONARY_OBJ_OWNER;
+    v_username     := SYS.LOGIN_USER;
+    v_object_name  := SYS.DICTIONARY_OBJ_NAME;
+    v_object_type  := SYS.DICTIONARY_OBJ_TYPE;
     
+    -- Identifier l'opération
+    IF SYS.SYSEVENT = 'DROP' THEN
+        v_operation := 'DROP';
+    ELSIF SYS.SYSEVENT = 'ALTER' THEN
+        v_operation := 'ALTER';
+    ELSIF SYS.SYSEVENT = 'TRUNCATE' THEN
+        v_operation := 'TRUNCATE';
+    ELSE
+        v_operation := 'UNKNOWN';
+    END IF;
+    
+    -- ========================================================================
+    -- RÈGLE 1 : SYS et SYSTEM peuvent tout faire
+    -- ========================================================================
     IF v_username IN ('SYS', 'SYSTEM') THEN
         RETURN;
     END IF;
     
-    IF v_schema NOT IN ({% for schema in schemas %}'{{ schema | upper }}'{% if not loop.last %}, {% endif %}{% endfor %}) THEN
+    -- ========================================================================
+    -- RÈGLE 2 : Bloquer les opérations sur les schémas système
+    -- ========================================================================
+    IF v_schema IN ('SYS', 'SYSTEM', 'DBSNMP', 'OUTLN', 'WMSYS', 'CTXSYS', 
+                    'MDSYS', 'OLAPSYS', 'ORDSYS', 'XDB', 'APEX_PUBLIC_USER') THEN
         RAISE_APPLICATION_ERROR(-20001,
-            'SECURITE: DROP autorise uniquement sur schemas: {{ schemas | join(", ") }}');
+            '⛔ SECURITE: ' || v_operation || ' interdit sur le schema systeme ' || v_schema);
     END IF;
-END TRG_BLOCK_DROP_EXCEPT_LUCA;
+    
+    -- ========================================================================
+    -- RÈGLE 3 : Vérifier que le user a le rôle correspondant au schéma
+    -- ========================================================================
+    
+    -- Construire le nom du rôle requis
+    v_required_role := '{{ oracle_role_prefix }}_' || v_schema || '_ROLE';
+    
+    -- Vérifier si le user a ce rôle activé dans sa session
+    BEGIN
+        SELECT COUNT(*) INTO v_has_role
+        FROM session_roles
+        WHERE role = v_required_role;
+        
+        IF v_has_role = 0 THEN
+            -- Le user n'a pas le rôle requis
+            RAISE_APPLICATION_ERROR(-20002,
+                '⛔ SECURITE: ' || v_operation || ' refuse sur ' || v_schema || '.' || v_object_name || CHR(10) ||
+                'Vous devez avoir le role ' || v_required_role || ' pour modifier ce schema.' || CHR(10) ||
+                'Vos roles actifs: ' || 
+                (SELECT LISTAGG(role, ', ') WITHIN GROUP (ORDER BY role) 
+                 FROM session_roles 
+                 WHERE role LIKE '{{ oracle_role_prefix }}_%_ROLE'));
+        END IF;
+        
+    EXCEPTION
+        WHEN NO_DATA_FOUND THEN
+            RAISE_APPLICATION_ERROR(-20003,
+                '⛔ SECURITE: Aucun role trouve pour le schema ' || v_schema);
+    END;
+    
+    -- Si on arrive ici, le user a le bon rôle → autoriser l'opération
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        IF SQLCODE IN (-20001, -20002, -20003) THEN
+            RAISE; -- Propager nos erreurs de sécurité
+        ELSE
+            -- En cas d'erreur inattendue, bloquer par sécurité
+            RAISE_APPLICATION_ERROR(-20099,
+                '⛔ SECURITE: Erreur lors de la verification des permissions: ' || SQLERRM);
+        END IF;
+END TRG_SECURITY_SCHEMA_ACCESS;
 /
 
--- ✅ DBMS_OUTPUT dans un bloc BEGIN/END
 BEGIN
-    DBMS_OUTPUT.PUT_LINE('[CREATE] Trigger TRG_BLOCK_DROP_EXCEPT_LUCA created');
+    DBMS_OUTPUT.PUT_LINE('[CREATE] Trigger TRG_SECURITY_SCHEMA_ACCESS created');
+    DBMS_OUTPUT.PUT_LINE('[INFO] Ce trigger verifie les roles actifs avant DROP/ALTER/TRUNCATE');
 END;
 /
