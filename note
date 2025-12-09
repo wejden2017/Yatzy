@@ -1,26 +1,2 @@
-- name: Render execute grants script
-  template:
-    src: templates/execute_grants_all_schemas.sql.j2
-    dest: "/tmp/execute_grants_{{ lookup('env', 'ENV') }}.sql"
-    mode: "0640"
-  run_once: true
-  tags: [grants]
-
-- name: Execute grants for all schemas
-  shell: |
-    set -eo pipefail
-    sqlplus -s sys/{{ vault_sysdba_password }}@{{ oracle_connection_string }} as sysdba <<'SQL'
-    @/tmp/execute_grants_{{ lookup('env', 'ENV') }}.sql
-    SQL
-  args:
-    executable: /bin/bash
-  register: grants_result
-  run_once: true
-  changed_when: "'SUCCESS' in grants_result.stdout"
-  tags: [grants]
-
-- name: Display grants result
-  debug:
-    msg: "{{ grants_result.stdout_lines }}"
-  run_once: true
-  tags: [grants]
+{% set all_schemas = users | map(attribute='schemas') | flatten | unique | list %}
+{% for schema in all_schemas %}
