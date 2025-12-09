@@ -1,61 +1,26 @@
-SELECT DISTINCT owner AS username, tablespace_name
-FROM dba_segments
-WHERE owner = 'LUCA'
-ORDER BY tablespace_name;
+1. Create security trigger (TRG_SECURITY_SCHEMA_ACCESS)
+   → Exécuté en: SYS/SYSDBA
+   → Template: security_system_object.sql.j2
+   → run_once: true
 
+2. Create roles per schema (DEV_LUCA_ROLE, DEV_LUCA2_ROLE, ...)
+   → Exécuté en: SYS/SYSDBA
+   → Template: create_role.sql.j2
+   → run_once: true
 
-SELECT username, tablespace_name, max_bytes,
-       CASE 
-         WHEN max_bytes = -1 THEN 'UNLIMITED'
-         WHEN max_bytes IS NULL THEN 'NO QUOTA'
-         ELSE TO_CHAR(max_bytes)
-       END AS quota_status
-FROM dba_ts_quotas
-WHERE username = 'LUCA'
-ORDER BY tablespace_name;
+3. Create grant procedures (one per schema)
+   → Exécuté en: LUCA, LUCA2, LUCA3, etc. (loop sur schemas)
+   → Template: grant_access_to_schema.sql.j2
 
+4. Create DDL triggers (auto-grant, one per schema)
+   → Exécuté en: LUCA, LUCA2, LUCA3, etc. (loop sur schemas)
+   → Template: auto_grant_trigger.sql.j2
 
-SELECT 
-    s.tablespace_name,
-    q.max_bytes,
-    CASE 
-        WHEN q.max_bytes = -1 THEN 'UNLIMITED'
-        WHEN q.max_bytes IS NULL THEN 'NO QUOTA'
-        ELSE TO_CHAR(q.max_bytes)
-    END AS quota_status
-FROM 
-    (SELECT DISTINCT tablespace_name 
-     FROM dba_segments 
-     WHERE owner = 'LUCA') s
-LEFT JOIN 
-    dba_ts_quotas q
-ON s.tablespace_name = q.tablespace_name
-AND q.username = 'LUCA'
-ORDER BY tablespace_name;
+5. Manage users (create/delete/lock/unlock/reset-password)
+   → Exécuté en: SYS/SYSDBA
+   → Template: user_present.sql.j2
+   → Loop sur: users
 
-
-ALTER USER LUCA QUOTA 50G ON BATCH;
-ALTER USER LUCA QUOTA 50G ON TBS_DATA_ARCH;
-ALTER USER LUCA QUOTA 50G ON TBS_DATA_JOUR;
-ALTER USER LUCA QUOTA 50G ON TBS_DATA_REF;
-ALTER USER LUCA QUOTA 50G ON TBS_IDX_ARCH;
-ALTER USER LUCA QUOTA 50G ON TBS_IDX_JOUR;
-ALTER USER LUCA QUOTA 50G ON TBS_IDX_REF;
-ALTER USER LUCA QUOTA 50G ON USERS;
-
-SELECT username, tablespace_name, max_bytes
-FROM dba_ts_quotas
-WHERE username = 'LUCA'
-ORDER BY tablespace_name;
-
--- 1) Voir les rôles actifs
-SELECT * 
-FROM session_roles
-ORDER BY role;
-
--- 2) Voir les privilèges système actifs
-SELECT privilege
-FROM session_privs
-ORDER BY privilege;
-
-
+6. Execute grant procedures (apply grants on existing objects)
+   → Exécuté en: LUCA, LUCA2, LUCA3, etc. (loop sur schemas)
+   → SQL direct: EXEC GRANT_xxx_ACCESS
