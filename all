@@ -1,256 +1,368 @@
-#!/bin/ksh
-#
-#---------------------------------------------------------------------------
-# Application Refonte LUCA - BATCH
-#---------------------------------------------------------------------------
-#
-# SOPRA
-#
-# Function : Installe la partie dba d'une livraison
-#
-# Gestion Configuration CVS :
-#
-# Nom du shell............: $RCSfile install_dba_scripts.ksh,v $
-# Date de modification....: $Date: 2013/10/31 $
-# Auteur.................: $Author: wda $
-# Revision...............: $Revision: 1.0 $
-# Classement.............: $Source: $
-#
-# Parametres d'entree : $1 => SERVICE_NAME
-#                       $2 => USER
-#                       $3 => PASSWORD
-#                       $4 => IP_SERVER
-#                       $5 => PACKAGE
-#
-# Codes Retour :
-#               0 => OK
-#               1 => Sortie en erreur le dossier des scripts existe deja
-#               2 => Sortie en erreur lors de la decompression de cats-script
-#               3 => Sortie en erreur le dossier cats-scripts n'a pas ete trouve dans le tar
-#               4 => Sortie en erreur un script n'a pas de script de rollback
-#               5 => Sortie en erreur l'insertion d'une ligne dans SCRIPT_HISTORY a echoue
-#               6 => Sortie en erreur l'execution du script a echoue
-#               7 => Sortie en erreur la mise a jour d'une ligne dans SCRIPT_HISTORY a echoue
-#               8 => Sortie en erreur la construction des packages a echoue
-#               9 => Sortie en erreur le nombre de parametres est incorrect
-#
-#---------------------------------------------------------------------------
-# WDA 28/10/2013 Creation du script shell
-# JFE 12/11/2013 Ajout parametres pour lancer le shell et redirection des messages dans les logs
-# CCM 19/12/2013 Appel de sqlplus avec ORACLE_SID a chaque fois
-# JFE 30/12/2013 Gestion du rollback directement avec sqlplus
-# Modification pour support service name et IP
+Template : create_role.sql.j2 (CORRIGÉ)
+-- =============================================================================
+-- CRÉATION DES RÔLES PAR SCHÉMA
+-- Environnement: {{ oracle_environment }}
+-- =============================================================================
 
-# Fichier de log
-rep_depart=$(pwd)
-fic_shell_sans_ext=$(basename $0 ".ksh")
-LOG_FILE=$rep_depart/${fic_shell_sans_ext}.log
-exec 1>> $LOG_FILE
-exec 2>> $LOG_FILE
+SET SERVEROUTPUT ON SIZE UNLIMITED;
+SET FEEDBACK OFF;
+SET VERIFY OFF;
+SET ECHO OFF;
+WHENEVER SQLERROR CONTINUE;
 
-echo `date +%y/%m/%d` `date +%H:%M:%S` "Debut Shell $0 $1 $2 $3 $4 $5" >> $LOG_FILE
+{% for schema in schemas %}
+-- =============================================================================
+-- Rôle pour le schéma {{ schema }}
+-- =============================================================================
 
-# Verification du nombre de parametres
-if [[ $# != 5 ]]
-then
-    echo `date +%y/%m/%d` `date +%H:%M:%S` "Usage: install_dba_scripts.ksh <SERVICE_NAME> <USER> <PASSWORD> <IP_SERVER> <PACKAGE>" >> $LOG_FILE
-    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <9>\n" >> $LOG_FILE
-    exit 9
-fi
+DECLARE
+    v_count NUMBER;
+    v_role_name VARCHAR2(128) := '{{ oracle_role_prefix }}_{{ schema }}_ROLE';
+BEGIN
+    SELECT COUNT(*) INTO v_count
+    FROM dba_roles
+    WHERE role = v_role_name;
+    
+    IF v_count > 0 THEN
+        DBMS_OUTPUT.PUT_LINE('[DROP] Dropping existing role ' || v_role_name);
+        EXECUTE IMMEDIATE 'DROP ROLE ' || v_role_name;
+    END IF;
+    
+    DBMS_OUTPUT.PUT_LINE('[CREATE] Creating role ' || v_role_name);
+    EXECUTE IMMEDIATE 'CREATE ROLE ' || v_role_name;
+END;
+/
 
-# Parametrage BDD
-SERVICE_NAME=$1
-USER=$2
-PASS=$3
-IP_SERVER=$4
-PACKAGE=$5
+-- Privilèges de base
+GRANT CREATE SESSION TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT CONNECT TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT RESOURCE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 
-# Construction de la chaine de connexion avec service name
-# Format: user/password@//host:port/service_name
-ORACLE_CONNECT_STRING="$USER/$PASS@//$IP_SERVER:1521/$SERVICE_NAME"
+-- Privilèges de création d'objets
+GRANT CREATE TABLE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT CREATE VIEW TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT CREATE PROCEDURE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT CREATE SEQUENCE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT CREATE SYNONYM TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT CREATE TRIGGER TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT CREATE TYPE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT CREATE MATERIALIZED VIEW TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT CREATE DATABASE LINK TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 
-# Parametrage cats-script
-rep_script=cats-script
+{% if oracle_environment in ['DEV', 'QA'] %}
+-- Privilèges DDL (DEV et QA uniquement)
+GRANT ALTER ANY TABLE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT DROP ANY TABLE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT ALTER ANY PROCEDURE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT DROP ANY PROCEDURE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT ALTER ANY SEQUENCE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT DROP ANY SEQUENCE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT DROP ANY VIEW TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT DROP ANY TYPE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT DROP ANY MATERIALIZED VIEW TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT DROP ANY TRIGGER TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT TRUNCATE ANY TABLE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+{% endif %}
 
-# Parametrage cats-plsql
-tar_plsql=cats-plsql.tar
-buildAll=buildAll.sql
+-- Privilèges dictionnaire
+GRANT SELECT_CATALOG_ROLE TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT SELECT ANY DICTIONARY TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT ANALYZE ANY TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 
-#---------------------------------------------
-#--------------- CATS-SCRIPT -----------------
-#---------------------------------------------
+-- Vues V$
+GRANT SELECT ON V_$SESSION TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT SELECT ON V_$SQL TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT SELECT ON V_$SQL_PLAN TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT SELECT ON V_$SQLAREA TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
+GRANT SELECT ON V_$PARAMETER TO {{ oracle_role_prefix }}_{{ schema }}_ROLE;
 
-# Verification de la non existance du dossier a extraire
-if [[ -d $rep_script ]]
-then
-    echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur le dossier a extraire \"$rep_script\" existe deja, veuillez le supprimer et relancer le script" >> $LOG_FILE
-    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <1>\n" >> $LOG_FILE
-    exit 1
-fi
+-- ✅ DBMS_OUTPUT dans un bloc BEGIN/END
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('[SUCCESS] Role {{ oracle_role_prefix }}_{{ schema }}_ROLE created with all privileges');
+END;
+/
 
-# Decompression de l'archive contenant les scripts
-tar xvf $rep_script.tar
-if [[ $? -ne 0 ]]
-then
-    echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur lors de la decompression" >> $LOG_FILE
-    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <2>\n" >> $LOG_FILE
-    exit 2
-fi
+{% endfor %}
 
-cd $rep_script
-if [[ $? -ne 0 ]]
-then
-    echo "Erreur le dossier $rep_script n'a pas ete compresse dans le tar $rep_script.tar"
-    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <3>\n" >> $LOG_FILE
-    exit 3
-fi
+COMMIT;
+/
 
-# Recuperation de la liste des scripts triee par ordre alphabetique
-liste_scripts=$(ls -1 | sort)
+Template : grant_access_to_schema.sql.j2 (CORRIGÉ) :
+-- =============================================================================
+-- PROCÉDURE DE GRANT PAR SCHÉMA
+-- =============================================================================
 
-# Pour chaque script extrait
-for script in $liste_scripts
-do
-    if [[ -d $script ]]; then
-        continue
-    fi
+{% for schema in schemas %}
+-- =============================================================================
+-- Procédure pour {{ schema }} → {{ oracle_role_prefix }}_{{ schema }}_ROLE
+-- =============================================================================
 
-    # on applique la convention de nommage des fichiers rollback
-    script_rollback=${script%'.sql'}_ROLLBACK.sql
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+    FROM all_objects
+    WHERE owner = '{{ schema | upper }}'
+      AND object_name = 'GRANT_{{ oracle_role_prefix }}_{{ schema }}_ROLE_ACCESS'
+      AND object_type = 'PROCEDURE';
+    
+    IF v_count > 0 THEN
+        EXECUTE IMMEDIATE 'DROP PROCEDURE {{ schema }}.GRANT_{{ oracle_role_prefix }}_{{ schema }}_ROLE_ACCESS';
+        DBMS_OUTPUT.PUT_LINE('[DROP] Procedure {{ schema }}.GRANT_{{ oracle_role_prefix }}_{{ schema }}_ROLE_ACCESS dropped');
+    END IF;
+END;
+/
 
-    if [[ ! -f "rollback/$script_rollback" ]]
-    then
-        echo `date +%y/%m/%d` `date +%H:%M:%S` "le script $script n'a pas de script de rollback associe. attendu : rollback/$script_rollback" >> $LOG_FILE
-        echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <4>\n" >> $LOG_FILE
-        exit 4
-    fi
+CREATE PROCEDURE {{ schema }}.GRANT_{{ oracle_role_prefix }}_{{ schema }}_ROLE_ACCESS(
+    p_schema_name VARCHAR2 DEFAULT '{{ schema }}',
+    p_role_name   VARCHAR2 DEFAULT '{{ oracle_role_prefix }}_{{ schema }}_ROLE'
+) AS
+    v_sql VARCHAR2(4000);
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    DBMS_OUTPUT.PUT_LINE('Applying grants for ' || p_role_name || ' on schema ' || p_schema_name);
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    
+    -- TABLES
+    FOR rec IN (SELECT table_name FROM all_tables WHERE owner = UPPER(p_schema_name)) LOOP
+        BEGIN
+            {% if oracle_environment in ['DEV', 'QA'] %}
+            v_sql := 'GRANT ALL PRIVILEGES ON ' || p_schema_name || '.' || rec.table_name || ' TO ' || p_role_name;
+            {% else %}
+            v_sql := 'GRANT SELECT ON ' || p_schema_name || '.' || rec.table_name || ' TO ' || p_role_name;
+            {% endif %}
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('  ✓ Table: ' || rec.table_name);
+        EXCEPTION
+            WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+    
+    -- VUES
+    FOR rec IN (SELECT view_name FROM all_views WHERE owner = UPPER(p_schema_name)) LOOP
+        BEGIN
+            v_sql := 'GRANT SELECT ON ' || p_schema_name || '.' || rec.view_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('  ✓ View: ' || rec.view_name);
+        EXCEPTION
+            WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+    
+    -- SEQUENCES
+    FOR rec IN (SELECT sequence_name FROM all_sequences WHERE sequence_owner = UPPER(p_schema_name)) LOOP
+        BEGIN
+            {% if oracle_environment in ['DEV', 'QA'] %}
+            v_sql := 'GRANT SELECT, ALTER ON ' || p_schema_name || '.' || rec.sequence_name || ' TO ' || p_role_name;
+            {% else %}
+            v_sql := 'GRANT SELECT ON ' || p_schema_name || '.' || rec.sequence_name || ' TO ' || p_role_name;
+            {% endif %}
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('  ✓ Sequence: ' || rec.sequence_name);
+        EXCEPTION
+            WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+    
+    {% if oracle_environment in ['DEV', 'QA'] %}
+    -- PROCEDURES/FUNCTIONS/PACKAGES/TYPES
+    FOR rec IN (SELECT object_name, object_type FROM all_objects
+                WHERE owner = UPPER(p_schema_name)
+                  AND object_type IN ('PROCEDURE', 'FUNCTION', 'PACKAGE', 'TYPE')) LOOP
+        BEGIN
+            v_sql := 'GRANT EXECUTE ON ' || p_schema_name || '.' || rec.object_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('  ✓ ' || rec.object_type || ': ' || rec.object_name);
+        EXCEPTION
+            WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+    {% endif %}
+    
+    -- MATERIALIZED VIEWS
+    FOR rec IN (SELECT mview_name FROM all_mviews WHERE owner = UPPER(p_schema_name)) LOOP
+        BEGIN
+            v_sql := 'GRANT SELECT ON ' || p_schema_name || '.' || rec.mview_name || ' TO ' || p_role_name;
+            EXECUTE IMMEDIATE v_sql;
+            DBMS_OUTPUT.PUT_LINE('  ✓ MView: ' || rec.mview_name);
+        EXCEPTION
+            WHEN OTHERS THEN NULL;
+        END;
+    END LOOP;
+    
+    DBMS_OUTPUT.PUT_LINE('========================================');
+    DBMS_OUTPUT.PUT_LINE('✅ Privileges applied on schema ' || p_schema_name);
+    DBMS_OUTPUT.PUT_LINE('========================================');
+END GRANT_{{ oracle_role_prefix }}_{{ schema }}_ROLE_ACCESS;
+/
 
-    # Recuperation de la version de la livraison
-    version=$(echo $script | cut -d'_' -f1)
-    if [[ $? -ne 0 ]]
-    then
-        version='0'
-    fi
+-- ✅ GRANT + DBMS_OUTPUT dans un bloc BEGIN/END
+BEGIN
+    EXECUTE IMMEDIATE 'GRANT EXECUTE ON {{ schema }}.GRANT_{{ oracle_role_prefix }}_{{ schema }}_ROLE_ACCESS TO {{ oracle_role_prefix }}_{{ schema }}_ROLE';
+    DBMS_OUTPUT.PUT_LINE('[CREATE] Procedure {{ schema }}.GRANT_{{ oracle_role_prefix }}_{{ schema }}_ROLE_ACCESS created');
+END;
+/
 
-    # Recuperation de l'id du fichier
-    id=$(echo $script | cut -d'_' -f2)
-    if [[ $? -ne 0 ]]
-    then
-        id='1'
-    fi
+{% endfor %}
 
-    # Recherche d'un enregistrement du script sur la base
-    statut=$(sqlplus -S $ORACLE_CONNECT_STRING <<! 
-        set PAGESIZE    0
-        set echo on
-        SELECT (SELECT STATUT FROM SCRIPT_HISTORY WHERE NOM_SCRIPT='$script') FROM DUAL;
-!
-)
+Template : auto_grant_trigger.sql.j2 (CORRIGÉ):
+-- =============================================================================
+-- TRIGGERS DDL AUTO-GRANT
+-- =============================================================================
 
-    if [[ -z $statut ]]
-    then
-        statut=0
-        # si le script n'a pas ete renseigne dans la base
-        # Insertion d'une ligne dans SCRIPT_HISTORY
-        sqlplus -S $ORACLE_CONNECT_STRING <<!
-            WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
-            set echo on
-            INSERT INTO SCRIPT_HISTORY (VERSION,ID,NOM_SCRIPT,STATUT,DATE_LIVRAISON, CATS_PACKAGE) VALUES ('$version','$id','$script',$statut,sysdate, '$PACKAGE');
-            COMMIT;
-!
+{% for schema in schemas %}
+-- =============================================================================
+-- Trigger pour {{ schema }}
+-- =============================================================================
 
-        if [[ $? -ne 0 ]]
-        then
-            echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur lors de l'insertion dans SCRIPT_HISTORY" >> $LOG_FILE
-            echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <5>\n" >> $LOG_FILE
-            exit 5
-        fi
-    fi
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+    FROM dba_sys_privs
+    WHERE grantee = '{{ schema | upper }}'
+      AND privilege = 'CREATE JOB';
+    
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'GRANT CREATE JOB TO {{ schema }}';
+        DBMS_OUTPUT.PUT_LINE('[GRANT] CREATE JOB granted to {{ schema }}');
+    END IF;
+END;
+/
 
-    if [[ $statut -eq 1 ]]
-    then
-        echo `date +%y/%m/%d` `date +%H:%M:%S` "Script $script deja execute" >> $LOG_FILE
-    fi
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+    FROM all_triggers
+    WHERE owner = '{{ schema | upper }}'
+      AND trigger_name = 'TRG_AUTO_GRANT_{{ oracle_role_prefix }}_{{ schema }}';
+    
+    IF v_count > 0 THEN
+        EXECUTE IMMEDIATE 'DROP TRIGGER {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_prefix }}_{{ schema }}';
+        DBMS_OUTPUT.PUT_LINE('[DROP] Trigger {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_prefix }}_{{ schema }} dropped');
+    END IF;
+END;
+/
 
-    if [[ $statut -eq 0 ]]
-    then
-        # si le script n'a pas ete execute
-        # Execution du script
-        sqlplus -S $ORACLE_CONNECT_STRING <<!
-            WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
-            set echo on
-            set SQLBLANKLINES ON
-            @$script;
-!
+CREATE TRIGGER {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_prefix }}_{{ schema }}
+AFTER CREATE ON {{ schema }}.SCHEMA
+DECLARE
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    
+    v_obj_type VARCHAR2(50);
+    v_obj_name VARCHAR2(128);
+    v_job_id   NUMBER;
+    v_sql      VARCHAR2(4000);
+BEGIN
+    v_obj_type := ORA_DICT_OBJ_TYPE;
+    v_obj_name := ORA_DICT_OBJ_NAME;
+    
+    CASE v_obj_type
+        WHEN 'TABLE' THEN
+            {% if oracle_environment in ['DEV', 'QA'] %}
+            v_sql := 'GRANT ALL PRIVILEGES ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_prefix }}_{{ schema }}_ROLE';
+            {% else %}
+            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_prefix }}_{{ schema }}_ROLE';
+            {% endif %}
+            
+        WHEN 'VIEW' THEN
+            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_prefix }}_{{ schema }}_ROLE';
+            
+        WHEN 'MATERIALIZED VIEW' THEN
+            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_prefix }}_{{ schema }}_ROLE';
+            
+        WHEN 'SEQUENCE' THEN
+            {% if oracle_environment in ['DEV', 'QA'] %}
+            v_sql := 'GRANT SELECT, ALTER ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_prefix }}_{{ schema }}_ROLE';
+            {% else %}
+            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_prefix }}_{{ schema }}_ROLE';
+            {% endif %}
+            
+        {% if oracle_environment in ['DEV', 'QA'] %}
+        WHEN 'PROCEDURE' THEN
+            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_prefix }}_{{ schema }}_ROLE';
+            
+        WHEN 'FUNCTION' THEN
+            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_prefix }}_{{ schema }}_ROLE';
+            
+        WHEN 'PACKAGE' THEN
+            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_prefix }}_{{ schema }}_ROLE';
+            
+        WHEN 'TYPE' THEN
+            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_prefix }}_{{ schema }}_ROLE';
+        {% endif %}
+            
+        ELSE
+            v_sql := NULL;
+    END CASE;
+    
+    IF v_sql IS NOT NULL THEN
+        DBMS_JOB.SUBMIT(
+            job       => v_job_id,
+            what      => 'BEGIN EXECUTE IMMEDIATE ''' || v_sql || '''; END;',
+            next_date => SYSDATE + (2/86400),
+            interval  => NULL
+        );
+        
+        COMMIT;
+    END IF;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+END TRG_AUTO_GRANT_{{ oracle_role_prefix }}_{{ schema }};
+/
 
-        if [[ $? -ne 0 ]]
-        then
-            echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur lors de l'execution du script $script" >> $LOG_FILE
-            echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <6>\n" >> $LOG_FILE
-            exit 6
-        fi
+-- ✅ DBMS_OUTPUT dans un bloc BEGIN/END
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('[CREATE] Trigger {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_prefix }}_{{ schema }} created');
+END;
+/
 
-        # Mise a jour de la ligne correspondant au script
-        sqlplus -S $ORACLE_CONNECT_STRING <<!
-            WHENEVER SQLERROR EXIT FAILURE ROLLBACK;
-            set echo on
-            UPDATE SCRIPT_HISTORY SET STATUT=1, DATE_LIVRAISON=SYSDATE WHERE NOM_SCRIPT='$script';
-            COMMIT;
-!
+{% endfor %}
+ Template : security_system_object.sql.j2 (CORRIGÉ):
+-- =============================================================================
+-- TRIGGER DE SÉCURITÉ - Bloquer DROP hors schémas autorisés
+-- =============================================================================
 
-        if [[ $? -ne 0 ]]
-        then
-            echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur lors de la mise a jour dans SCRIPT_HISTORY" >> $LOG_FILE
-            echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <7>\n" >> $LOG_FILE
-            exit 7
-        fi
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+    FROM dba_triggers
+    WHERE owner = 'SYS'
+      AND trigger_name = 'TRG_BLOCK_DROP_EXCEPT_LUCA';
+    
+    IF v_count > 0 THEN
+        EXECUTE IMMEDIATE 'DROP TRIGGER SYS.TRG_BLOCK_DROP_EXCEPT_LUCA';
+        DBMS_OUTPUT.PUT_LINE('[DROP] Trigger TRG_BLOCK_DROP_EXCEPT_LUCA dropped');
+    END IF;
+END;
+/
 
-        echo `date +%y/%m/%d` `date +%H:%M:%S` "Script $script execute" >> $LOG_FILE
-    fi
-done
+CREATE OR REPLACE TRIGGER SYS.TRG_BLOCK_DROP_EXCEPT_LUCA
+BEFORE DROP ON DATABASE
+DECLARE
+    v_schema   VARCHAR2(128);
+    v_username VARCHAR2(128);
+BEGIN
+    v_schema   := SYS.DICTIONARY_OBJ_OWNER;
+    v_username := SYS.LOGIN_USER;
+    
+    IF v_username IN ('SYS', 'SYSTEM') THEN
+        RETURN;
+    END IF;
+    
+    IF v_schema NOT IN ({% for schema in schemas %}'{{ schema | upper }}'{% if not loop.last %}, {% endif %}{% endfor %}) THEN
+        RAISE_APPLICATION_ERROR(-20001,
+            'SECURITE: DROP autorise uniquement sur schemas: {{ schemas | join(", ") }}');
+    END IF;
+END TRG_BLOCK_DROP_EXCEPT_LUCA;
+/
 
-statut=''
-
-# Suppression des fichiers extraits
-cd $rep_depart
-rm -r $rep_script
-
-#---------------------------------------------
-#-------------- CATS-PL/SQL -----------------
-#---------------------------------------------
-
-rep_temp=temp_plsql
-
-# Creation du dossier temporaire
-mkdir $rep_temp
-
-# Copie du tar vers le dossier temporaire
-cp $tar_plsql $rep_temp
-
-cd $rep_temp
-
-# Decompression de l'archive contenant les packages
-tar xvf $tar_plsql
-
-# Execution du buildAll
-sqlplus -S $ORACLE_CONNECT_STRING <<!
-    WHENEVER SQLERROR EXIT FAILURE;
-    set echo on
-    @$buildAll
-!
-
-if [[ $? -ne 0 ]]
-then
-    echo `date +%y/%m/%d` `date +%H:%M:%S` "Erreur lors de l'execution de $buildAll" >> $LOG_FILE
-    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: <8>\n" >> $LOG_FILE
-    exit 8
-fi
-
-# Suppression des fichiers extraits
-cd $rep_depart
-rm -r $rep_temp
-
-echo `date +%y/%m/%d` `date +%H:%M:%S` "Installation des scripts dba et des packages terminee" >> $LOG_FILE
-echo `date +%y/%m/%d` `date +%H:%M:%S` "Fin Shell $0 \n\n" >> $LOG_FILE
-
-exit 0
+-- ✅ DBMS_OUTPUT dans un bloc BEGIN/END
+BEGIN
+    DBMS_OUTPUT.PUT_LINE('[CREATE] Trigger TRG_BLOCK_DROP_EXCEPT_LUCA created');
+END;
+/
