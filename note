@@ -1,59 +1,124 @@
-# ================================================
-# Render SQL for UAT READ-ONLY users
-# ================================================
-- name: Render SQL for READ-ONLY users UAT
-  template:
-    src: user_readonly_uat.sql.j2
-    dest: "/tmp/create_readonly_user_{{ item.login }}.sql"
-    mode: "0640"
-  loop: "{{ _users }}"
-  loop_control:
-    label: "{{ item.login }}"
-  when:
-    - (item.action | default('create') | lower) != 'delete'
-    - lookup('env', 'ENV') | upper == 'UAT'
-  become: true
-  become_user: oracle
-  tags: [users, create]
+-- =============================================================================
+-- TRIGGERS DDL AUTO-GRANT
+-- Role: {{ oracle_role_name }}
+-- Schémas: {{ schemas | join(', ') }}
+-- Stratégie: DROP + CREATE
+-- =============================================================================
 
-# ================================================
-# Apply SQL for UAT READ-ONLY users
-# ================================================
-- name: Apply SQL for READ-ONLY users UAT
-  shell: |
-    set -eo pipefail
-    {{ _ora_sqlplus }} <<'SQL'
-    WHENEVER OSERROR EXIT 1
-    WHENEVER SQLERROR EXIT SQL.SQLCODE
-    SET HEADING OFF FEEDBACK OFF PAGES 0 VERIFY OFF ECHO OFF TERMOUT ON
-    SET SERVEROUTPUT ON SIZE UNLIMITED
-    SPOOL /tmp/ansible_create_readonly_user_{{ item.login }}.log
-    @/tmp/create_readonly_user_{{ item.login }}.sql
-    SPOOL OFF
-    EXIT
-    SQL
-  args:
-    executable: /bin/bash
-  environment:
-    ORACLE_HOME: "{{ oracle_home }}"
-    LD_LIBRARY_PATH: "{{ oracle_home }}/lib"
-    PATH: "{{ oracle_home }}/bin:{{ ansible_env.PATH | default('') }}"
-  register: apply_readonly_user
-  changed_when: >
-    apply_readonly_user.rc == 0 and
-    ('ORA-00955' not in (apply_readonly_user.stdout | default(''))) and
-    ('ORA-01920' not in (apply_readonly_user.stdout | default('')))
-  failed_when: >
-    apply_readonly_user.rc != 0 and
-    ('ORA-00955' not in (apply_readonly_user.stdout | default(''))) and
-    ('ORA-01920' not in (apply_readonly_user.stdout | default('')))
-  no_log: false
-  loop: "{{ _users }}"
-  loop_control:
-    label: "{{ item.login }}"
-  become: true
-  become_user: oracle
-  when:
-    - (item.action | default('create') | lower) != 'delete'
-    - lookup('env', 'ENV') | upper == 'UAT'
-  tags: [users, create]
+{% for schema in schemas %}
+-- =============================================================================
+-- Trigger pour le schéma {{ schema }}
+-- =============================================================================
+
+-- Donner le privilège CREATE JOB au schéma (si pas déjà présent)
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+    FROM dba_sys_privs
+    WHERE grantee = '{{ schema | upper }}'
+      AND privilege = 'CREATE JOB';
+    
+    IF v_count = 0 THEN
+        EXECUTE IMMEDIATE 'GRANT CREATE JOB TO {{ schema }}';
+        DBMS_OUTPUT.PUT_LINE('[GRANT] CREATE JOB granted to {{ schema }}');
+    END IF;
+END;
+/
+
+-- Dropper le trigger s'il existe
+DECLARE
+    v_count NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO v_count
+    FROM all_triggers
+    WHERE owner = '{{ schema | upper }}'
+      AND trigger_name = 'TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE';
+    
+    IF v_count > 0 THEN
+        EXECUTE IMMEDIATE 'DROP TRIGGER {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE';
+        DBMS_OUTPUT.PUT_LINE('[DROP] Trigger {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE dropped');
+    END IF;
+END;
+/
+
+-- Créer le trigger
+CREATE TRIGGER {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE
+AFTER CREATE ON {{ schema }}.SCHEMA
+DECLARE
+    PRAGMA AUTONOMOUS_TRANSACTION;
+    
+    v_obj_type VARCHAR2(50);
+    v_obj_name VARCHAR2(128);
+    v_job_id   NUMBER;
+    v_sql      VARCHAR2(4000);
+BEGIN
+    v_obj_type := ORA_DICT_OBJ_TYPE;
+    v_obj_name := ORA_DICT_OBJ_NAME;
+    
+    DBMS_OUTPUT.PUT_LINE('🔔 New object created: ' || v_obj_type || ' ' || v_obj_name);
+    
+    -- Construire la commande GRANT selon le type d'objet
+    CASE v_obj_type
+        WHEN 'TABLE' THEN
+            {% if oracle_environment in ['DEV', 'QA'] %}
+            v_sql := 'GRANT ALL PRIVILEGES ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
+            {% else %}
+            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
+            {% endif %}
+            
+        WHEN 'VIEW' THEN
+            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
+            
+        WHEN 'MATERIALIZED VIEW' THEN
+            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
+            
+        WHEN 'SEQUENCE' THEN
+            {% if oracle_environment in ['DEV', 'QA'] %}
+            v_sql := 'GRANT SELECT, ALTER ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
+            {% else %}
+            v_sql := 'GRANT SELECT ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
+            {% endif %}
+            
+        {% if oracle_environment in ['DEV', 'QA'] %}
+        WHEN 'PROCEDURE' THEN
+            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
+            
+        WHEN 'FUNCTION' THEN
+            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
+            
+        WHEN 'PACKAGE' THEN
+            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
+            
+        WHEN 'TYPE' THEN
+            v_sql := 'GRANT EXECUTE ON {{ schema }}.' || v_obj_name || ' TO {{ oracle_role_name }}';
+        {% endif %}
+            
+        ELSE
+            v_sql := NULL;
+    END CASE;
+    
+    -- Créer un job pour exécuter le GRANT dans 2 secondes
+    IF v_sql IS NOT NULL THEN
+        DBMS_JOB.SUBMIT(
+            job       => v_job_id,
+            what      => 'BEGIN EXECUTE IMMEDIATE ''' || v_sql || '''; END;',
+            next_date => SYSDATE + (2/86400),
+            interval  => NULL
+        );
+        
+        COMMIT;
+        
+        DBMS_OUTPUT.PUT_LINE('✓ Job ' || v_job_id || ' created for GRANT on ' || v_obj_name);
+    END IF;
+    
+EXCEPTION
+    WHEN OTHERS THEN
+        DBMS_OUTPUT.PUT_LINE('✗ Error: ' || SQLERRM);
+        ROLLBACK;
+END TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE;
+/
+
+DBMS_OUTPUT.PUT_LINE('[CREATE] Trigger {{ schema }}.TRG_AUTO_GRANT_{{ oracle_role_name }}_ON_CREATE created');
+
+{% endfor %}
