@@ -1,2 +1,15 @@
-{% set all_schemas = users | map(attribute='schemas') | flatten | unique | list %}
-{% for schema in all_schemas %}
+- name: Cleanup - Remove all SQL files from /tmp
+  shell: |
+    rm -f /tmp/*.sql
+  args:
+    warn: false
+  become: yes
+  changed_when: false
+  tags: [cleanup]
+
+- name: Cleanup - Truncate all log files in /tmp
+  shell: |
+    truncate -s 0 /tmp/*.log
+  become: yes
+  changed_when: false
+  tags: [cleanup]
