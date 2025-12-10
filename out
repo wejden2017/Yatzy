@@ -1,101 +1,141 @@
--- =============================================================================
--- CRÉATION DU RÔLE {{ oracle_role_name }}
--- Environnement: {{ oracle_environment }}
--- Stratégie: DROP + CREATE (Infrastructure as Code)
--- =============================================================================
-
-SET SERVEROUTPUT ON SIZE UNLIMITED;
-SET FEEDBACK OFF;
-SET VERIFY OFF;
-SET ECHO OFF;
-
-WHENEVER SQLERROR CONTINUE;
-
+CREATE OR REPLACE TRIGGER SYS.TRG_AUTO_GRANT_ROLES
+    AFTER CREATE ON DATABASE
 DECLARE
-    v_count NUMBER;
-BEGIN
-    -- Vérifier si le rôle existe
-    SELECT COUNT(*) INTO v_count
-    FROM dba_roles
-    WHERE role = '{{ oracle_role_name }}';
+    PRAGMA AUTONOMOUS_TRANSACTION;
     
-    -- Si le rôle existe, le dropper
-    IF v_count > 0 THEN
-        DBMS_OUTPUT.PUT_LINE('[DROP] Dropping existing role {{ oracle_role_name }}');
-        EXECUTE IMMEDIATE 'DROP ROLE {{ oracle_role_name }}';
+    v_obj_type      VARCHAR2(50);
+    v_obj_name      VARCHAR2(128);
+    v_schema        VARCHAR2(128);
+    v_job_id        NUMBER;
+    v_sql_dev       VARCHAR2(4000);
+    v_sql_qa        VARCHAR2(4000);
+    v_sql_uat       VARCHAR2(4000);
+    v_oracle_env    VARCHAR2(10);
+BEGIN
+    v_obj_type := ORA_DICT_OBJ_TYPE;
+    v_obj_name := ORA_DICT_OBJ_NAME;
+    v_schema   := ORA_DICT_OBJ_OWNER;
+    
+    SELECT UPPER(
+        CASE 
+            WHEN name LIKE '%DEV%' THEN 'DEV'
+            WHEN name LIKE '%QA%' OR name LIKE '%TEST%' THEN 'QA'
+            WHEN name LIKE '%UAT%' OR name LIKE '%PREPROD%' THEN 'UAT'
+            ELSE 'PROD'
+        END
+    ) INTO v_oracle_env
+    FROM v$database;
+    
+    IF v_schema NOT IN ('SYS', 'SYSTEM', 'DBSNMP', 'SYSMAN', 'WMSYS', 'EXFSYS', 
+                        'CTXSYS', 'XDB', 'ANONYMOUS', 'ORACLE_OCM', 'APPQOSSYS', 
+                        'OUTLN', 'MDSYS', 'ORDSYS', 'ORDDATA', 'SI_INFORMTN_SCHEMA', 
+                        'OLAPSYS', 'APEX_PUBLIC_USER', 'FLOWS_FILES', 'APEX_040000', 
+                        'APEX_040200', 'DIP', 'OJVMSYS', 'GSMADMIN_INTERNAL') THEN
+        
+        CASE v_obj_type
+            WHEN 'TABLE' THEN
+                IF v_oracle_env IN ('DEV', 'QA') THEN
+                    v_sql_dev := 'GRANT ALL PRIVILEGES ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
+                    v_sql_qa  := 'GRANT ALL PRIVILEGES ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
+                ELSE
+                    v_sql_dev := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
+                    v_sql_qa  := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
+                END IF;
+                v_sql_uat := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
+            
+            WHEN 'VIEW' THEN
+                v_sql_dev := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
+                v_sql_qa  := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
+                v_sql_uat := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
+            
+            WHEN 'MATERIALIZED VIEW' THEN
+                v_sql_dev := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
+                v_sql_qa  := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
+                v_sql_uat := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
+            
+            WHEN 'SEQUENCE' THEN
+                IF v_oracle_env IN ('DEV', 'QA') THEN
+                    v_sql_dev := 'GRANT SELECT, ALTER ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
+                    v_sql_qa  := 'GRANT SELECT, ALTER ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
+                ELSE
+                    v_sql_dev := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
+                    v_sql_qa  := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
+                END IF;
+                v_sql_uat := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
+            
+            WHEN 'PROCEDURE' THEN
+                IF v_oracle_env IN ('DEV', 'QA') THEN
+                    v_sql_dev := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
+                    v_sql_qa  := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
+                    v_sql_uat := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
+                ELSE
+                    v_sql_dev := NULL;
+                    v_sql_qa  := NULL;
+                    v_sql_uat := NULL;
+                END IF;
+            
+            WHEN 'FUNCTION' THEN
+                IF v_oracle_env IN ('DEV', 'QA') THEN
+                    v_sql_dev := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
+                    v_sql_qa  := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
+                    v_sql_uat := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
+                ELSE
+                    v_sql_dev := NULL;
+                    v_sql_qa  := NULL;
+                    v_sql_uat := NULL;
+                END IF;
+            
+            WHEN 'PACKAGE' THEN
+                IF v_oracle_env IN ('DEV', 'QA') THEN
+                    v_sql_dev := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
+                    v_sql_qa  := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
+                    v_sql_uat := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
+                ELSE
+                    v_sql_dev := NULL;
+                    v_sql_qa  := NULL;
+                    v_sql_uat := NULL;
+                END IF;
+            
+            WHEN 'TYPE' THEN
+                IF v_oracle_env IN ('DEV', 'QA') THEN
+                    v_sql_dev := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
+                    v_sql_qa  := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
+                    v_sql_uat := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
+                ELSE
+                    v_sql_dev := NULL;
+                    v_sql_qa  := NULL;
+                    v_sql_uat := NULL;
+                END IF;
+            
+            ELSE
+                v_sql_dev := NULL;
+                v_sql_qa  := NULL;
+                v_sql_uat := NULL;
+        END CASE;
+        
+        IF v_sql_dev IS NOT NULL OR v_sql_qa IS NOT NULL OR v_sql_uat IS NOT NULL THEN
+            DBMS_JOB.SUBMIT(
+                job       => v_job_id,
+                what      => 'BEGIN ' ||
+                             CASE WHEN v_sql_dev IS NOT NULL 
+                                  THEN 'EXECUTE IMMEDIATE ''' || v_sql_dev || '''; ' 
+                                  ELSE '' END ||
+                             CASE WHEN v_sql_qa IS NOT NULL 
+                                  THEN 'EXECUTE IMMEDIATE ''' || v_sql_qa || '''; ' 
+                                  ELSE '' END ||
+                             CASE WHEN v_sql_uat IS NOT NULL 
+                                  THEN 'EXECUTE IMMEDIATE ''' || v_sql_uat || '''; ' 
+                                  ELSE '' END ||
+                             'END;',
+                next_date => SYSDATE + (2/86400),
+                interval  => NULL
+            );
+            COMMIT;
+        END IF;
     END IF;
-    
-    -- Créer le rôle (toujours)
-    DBMS_OUTPUT.PUT_LINE('[CREATE] Creating role {{ oracle_role_name }}');
-    EXECUTE IMMEDIATE 'CREATE ROLE {{ oracle_role_name }}';
-    
-END;
-/
 
-WHENEVER SQLERROR CONTINUE;
-
-BEGIN
-    DBMS_OUTPUT.PUT_LINE('[GRANTS] Applying privileges to {{ oracle_role_name }}...');
-END;
-/
-
--- ============================================================================
--- PRIVILÈGES DE BASE
--- ============================================================================
-GRANT CREATE SESSION TO {{ oracle_role_name }};
-GRANT CONNECT TO {{ oracle_role_name }};
-GRANT RESOURCE TO {{ oracle_role_name }};
-
--- ============================================================================
--- PRIVILÈGES DE CRÉATION D'OBJETS
--- ============================================================================
-GRANT CREATE TABLE TO {{ oracle_role_name }};
-GRANT CREATE VIEW TO {{ oracle_role_name }};
-GRANT CREATE PROCEDURE TO {{ oracle_role_name }};
-GRANT CREATE SEQUENCE TO {{ oracle_role_name }};
-GRANT CREATE SYNONYM TO {{ oracle_role_name }};
-GRANT CREATE TRIGGER TO {{ oracle_role_name }};
-GRANT CREATE TYPE TO {{ oracle_role_name }};
-GRANT CREATE MATERIALIZED VIEW TO {{ oracle_role_name }};
-GRANT CREATE DATABASE LINK TO {{ oracle_role_name }};
-
-{% if oracle_environment in ['DEV', 'QA'] %}
--- ============================================================================
--- PRIVILÈGES DDL (DEV et QA uniquement)
--- ============================================================================
-GRANT ALTER ANY TABLE TO {{ oracle_role_name }};
-GRANT DROP ANY TABLE TO {{ oracle_role_name }};
-GRANT ALTER ANY PROCEDURE TO {{ oracle_role_name }};
-GRANT DROP ANY PROCEDURE TO {{ oracle_role_name }};
-GRANT ALTER ANY SEQUENCE TO {{ oracle_role_name }};
-GRANT DROP ANY SEQUENCE TO {{ oracle_role_name }};
-GRANT DROP ANY VIEW TO {{ oracle_role_name }};
-GRANT DROP ANY TYPE TO {{ oracle_role_name }};
-GRANT DROP ANY MATERIALIZED VIEW TO {{ oracle_role_name }};
-GRANT DROP ANY TRIGGER TO {{ oracle_role_name }};
-GRANT TRUNCATE ANY TABLE TO {{ oracle_role_name }};
-{% endif %}
-
--- ============================================================================
--- PRIVILÈGES DE CONSULTATION DU DICTIONNAIRE
--- ============================================================================
-GRANT SELECT_CATALOG_ROLE TO {{ oracle_role_name }};
-GRANT SELECT ANY DICTIONARY TO {{ oracle_role_name }};
-GRANT ANALYZE ANY TO {{ oracle_role_name }};
-
--- ============================================================================
--- ACCÈS AUX VUES DYNAMIQUES V$
--- ============================================================================
-GRANT SELECT ON V_$SESSION TO {{ oracle_role_name }};
-GRANT SELECT ON V_$SQL TO {{ oracle_role_name }};
-GRANT SELECT ON V_$SQL_PLAN TO {{ oracle_role_name }};
-GRANT SELECT ON V_$SQLAREA TO {{ oracle_role_name }};
-GRANT SELECT ON V_$PARAMETER TO {{ oracle_role_name }};
-
-BEGIN
-    DBMS_OUTPUT.PUT_LINE('[SUCCESS] Role {{ oracle_role_name }} created with all privileges');
-END;
-/
-
-COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        ROLLBACK;
+END TRG_AUTO_GRANT_ROLES;
 /
