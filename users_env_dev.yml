@@ -1,43 +1,37 @@
--- 1) Rôles accordés à JEROME
+-- 1) Voir les rôles actifs dans la session
+SELECT * FROM session_roles ORDER BY role;
+
+-- 2) Vérifier que QA_ROLE est bien actif
 SELECT granted_role, default_role
 FROM   dba_role_privs
 WHERE  grantee = 'JEROME';
 
--- 2) Simulation de sa session
-CONNECT JEROME/son_mot_de_passe@TON_TNS;
-
-SHOW USER;
-
--- 3) Rôles actifs dans la session
-SELECT * FROM session_roles;
-
-
-ALTER USER JEROME DEFAULT ROLE ALL;
--- puis se reconnecter et re-tester
-
--- Privilèges système du rôle QA_ROLE
+-- 3) Vérifier que QA_ROLE porte bien CREATE ANY TABLE
 SELECT privilege
 FROM   dba_sys_privs
 WHERE  grantee = 'QA_ROLE'
-ORDER BY privilege;
+ORDER  BY privilege;
 
--- Privilèges sur objets (si tu as mis des GRANT sur des tables / vues existantes)
-SELECT owner, table_name, privilege
-FROM   dba_tab_privs
-WHERE  grantee = 'QA_ROLE'
-ORDER BY owner, table_name, privilege;
-
-SELECT username, default_tablespace
-FROM   dba_users
-WHERE  username = 'JEROME';
-
-SELECT tablespace_name, max_bytes
-FROM   dba_ts_quotas
-WHERE  username = 'JEROME';
-
-SELECT privilege
+-- 4) Vérifier que JEROME voit bien CREATE ANY TABLE via les rôles
+SELECT DISTINCT privilege, admin_option
 FROM   dba_sys_privs
-WHERE  grantee = 'QA_ROLE'
-  AND  privilege IN ('CREATE TABLE','CREATE ANY TABLE','ALTER ANY TABLE','DROP ANY TABLE');
+WHERE  grantee IN (
+  'JEROME',
+  'QA_ROLE'
+)
+ORDER BY grantee, privilege;
 
 
+SET ROLE QA_ROLE;
+
+
+-- test simple de CREATE ANY TABLE dans LUCA
+CREATE TABLE LUCA.ZZ_TEST_PRIV (ID NUMBER);
+
+
+SELECT owner, trigger_name, trigger_type, triggering_event, table_owner, base_object_type
+FROM   dba_triggers
+WHERE  base_object_type = 'DATABASE'
+ORDER  BY owner, trigger_name;
+
+GRANT CREATE ANY TABLE TO JEROME;
