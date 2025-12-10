@@ -1,73 +1,18 @@
-SET SERVEROUTPUT ON SIZE UNLIMITED
-SET FEEDBACK OFF
-SET VERIFY OFF
-SET HEADING OFF
-SET ECHO OFF
-WHENEVER SQLERROR EXIT SQL.SQLCODE
+CREATE TABLE ABEV_PERSON (
+    ID        NUMBER PRIMARY KEY,
+    NOM       VARCHAR2(100) NOT NULL,
+    PRENOM    VARCHAR2(100) NOT NULL,
+    ADRESSE   VARCHAR2(255),
+    EMAIL     VARCHAR2(150)
+);
 
-DECLARE
-  v_user   VARCHAR2(128) := UPPER('{{ item.login }}');
-  v_exists NUMBER := 0;
-BEGIN
+INSERT INTO ABEV_PERSON (ID, NOM, PRENOM, ADRESSE, EMAIL)
+VALUES (1, 'ALI', 'SAMI', 'Tunis', 'sami.ali@test.com');
 
-  -- Vérifier que le user existe
-  SELECT COUNT(*)
-  INTO   v_exists
-  FROM   dba_users
-  WHERE  username = v_user;
+INSERT INTO ABEV_PERSON (ID, NOM, PRENOM, ADRESSE, EMAIL)
+VALUES (2, 'DUPONT', 'JEAN', 'Paris', 'jean.dupont@test.com');
 
-  IF v_exists = 0 THEN
-    DBMS_OUTPUT.PUT_LINE('User '||v_user||' does not exist; nothing to do.');
-    RETURN;
-  END IF;
+INSERT INTO ABEV_PERSON (ID, NOM, PRENOM, ADRESSE, EMAIL)
+VALUES (3, 'BEN SALEM', 'NOUR', 'Sfax', 'nour.bensalem@test.com');
 
-  DBMS_OUTPUT.PUT_LINE('User '||v_user||' exists. Killing direct + proxy sessions...');
-
-
-  FOR s IN (
-    SELECT s.sid, s.serial#, s.inst_id
-    FROM   gv$session s
-           LEFT JOIN dba_users u ON u.user# = s.proxy_user#
-    WHERE  s.username = v_user      -- direct login
-       OR  u.username = v_user      -- proxy LUCA[USER]
-  )
-  LOOP
-    BEGIN
-      DBMS_OUTPUT.PUT_LINE('Killing '||s.sid||','||s.serial#||' @ '||s.inst_id||' ...');
-      EXECUTE IMMEDIATE
-        'ALTER SYSTEM KILL SESSION '''||s.sid||','||s.serial#||',@'||s.inst_id||''' IMMEDIATE';
-    EXCEPTION
-      WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE(
-          'Could not kill session '||s.sid||','||s.serial#||' : '||SQLERRM
-        );
-    END;
-  END LOOP;
-
-  -- Attendre que les sessions se terminent
-  BEGIN
-    DBMS_LOCK.SLEEP(1);
-  EXCEPTION WHEN OTHERS THEN NULL;
-  END;
-
-
-  BEGIN
-    DBMS_OUTPUT.PUT_LINE('Dropping user '||v_user||' CASCADE...');
-    EXECUTE IMMEDIATE 'DROP USER '||v_user||' CASCADE';
-    DBMS_OUTPUT.PUT_LINE('User '||v_user||' dropped.');
-  EXCEPTION
-    WHEN OTHERS THEN
-      IF SQLCODE = -1940 THEN
-        DBMS_OUTPUT.PUT_LINE(
-          'ERROR dropping '||v_user||
-          ' : user is still connected (ORA-01940). Disconnect manually and rerun.'
-        );
-      ELSE
-        DBMS_OUTPUT.PUT_LINE('ERROR dropping '||v_user||' : '||SQLERRM);
-      END IF;
-      RAISE;
-  END;
-
-END;
-/
-PROMPT Done for {{ item.login | upper }}
+COMMIT;
