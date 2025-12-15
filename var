@@ -1,7 +1,19 @@
-- name: Fail playbook if Oracle update failed
-      ansible.builtin.fail:
-        msg: "Oracle database update failed with return code {{ oracle_update_result.rc }}"
-      when: 
-        - oracle_update_result is defined
-        - oracle_update_result.rc != 0
+- name: Find ALL logs in deployment directory (recursive)
+      ansible.builtin.find:
+        paths: "{{ tar_deploy_path }}"
+        patterns: "*.log"
+        recurse: yes
+      register: all_deployment_logs
+      become: true
+      ignore_errors: yes
+
+    - name: Fetch ALL logs into artifacts/
+      ansible.builtin.fetch:
+        src: "{{ item.path }}"
+        dest: "{{ local_artifacts_dir }}/{{ item.path | regex_replace('^.*/(.*)$', '\\1') }}"
+        flat: true
+      loop: "{{ all_deployment_logs.files }}"
+      when: all_deployment_logs.files is defined and all_deployment_logs.files | length > 0
+      become: true
+      ignore_errors: yes
       tags: [update_database]
