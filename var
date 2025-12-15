@@ -1,13 +1,9 @@
-echo `date +%y/%m/%d` `date +%H:%M:%S` "Consultez le fichier buildAll.execution.log pour plus de details" >> $LOG_FILE
-    cd $rep_depart
-    
-    # Archive logs before cleanup
-    mkdir -p /opt/cats/logs_execution
-    find $rep_temp -type f -name "*.log" -exec cp -f {} /opt/cats/logs_execution/ \; 2>/dev/null || true
-    chown -R cats:cats /opt/cats/logs_execution
-    chmod -R 755 /opt/cats/logs_execution
-    echo `date +%y/%m/%d` `date +%H:%M:%S` "Logs archived to /opt/cats/logs_execution" >> $LOG_FILE
-    
-    rm -rf $rep_temp
-    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: 8" >> $LOG_FILE
-    exit 8
+# Suppression automatique du dossier existant
+echo `date +%y/%m/%d` `date +%H:%M:%S` "Suppression automatique du dossier existant..." >> $LOG_FILE
+
+# Archive script logs before cleanup
+mkdir -p /opt/cats/logs_execution
+find $rep_script -type f -name "*.log" -exec cp -f {} /opt/cats/logs_execution/ \; 2>/dev/null || true
+echo `date +%y/%m/%d` `date +%H:%M:%S` "Script logs archived to /opt/cats/logs_execution" >> $LOG_FILE
+
+rm -rf $rep_script
