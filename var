@@ -1,20 +1,13 @@
-- name: DEBUG - Search logs EVERYWHERE on the server
-      ansible.builtin.shell: |
-        echo "=== Searching *.log files in {{ tar_deploy_path }} ==="
-        find {{ tar_deploy_path }} -type f -name "*.log" -ls 2>/dev/null
-        echo ""
-        echo "=== Searching buildAll* files ==="
-        find {{ tar_deploy_path }} -type f -name "buildAll*" -ls 2>/dev/null
-        echo ""
-        echo "=== Searching *.execution.log files ==="
-        find {{ tar_deploy_path }} -type f -name "*.execution.log" -ls 2>/dev/null
-        echo ""
-        echo "=== All files in {{ tar_deploy_path }} ==="
-        ls -laR {{ tar_deploy_path }}
-      register: debug_all_logs
-      become: true
-      ignore_errors: yes
-
-    - name: Show where logs really are
-      ansible.builtin.debug:
-        var: debug_all_logs.stdout_lines
+echo `date +%y/%m/%d` `date +%H:%M:%S` "Consultez le fichier buildAll.execution.log pour plus de details" >> $LOG_FILE
+    cd $rep_depart
+    
+    # Archive logs before cleanup
+    mkdir -p /opt/cats/logs_execution
+    find $rep_temp -type f -name "*.log" -exec cp -f {} /opt/cats/logs_execution/ \; 2>/dev/null || true
+    chown -R cats:cats /opt/cats/logs_execution
+    chmod -R 755 /opt/cats/logs_execution
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Logs archived to /opt/cats/logs_execution" >> $LOG_FILE
+    
+    rm -rf $rep_temp
+    echo `date +%y/%m/%d` `date +%H:%M:%S` "Sortie en erreur. Code retour: 8" >> $LOG_FILE
+    exit 8
