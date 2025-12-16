@@ -15,3 +15,34 @@ ALTER SYSTEM KILL SESSION '257,65427' IMMEDIATE;
 ALTER SYSTEM KILL SESSION '287,49227' IMMEDIATE;
 ALTER SYSTEM KILL SESSION '295,16780' IMMEDIATE;
 
+SELECT 
+    l.session_id AS blocking_sid,
+    s.serial#,
+    s.username,
+    s.status,
+    s.program,
+    s.machine,
+    l.oracle_username,
+    l.os_user_name,
+    o.object_name,
+    l.locked_mode
+FROM v$locked_object l
+JOIN dba_objects o ON l.object_id = o.object_id
+JOIN v$session s ON l.session_id = s.sid
+WHERE o.object_name = 'PACK_GESTION_ACCES';
+
+-- Générer les commandes
+SELECT 'ALTER SYSTEM KILL SESSION ''' || sid || ',' || serial# || ''' IMMEDIATE;'
+FROM v$session
+WHERE username = 'LUCA'
+  OR client_identifier LIKE '%LUCA%';
+
+SELECT 
+    s.sid, 
+    s.serial#, 
+    p.spid AS "OS Process ID",
+    s.username,
+    s.program
+FROM v$session s
+JOIN v$process p ON s.paddr = p.addr
+WHERE s.username = 'LUCA';
