@@ -1,6 +1,10 @@
-- name: Clean current execution logs after archiving
-      ansible.builtin.shell: rm -f /opt/cats/logs_exec_scripts/*.log
-      become: true
-      ignore_errors: yes
-      when: logs_to_archive.files is defined and logs_to_archive.files | length > 0
-      tags: [update_database]
+-- Qui tient un lock DDL sur le package ?
+SELECT
+  s.sid, s.serial#, s.username, s.status,
+  s.machine, s.program, s.module,
+  l.lock_type, l.mode_held, l.mode_requested
+FROM dba_ddl_locks l
+JOIN v$session s ON s.sid = l.session_id
+WHERE l.owner = 'LUCA'
+  AND l.name  = 'PACK_GESTION_ACCES'
+ORDER BY s.sid;
