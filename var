@@ -1,9 +1,60 @@
-# Suppression automatique du dossier existant
-echo `date +%y/%m/%d` `date +%H:%M:%S` "Suppression automatique du dossier existant..." >> $LOG_FILE
+- name: Create logs archive directory
+      ansible.builtin.file:
+        path: /opt/cats/logs_exec_scripts_archive
+        state: directory
+        owner: cats
+        group: cats
+        mode: '0755'
+      become: true
+      ignore_errors: yes
+      tags: [update_database]
 
-# Archive script logs before cleanup
-mkdir -p /opt/cats/logs_execution
-find $rep_script -type f -name "*.log" -exec cp -f {} /opt/cats/logs_execution/ \; 2>/dev/null || true
-echo `date +%y/%m/%d` `date +%H:%M:%S` "Script logs archived to /opt/cats/logs_execution" >> $LOG_FILE
+    - name: Check if logs exist to archive
+      ansible.builtin.find:
+        paths: "/opt/cats/logs_exec_scripts"
+        patterns: "*.log"
+      register: logs_to_archive
+      become: true
+      ignore_errors: yes
+      tags: [update_database]
 
-rm -rf $rep_script
+    - name: Archive execution logs with version name
+      ansible.builtin.archive:
+        path: /opt/cats/logs_exec_scripts/*.log
+        dest: "/opt/cats/logs_exec_scripts_archive/logs_cats_{{ cats_version }}_{{ ansible_date_time.date }}.tar.gz"
+        format: gz
+        owner: cats
+        group: cats
+        mode: '0644'
+      when: logs_to_archive.files is defined and logs_to_archive.files | length > 0
+      become: true
+      ignore_errors: yes
+      tags: [update_database]
+
+    - name: Keep only last 7 version archives
+      ansible.builtin.shell: |
+        cd /opt/cats/logs_exec_scripts_archive
+        ls -t logs_cats_*.tar.gz 2>/dev/null | tail -n +8 | xargs -r rm -f
+        echo "Kept last 7 archives"
+      become: true
+      ignore_errors: yes
+      tags: [update_database]
+
+    - name: Clean current execution logs after archiving
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ logs_to_archive.files }}"
+      when: logs_to_archive.files is defined and logs_to_archive.files | length > 0
+      become: true
+      ignore_errors: yes
+      tags: [update_database]
+```
+
+**Résultat :**
+```
+/opt/cats/logs_exec_scripts_archive/
+├── logs_cats_7.01.08_001_2025-12-16.tar.gz
+├── logs_cats_7.01.07_001_2025-12-15.tar.gz
+├── logs_cats_7.01.06_003_2025-12-14.tar.gz
+└── ... (7 dernières versions max)
