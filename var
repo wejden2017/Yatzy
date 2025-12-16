@@ -1,8 +1,7 @@
--- Qui tient un lock DDL sur le package ?
 SELECT
   s.sid, s.serial#, s.username, s.status,
   s.machine, s.program, s.module,
-  l.lock_type, l.mode_held, l.mode_requested
+  l.name, l.type, l.mode_held, l.mode_requested
 FROM dba_ddl_locks l
 JOIN v$session s ON s.sid = l.session_id
 WHERE l.owner = 'LUCA'
