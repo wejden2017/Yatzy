@@ -1,4 +1,8 @@
-SHOW PARAMETER ddl_lock_timeout;
+SELECT sys_context('USERENV','SID') AS sid,
+       s.ddl_lock_timeout
+FROM v$session s
+WHERE s.sid = sys_context('USERENV','SID');
+
 
 SELECT sys_context('USERENV','SID') AS sid FROM dual;
 
@@ -17,7 +21,12 @@ GROUP BY username, program, ddl_lock_timeout
 ORDER BY nb DESC;
 
 
-ALTER SESSION SET ddl_lock_timeout = 600;  -- 10 minutes
+ALTER SESSION SET ddl_lock_timeout = 600;
+
+SELECT s.ddl_lock_timeout
+FROM v$session s
+WHERE s.sid = sys_context('USERENV','SID');
+
 
 SELECT
   l.owner,
