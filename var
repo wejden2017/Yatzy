@@ -49,5 +49,9 @@ SELECT sid, serial#, username, osuser, machine, program, module, action, logon_t
 FROM v$session
 WHERE sid IN (289,55);
 
+ALTER SYSTEM KILL SESSION '289,4067' IMMEDIATE;
+SELECT *
+FROM dba_ddl_locks
+WHERE owner='LUCA' AND name='PACK_GESTION_ACCES';
 
 
