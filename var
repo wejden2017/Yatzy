@@ -5,6 +5,20 @@ SELECT name,
 FROM v$parameter
 WHERE name = 'ddl_lock_timeout';
 
+SELECT
+  l.owner, l.name, l.type,
+  l.mode_held, l.mode_requested,
+  s.sid, s.serial#, s.username, s.status,
+  s.machine, s.program, s.sql_id
+FROM dba_ddl_locks l
+JOIN v$session s ON s.sid = l.session_id
+WHERE l.owner='LUCA'
+  AND l.name='PACK_GESTION_ACCES'
+ORDER BY s.sid;
+
+SELECT sql_fulltext
+FROM v$sql
+WHERE sql_id = 'TON_SQL_ID';
 
 
 SELECT sys_context('USERENV','SID') AS sid FROM dual;
