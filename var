@@ -1,7 +1,10 @@
-SELECT sys_context('USERENV','SID') AS sid,
-       s.ddl_lock_timeout
-FROM v$session s
-WHERE s.sid = sys_context('USERENV','SID');
+SELECT name,
+       value,
+       isses_modifiable,
+       issys_modifiable
+FROM v$parameter
+WHERE name = 'ddl_lock_timeout';
+
 
 
 SELECT sys_context('USERENV','SID') AS sid FROM dual;
