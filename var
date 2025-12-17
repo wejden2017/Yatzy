@@ -32,4 +32,18 @@ SELECT sql_id, sql_fulltext
 FROM v$sql
 WHERE sql_id IN ('gtzk5bbanqzl2','d92b7vhczgpzy');
 
+SELECT
+  l.sid,
+  o.owner,
+  o.object_name,
+  o.object_type,
+  l.lmode,
+  l.request
+FROM v$lock l
+JOIN dba_objects o ON o.object_id = l.id1
+WHERE l.type = 'TM'
+  AND l.sid IN (55,289)
+ORDER BY l.sid;
+
+
 
