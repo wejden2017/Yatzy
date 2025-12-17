@@ -20,55 +20,11 @@ SELECT sql_fulltext
 FROM v$sql
 WHERE sql_id = 'TON_SQL_ID';
 
-
-SELECT sys_context('USERENV','SID') AS sid FROM dual;
-
-SELECT s.sid,
-       s.serial#,
-       s.username,
-       s.program,
-       s.ddl_lock_timeout
-FROM v$session s
-WHERE s.sid = sys_context('USERENV','SID');
-
-SELECT username, program, ddl_lock_timeout, COUNT(*) nb
-FROM v$session
-WHERE username IS NOT NULL
-GROUP BY username, program, ddl_lock_timeout
-ORDER BY nb DESC;
-
-
-ALTER SESSION SET ddl_lock_timeout = 600;
-
-SELECT s.ddl_lock_timeout
-FROM v$session s
-WHERE s.sid = sys_context('USERENV','SID');
-
-
 SELECT
-  l.owner,
-  l.name,
-  l.type,
-  l.mode_held,
-  l.mode_requested,
-  s.sid,
-  s.serial#,
-  s.username,
-  s.status,
-  s.osuser,
-  s.machine,
-  s.program,
-  s.module,
-  s.action,
-  s.sql_id
-FROM dba_ddl_locks l
-JOIN v$session s
-  ON s.sid = l.session_id
-WHERE l.owner = 'LUCA'
-  AND l.name  = 'PACK_GESTION_ACCES'
-ORDER BY
-  CASE WHEN l.mode_requested IS NOT NULL THEN 0 ELSE 1 END,
-  l.mode_requested,
-  l.mode_held,
-  s.sid;
+  sid, serial#, username, status,
+  event, state, wait_class, seconds_in_wait,
+  blocking_session, blocking_session_status,
+  sql_id, machine, program
+FROM v$session
+WHERE sid IN (286,55,289);
 
