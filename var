@@ -45,5 +45,9 @@ WHERE l.type = 'TM'
   AND l.sid IN (55,289)
 ORDER BY l.sid;
 
+SELECT sid, serial#, username, osuser, machine, program, module, action, logon_time
+FROM v$session
+WHERE sid IN (289,55);
+
 
 
