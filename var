@@ -28,3 +28,8 @@ SELECT
 FROM v$session
 WHERE sid IN (286,55,289);
 
+SELECT sql_id, sql_fulltext
+FROM v$sql
+WHERE sql_id IN ('gtzk5bbanqzl2','d92b7vhczgpzy');
+
+
