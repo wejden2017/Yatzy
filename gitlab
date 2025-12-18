@@ -1,133 +1,23 @@
-D’abord : lister ce qui existe (pour ne rien casser)
-
-À faire en SYS (ou user DBA) :
-
-a) Ancien triggers “auto grant” par schéma
-SELECT owner, trigger_name
-FROM   dba_triggers
-WHERE  trigger_name LIKE 'TRG_AUTO_GRANT_%'
-ORDER BY owner, trigger_name;
-
-b) Ancien triggers de sécurité
-SELECT owner, trigger_name
-FROM   dba_triggers
-WHERE  trigger_name IN (
-  'TRG_SECURITY_SCHEMA_ACCESS',
-  'TRG_BLOCK_DDL_ON_SYSTEM_SCHEMAS',
-  'TRG_BLOCK_DROP_EXCEPT_LUCA'
-)
-ORDER BY owner, trigger_name;
-
-c) Anciens rôles “par schéma”
-
-Si tu avais des rôles du type QA_LUCA_ROLE, DEV_LUCA1_ROLE, etc. :
-
-SELECT role
-FROM   dba_roles
-WHERE  role LIKE '%\_LUCA\_ROLE' ESCAPE '\'
-   OR  role LIKE 'DEV\_%\_ROLE' ESCAPE '\'
-   OR  role LIKE 'QA\_%\_ROLE'  ESCAPE '\'
-ORDER BY role;
-
-2️⃣ Nettoyage des TRIGGERS
-a) Drop des anciens triggers “auto-grant” par schéma
-
-Exemple générique :
-
-DECLARE
-  CURSOR c_trg IS
-    SELECT owner, trigger_name
-    FROM   dba_triggers
-    WHERE  trigger_name LIKE 'TRG_AUTO_GRANT_%'
-       AND owner IN ('LUCA','LUCA1','LUCA2','LUCA3','LUCA4','LUCA5','LUCA6','LUCA7','LUCA8','LUCA9');
-BEGIN
-  FOR r IN c_trg LOOP
-    EXECUTE IMMEDIATE 'DROP TRIGGER ' || r.owner || '.' || r.trigger_name;
-  END LOOP;
-END;
-/
-
-b) Drop des anciens triggers de sécurité (si tu ne veux garder que le nouveau modèle)
-DECLARE
-  CURSOR c_trg IS
-    SELECT owner, trigger_name
-    FROM   dba_triggers
-    WHERE  trigger_name IN (
-      'TRG_SECURITY_SCHEMA_ACCESS',
-      'TRG_BLOCK_DDL_ON_SYSTEM_SCHEMAS',
-      'TRG_BLOCK_DROP_EXCEPT_LUCA'
-    );
-BEGIN
-  FOR r IN c_trg LOOP
-    EXECUTE IMMEDIATE 'DROP TRIGGER ' || r.owner || '.' || r.trigger_name;
-  END LOOP;
-END;
-/
-
-
-Ensuite, tu laisses :
-
-ton nouveau trigger global SYS.TRG_AUTO_GRANT_ROLES,
-
-et éventuellement un trigger simple de protection des schémas système si tu en gardes un.
-
-3️⃣ Nettoyage des RÔLES (⚠️ avec prudence)
-a) Voir quels users ont encore les anciens rôles
-
-Avant de DROP un rôle, regarde qui l’a :
-
-SELECT granted_role, grantee, admin_option, default_role
-FROM   dba_role_privs
-WHERE  granted_role LIKE '%\_LUCA\_ROLE' ESCAPE '\'
-    OR granted_role LIKE 'DEV\_%\_ROLE' ESCAPE '\'
-    OR granted_role LIKE 'QA\_%\_ROLE'  ESCAPE '\'
-ORDER BY granted_role, grantee;
-
-b) Rebasculer les utilisateurs nominatif sur les nouveaux rôles
-
-Par exemple :
-
-GRANT DEV_ROLE TO JEROME;
-GRANT QA_ROLE  TO JEROME;
-
--- et pour les autres :
-GRANT QA_ROLE  TO SALMA;
-GRANT QA_ROLE  TO SEYDOU;
--- etc.
-
-c) Puis seulement ensuite : DROP des anciens rôles
-
-Quand tu es sûr qu’ils ne sont plus utilisés :
-
-DECLARE
-  CURSOR c_roles IS
-    SELECT role
-    FROM   dba_roles
-    WHERE  role LIKE '%\_LUCA\_ROLE' ESCAPE '\'
-       OR  role LIKE 'DEV\_%\_ROLE' ESCAPE '\'
-       OR  role LIKE 'QA\_%\_ROLE'  ESCAPE '\';
-BEGIN
-  FOR r IN c_roles LOOP
-    EXECUTE IMMEDIATE 'DROP ROLE ' || r.role;
-  END LOOP;
-END;
-/
-
-
-👉 Ne touche pas aux users nominatif (JEROME, SALMA, etc.), tu fais juste évoluer leurs rôles.
-
-En clair
-
-✅ Oui, c’est la bonne idée de faire du ménage (triggers + anciens rôles).
-
-✅ Fais-le dans cet ordre :
-
-Lister → vérifier ce qui existe.
-
-Drop les vieux triggers (TRG_AUTO_GRANT_*, anciens triggers RLS/secure).
-
-Donner les nouveaux rôles globaux (DEV_ROLE, QA_ROLE, UAT_ROLE) à tes users.
-
-Drop les vieux rôles “par schéma” quand plus personne ne les a.
-
-Si tu veux, tu peux ensuite me coller ton fichier template Ansible de “cleanup” et je te le resserre propre en version finale.
+private async getCloudEnvironment(url: URL): Promise<Environment> {
+  let address = this.computeApiURL(url.toString()).toString();
+  let pathApi = '/api/v1/environment-information';
+  
+  // ZQI 18 12 2025: fix URL in CLOUD environments contained a potentially malicious String "//"
+  console.log(address);
+  console.log(pathApi);
+  
+  if (address.endsWith('/')) {
+    address = address.slice(0, -1);
+  }
+  
+  const fullUrl = address + pathApi;
+  console.log('🔍 Calling:', fullUrl);
+  
+  try {
+    const response = await this.http.get<{env: string}>(fullUrl).toPromise();
+    return Environment[response.env];
+  } catch (error) {
+    console.error("Error when calling " + fullUrl, error);
+    return Environment.PROD;
+  }
+}
