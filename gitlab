@@ -21,3 +21,27 @@ private async getCloudEnvironment(url: URL): Promise<Environment> {
     return Environment.PROD;
   }
 }
+
+private computeApiURL(location : string) : string {
+  const url = new URL(location);
+  
+  // SPECIAL CASE OF LOCAL
+  if (url.port === '4200') {
+    url.port = '8080';
+  }
+  
+  // SPECIAL CASE OF IUA2 EUA2
+  url.pathname = EnvService.CATS2.test(url.pathname) ? 'cats2' : 'cats';
+  url.hash = '';
+  url.search = '';
+  url.username = '';
+  url.password = '';
+  
+  // ZQI 18 12 2025: Fix - Remove trailing slash to avoid "//" in URL
+  let result = url.toString();
+  if (result.endsWith('/')) {
+    result = result.slice(0, -1);
+  }
+  
+  return result;
+}
