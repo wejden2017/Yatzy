@@ -1,141 +1,17 @@
-CREATE OR REPLACE TRIGGER SYS.TRG_AUTO_GRANT_ROLES
-    AFTER CREATE ON DATABASE
-DECLARE
-    PRAGMA AUTONOMOUS_TRANSACTION;
-    
-    v_obj_type      VARCHAR2(50);
-    v_obj_name      VARCHAR2(128);
-    v_schema        VARCHAR2(128);
-    v_job_id        NUMBER;
-    v_sql_dev       VARCHAR2(4000);
-    v_sql_qa        VARCHAR2(4000);
-    v_sql_uat       VARCHAR2(4000);
-    v_oracle_env    VARCHAR2(10);
-BEGIN
-    v_obj_type := ORA_DICT_OBJ_TYPE;
-    v_obj_name := ORA_DICT_OBJ_NAME;
-    v_schema   := ORA_DICT_OBJ_OWNER;
-    
-    SELECT UPPER(
-        CASE 
-            WHEN name LIKE '%DEV%' THEN 'DEV'
-            WHEN name LIKE '%QA%' OR name LIKE '%TEST%' THEN 'QA'
-            WHEN name LIKE '%UAT%' OR name LIKE '%PREPROD%' THEN 'UAT'
-            ELSE 'PROD'
-        END
-    ) INTO v_oracle_env
-    FROM v$database;
-    
-    IF v_schema NOT IN ('SYS', 'SYSTEM', 'DBSNMP', 'SYSMAN', 'WMSYS', 'EXFSYS', 
-                        'CTXSYS', 'XDB', 'ANONYMOUS', 'ORACLE_OCM', 'APPQOSSYS', 
-                        'OUTLN', 'MDSYS', 'ORDSYS', 'ORDDATA', 'SI_INFORMTN_SCHEMA', 
-                        'OLAPSYS', 'APEX_PUBLIC_USER', 'FLOWS_FILES', 'APEX_040000', 
-                        'APEX_040200', 'DIP', 'OJVMSYS', 'GSMADMIN_INTERNAL') THEN
-        
-        CASE v_obj_type
-            WHEN 'TABLE' THEN
-                IF v_oracle_env IN ('DEV', 'QA') THEN
-                    v_sql_dev := 'GRANT ALL PRIVILEGES ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
-                    v_sql_qa  := 'GRANT ALL PRIVILEGES ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
-                ELSE
-                    v_sql_dev := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
-                    v_sql_qa  := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
-                END IF;
-                v_sql_uat := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
-            
-            WHEN 'VIEW' THEN
-                v_sql_dev := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
-                v_sql_qa  := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
-                v_sql_uat := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
-            
-            WHEN 'MATERIALIZED VIEW' THEN
-                v_sql_dev := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
-                v_sql_qa  := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
-                v_sql_uat := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
-            
-            WHEN 'SEQUENCE' THEN
-                IF v_oracle_env IN ('DEV', 'QA') THEN
-                    v_sql_dev := 'GRANT SELECT, ALTER ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
-                    v_sql_qa  := 'GRANT SELECT, ALTER ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
-                ELSE
-                    v_sql_dev := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
-                    v_sql_qa  := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
-                END IF;
-                v_sql_uat := 'GRANT SELECT ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
-            
-            WHEN 'PROCEDURE' THEN
-                IF v_oracle_env IN ('DEV', 'QA') THEN
-                    v_sql_dev := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
-                    v_sql_qa  := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
-                    v_sql_uat := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
-                ELSE
-                    v_sql_dev := NULL;
-                    v_sql_qa  := NULL;
-                    v_sql_uat := NULL;
-                END IF;
-            
-            WHEN 'FUNCTION' THEN
-                IF v_oracle_env IN ('DEV', 'QA') THEN
-                    v_sql_dev := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
-                    v_sql_qa  := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
-                    v_sql_uat := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
-                ELSE
-                    v_sql_dev := NULL;
-                    v_sql_qa  := NULL;
-                    v_sql_uat := NULL;
-                END IF;
-            
-            WHEN 'PACKAGE' THEN
-                IF v_oracle_env IN ('DEV', 'QA') THEN
-                    v_sql_dev := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
-                    v_sql_qa  := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
-                    v_sql_uat := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
-                ELSE
-                    v_sql_dev := NULL;
-                    v_sql_qa  := NULL;
-                    v_sql_uat := NULL;
-                END IF;
-            
-            WHEN 'TYPE' THEN
-                IF v_oracle_env IN ('DEV', 'QA') THEN
-                    v_sql_dev := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO DEV_ROLE';
-                    v_sql_qa  := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO QA_ROLE';
-                    v_sql_uat := 'GRANT EXECUTE ON ' || v_schema || '.' || v_obj_name || ' TO UAT_ROLE';
-                ELSE
-                    v_sql_dev := NULL;
-                    v_sql_qa  := NULL;
-                    v_sql_uat := NULL;
-                END IF;
-            
-            ELSE
-                v_sql_dev := NULL;
-                v_sql_qa  := NULL;
-                v_sql_uat := NULL;
-        END CASE;
-        
-        IF v_sql_dev IS NOT NULL OR v_sql_qa IS NOT NULL OR v_sql_uat IS NOT NULL THEN
-            DBMS_JOB.SUBMIT(
-                job       => v_job_id,
-                what      => 'BEGIN ' ||
-                             CASE WHEN v_sql_dev IS NOT NULL 
-                                  THEN 'EXECUTE IMMEDIATE ''' || v_sql_dev || '''; ' 
-                                  ELSE '' END ||
-                             CASE WHEN v_sql_qa IS NOT NULL 
-                                  THEN 'EXECUTE IMMEDIATE ''' || v_sql_qa || '''; ' 
-                                  ELSE '' END ||
-                             CASE WHEN v_sql_uat IS NOT NULL 
-                                  THEN 'EXECUTE IMMEDIATE ''' || v_sql_uat || '''; ' 
-                                  ELSE '' END ||
-                             'END;',
-                next_date => SYSDATE + (2/86400),
-                interval  => NULL
-            );
-            COMMIT;
-        END IF;
-    END IF;
-
-EXCEPTION
-    WHEN OTHERS THEN
-        ROLLBACK;
-END TRG_AUTO_GRANT_ROLES;
-/
+SELECT
+  s.sid,
+  s.serial#,
+  s.username,
+  s.status,
+  s.osuser,
+  s.machine,
+  s.program,
+  s.module,
+  s.logon_time,
+  s.sql_id,
+  s.event
+FROM v$session s
+WHERE s.type = 'USER'
+  AND s.username IS NOT NULL
+  AND s.status = 'ACTIVE'
+ORDER BY s.username, s.machine, s.sid;
