@@ -1,20 +1,30 @@
-private getCloudEnvironment(url: URL) : Environment {
-  let address = this.computeApiURL(url.toString()).toString();
-  let pathApi = '/api/v1/environment-information';
+
+private isIUA(hostname: string, pathname: string) : boolean {
+  // https://cats-iua.corp.lch.com/cats
+  // http://172.18.128.52:8080/cats
+  // http://10.63.76.29:8080/cats
+  // http://172.18.128.65:8080/cats (luca7)
+  // http://10.63.72.228:8080/cats (luca7 vu de windows10)
   
-  // ZQI 18 12 2025: Fix - Remove trailing slash to avoid "//" in URL
-  if (address.endsWith('/')) {
-    address = address.slice(0, -1);
-  }
+  console.log('  🔸 isIUA - hostname:', hostname);
+  console.log('  🔸 isIUA - pathname:', pathname);
+  console.log('  🔸 EnvService.IUA:', EnvService.IUA);
+  console.log('  🔸 EnvService.CATS:', EnvService.CATS);
+  console.log('  🔸 IUA.test(hostname):', EnvService.IUA.test(hostname));
+  console.log('  🔸 CATS.test(pathname):', EnvService.CATS.test(pathname));
+  console.log('  🔸 DEV1.test(hostname):', EnvService.DEV1.test(hostname));
+  console.log('  🔸 DEV2.test(hostname):', EnvService.DEV2.test(hostname));
+  console.log('  🔸 DEV3.test(hostname):', EnvService.DEV3.test(hostname));
+  console.log('  🔸 DEV4.test(hostname):', EnvService.DEV4.test(hostname));
   
-  let request = new XMLHttpRequest();
-  request.open('GET', address + pathApi, false);  // `false` makes the request synchronous
-  request.send();
+  const result = (
+    (EnvService.IUA.test(hostname) && EnvService.CATS.test(pathname))
+    || EnvService.DEV1.test(hostname)
+    || EnvService.DEV2.test(hostname)
+    || EnvService.DEV3.test(hostname)
+    || EnvService.DEV4.test(hostname));
   
-  if (request.status === 200) {
-    return Environment[JSON.parse(request.response).env];
-  } else {
-    console.error("Error when calling " + address + pathApi);
-    return Environment.PROD;
-  }
+  console.log('  🔸 Final isIUA result:', result);
+  
+  return result;
 }
