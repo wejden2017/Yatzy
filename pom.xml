@@ -1,169 +1,37 @@
--- ================================================
--- Create READ-ONLY user on UAT
--- User: {{ item.login | upper }}
--- Schema to read: {{ item.schema | default('LUCA') | upper }}
--- ================================================
-SET SERVEROUTPUT ON SIZE UNLIMITED
-SET FEEDBACK OFF
-SET VERIFY OFF
-SET HEADING OFF
-SET ECHO OFF
-WHENEVER SQLERROR EXIT SQL.SQLCODE
+private sanitizeUrl(url: string): string {
+  const parts = url.split('://');
+  if (parts.length === 2) {
+    return parts[0] + '://' + parts[1].replace(/\/+/g, '/');
+  }
+  return url.replace(/\/+/g, '/');
+}
 
-DECLARE
-  v_user   VARCHAR2(128) := UPPER('{{ item.login }}');
-  v_schema VARCHAR2(128) := UPPER('{{ item.schema | default("LUCA") }}');
-  v_exists NUMBER := 0;
-  v_count  NUMBER := 0;
-BEGIN
-  -- 1) Vérifier si l'utilisateur existe
-  SELECT COUNT(*)
-  INTO   v_exists
-  FROM   dba_users
-  WHERE  username = v_user;
+private getCloudEnvironment(url: URL): Environment {
+  let address: string = this.computeApiURL(url.toString()).toString();
+  const apiURL = new URL('/api/v1/environment-information', address);
   
-  IF v_exists = 0 THEN
-    -- Créer l'utilisateur
-    DBMS_OUTPUT.PUT_LINE('Creating user '||v_user||'...');
-    EXECUTE IMMEDIATE 'CREATE USER '||v_user||' IDENTIFIED BY "{{ item.password | default("ChangeMe123!") }}"';
-    DBMS_OUTPUT.PUT_LINE('User '||v_user||' created.');
-  ELSE
-    DBMS_OUTPUT.PUT_LINE('User '||v_user||' already exists.');
-  END IF;
+  // Sanitize l'URL finale pour enlever tous les doubles slashes
+  const sanitizedUrl = this.sanitizeUrl(apiURL.toString());
   
-  -- 2) Révoquer TOUS les privilèges existants
-  DBMS_OUTPUT.PUT_LINE('Revoking all existing privileges...');
+  console.log('URL FINALE:', sanitizedUrl);
   
-  -- Révoquer privilèges système
-  FOR r IN (
-    SELECT privilege 
-    FROM dba_sys_privs 
-    WHERE grantee = v_user
-  ) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'REVOKE '||r.privilege||' FROM '||v_user;
-    EXCEPTION
-      WHEN OTHERS THEN NULL;
-    END;
-  END LOOP;
+  let request: XMLHttpRequest = new XMLHttpRequest();
+  request.open('GET', sanitizedUrl, false); // `false` makes the request synchronous
+  request.send();
   
-  -- Révoquer rôles
-  FOR r IN (
-    SELECT granted_role 
-    FROM dba_role_privs 
-    WHERE grantee = v_user
-  ) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'REVOKE '||r.granted_role||' FROM '||v_user;
-    EXCEPTION
-      WHEN OTHERS THEN NULL;
-    END;
-  END LOOP;
-  
-  -- 3) Donner uniquement le privilège de connexion
-  DBMS_OUTPUT.PUT_LINE('Granting CREATE SESSION...');
-  EXECUTE IMMEDIATE 'GRANT CREATE SESSION TO '||v_user;
-  
-  -- 4) Donner SELECT sur toutes les TABLES du schéma
-  DBMS_OUTPUT.PUT_LINE('Granting SELECT on all tables of schema '||v_schema||'...');
-  FOR t IN (
-    SELECT table_name
-    FROM dba_tables
-    WHERE owner = v_schema
-    ORDER BY table_name
-  ) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'GRANT SELECT ON '||v_schema||'.'||t.table_name||' TO '||v_user;
-      v_count := v_count + 1;
-    EXCEPTION
-      WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant SELECT on '||v_schema||'.'||t.table_name||': '||SQLERRM);
-    END;
-  END LOOP;
-  
-  DBMS_OUTPUT.PUT_LINE('  SELECT granted on '||v_count||' tables.');
-  v_count := 0;
-  
-  -- 5) Donner SELECT sur toutes les VUES du schéma
-  DBMS_OUTPUT.PUT_LINE('Granting SELECT on all views of schema '||v_schema||'...');
-  FOR v IN (
-    SELECT view_name
-    FROM dba_views
-    WHERE owner = v_schema
-    ORDER BY view_name
-  ) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'GRANT SELECT ON '||v_schema||'.'||v.view_name||' TO '||v_user;
-      v_count := v_count + 1;
-    EXCEPTION
-      WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant SELECT on '||v_schema||'.'||v.view_name||': '||SQLERRM);
-    END;
-  END LOOP;
-  
-  DBMS_OUTPUT.PUT_LINE('  SELECT granted on '||v_count||' views.');
-  v_count := 0;
-  
-  -- 6) Donner EXECUTE sur les PROCEDURES/FONCTIONS (optionnel, pour lecture uniquement)
-  DBMS_OUTPUT.PUT_LINE('Granting EXECUTE on procedures/functions of schema '||v_schema||'...');
-  FOR p IN (
-    SELECT object_name, object_type
-    FROM dba_objects
-    WHERE owner = v_schema
-      AND object_type IN ('PROCEDURE', 'FUNCTION', 'PACKAGE')
-    ORDER BY object_name
-  ) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'GRANT EXECUTE ON '||v_schema||'.'||p.object_name||' TO '||v_user;
-      v_count := v_count + 1;
-    EXCEPTION
-      WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant EXECUTE on '||v_schema||'.'||p.object_name||': '||SQLERRM);
-    END;
-  END LOOP;
-  
-  DBMS_OUTPUT.PUT_LINE('  EXECUTE granted on '||v_count||' procedures/functions.');
-  
-  -- 7) Donner SELECT sur les SEQUENCES (pour voir la valeur)
-  v_count := 0;
-  DBMS_OUTPUT.PUT_LINE('Granting SELECT on sequences of schema '||v_schema||'...');
-  FOR s IN (
-    SELECT sequence_name
-    FROM dba_sequences
-    WHERE sequence_owner = v_schema
-    ORDER BY sequence_name
-  ) LOOP
-    BEGIN
-      EXECUTE IMMEDIATE 'GRANT SELECT ON '||v_schema||'.'||s.sequence_name||' TO '||v_user;
-      v_count := v_count + 1;
-    EXCEPTION
-      WHEN OTHERS THEN
-        DBMS_OUTPUT.PUT_LINE('  WARNING: Cannot grant SELECT on '||v_schema||'.'||s.sequence_name||': '||SQLERRM);
-    END;
-  END LOOP;
-  
-  DBMS_OUTPUT.PUT_LINE('  SELECT granted on '||v_count||' sequences.');
-  
-  -- 8) Résumé
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  DBMS_OUTPUT.PUT_LINE('User '||v_user||' configured as READ-ONLY on schema '||v_schema);
-  DBMS_OUTPUT.PUT_LINE('Privileges:');
-  DBMS_OUTPUT.PUT_LINE('  - CREATE SESSION (can connect)');
-  DBMS_OUTPUT.PUT_LINE('  - SELECT on all tables and views');
-  DBMS_OUTPUT.PUT_LINE('  - EXECUTE on procedures/functions');
-  DBMS_OUTPUT.PUT_LINE('  - SELECT on sequences (read current value)');
-  DBMS_OUTPUT.PUT_LINE('Restrictions:');
-  DBMS_OUTPUT.PUT_LINE('  - NO INSERT');
-  DBMS_OUTPUT.PUT_LINE('  - NO UPDATE');
-  DBMS_OUTPUT.PUT_LINE('  - NO DELETE');
-  DBMS_OUTPUT.PUT_LINE('  - NO CREATE/DROP/ALTER');
-  DBMS_OUTPUT.PUT_LINE('================================================');
-  
-EXCEPTION
-  WHEN OTHERS THEN
-    DBMS_OUTPUT.PUT_LINE('ERROR: '||SQLERRM);
-    RAISE;
-END;
-/
-PROMPT Done for {{ item.login | upper }}
-/
+  if (request.status === 200) {
+    return Environment[JSON.parse(request.response).env];
+  } else {
+    console.error("Error when calling " + sanitizedUrl);
+    return Environment.PROD;
+  }
+}
+
+// Fonction helper pour sanitize les URLs
+private sanitizeUrl(url: string): string {
+  const parts = url.split('://');
+  if (parts.length === 2) {
+    return parts[0] + '://' + parts[1].replace(/\/+/g, '/');
+  }
+  return url.replace(/\/+/g, '/');
+}
