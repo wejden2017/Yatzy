@@ -1,0 +1,99 @@
+---
+# Vérifier et démarrer le listener
+- name: Check listener status
+  ansible.builtin.shell: |
+    if ! lsnrctl status >/dev/null 2>&1; then
+      echo "STOPPED"
+    else
+      echo "RUNNING"
+    fi
+  become: yes
+  become_user: oracle
+  register: listener_status
+  changed_when: false
+
+- name: Start listener if needed
+  ansible.builtin.shell: lsnrctl start
+  become: yes
+  become_user: oracle
+  when: listener_status.stdout == "STOPPED"
+
+# Vérifier et démarrer le service database
+- name: Check Oracle service status
+  ansible.builtin.systemd:
+    name: oracle-db.service
+  register: db_service_status
+
+- name: Start Oracle service if needed
+  ansible.builtin.systemd:
+    name: oracle-db.service
+    state: started
+  when: db_service_status.status.ActiveState != "active"
+
+# Vérifier et ouvrir la CDB
+- name: Check CDB open mode
+  ansible.builtin.shell: |
+    sqlplus -s / as sysdba <<'SQL'
+    set pages 0 feedback off
+    select open_mode from v$database;
+    exit;
+    SQL
+  become: yes
+  become_user: oracle
+  register: cdb_mode
+  changed_when: false
+
+- name: Open CDB if needed
+  ansible.builtin.shell: |
+    sqlplus -s / as sysdba <<'SQL'
+    alter database open;
+    exit;
+    SQL
+  become: yes
+  become_user: oracle
+  when: "'READ WRITE' not in cdb_mode.stdout"
+
+# Vérifier et ouvrir le PDB
+- name: Check PDB open mode
+  ansible.builtin.shell: |
+    sqlplus -s / as sysdba <<'SQL'
+    set pages 0 feedback off
+    select open_mode from v$pdbs where name='{{ pdbs_name | upper }}';
+    exit;
+    SQL
+  become: yes
+  become_user: oracle
+  register: pdb_mode
+  changed_when: false
+
+- name: Open PDB if needed
+  ansible.builtin.shell: |
+    sqlplus -s / as sysdba <<'SQL'
+    alter pluggable database {{ pdbs_name }} open;
+    exit;
+    SQL
+  become: yes
+  become_user: oracle
+  when: "'READ WRITE' not in pdb_mode.stdout"
+
+- name: Save PDB state for auto-open
+  ansible.builtin.shell: |
+    sqlplus -s / as sysdba <<'SQL'
+    alter pluggable database {{ pdbs_name }} save state;
+    exit;
+    SQL
+  become: yes
+  become_user: oracle
+  when: "'READ WRITE' not in pdb_mode.stdout"
+
+# Vérification finale
+- name: Final status check
+  ansible.builtin.shell: "/home/oracle/scripts/database_status.sh"
+  become: yes
+  become_user: "{{ oracle_user }}"
+  register: final_check
+  changed_when: false
+
+- name: Display final status
+  ansible.builtin.debug:
+    var: final_check.stdout_lines
