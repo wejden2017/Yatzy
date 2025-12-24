@@ -1,75 +1,34 @@
-# Se connecter en tant qu'oracle
-sudo su - oracle
-. ~/.bash_profile
-
-echo "========================================="
-echo "1. VOIR LE NOM DU PDB ET SON STATUT (OUVERT)"
-echo "========================================="
-sqlplus / as sysdba <<'SQL'
-SELECT NAME, OPEN_MODE FROM V$PDBS;
-exit;
-SQL
-
-echo ""
-echo "========================================="
-echo "2. ESSAYER D'OUVRIR LE PDB QUAND DÉJÀ OUVERT"
-echo "========================================="
-# Remplacez CATSPDB par le vrai nom si différent
-sqlplus / as sysdba <<'SQL'
-ALTER PLUGGABLE DATABASE CATSPDB OPEN;
-exit;
-SQL
-
-echo ""
-echo "========================================="
-echo "3. FERMER LE PDB"
-echo "========================================="
-sqlplus / as sysdba <<'SQL'
-ALTER PLUGGABLE DATABASE CATSPDB CLOSE IMMEDIATE;
-exit;
-SQL
-
-echo ""
-echo "========================================="
-echo "4. VOIR LE STATUT DU PDB (FERMÉ)"
-echo "========================================="
-sqlplus / as sysdba <<'SQL'
-SELECT NAME, OPEN_MODE FROM V$PDBS WHERE NAME='CATSPDB';
-exit;
-SQL
-
-echo ""
-echo "========================================="
-echo "5. OUVRIR LE PDB"
-echo "========================================="
-sqlplus / as sysdba <<'SQL'
-ALTER PLUGGABLE DATABASE CATSPDB OPEN;
-exit;
-SQL
-
-echo ""
-echo "========================================="
-echo "6. VÉRIFIER QUE LE PDB EST BIEN OUVERT"
-echo "========================================="
-sqlplus / as sysdba <<'SQL'
-SELECT NAME, OPEN_MODE FROM V$PDBS WHERE NAME='CATSPDB';
-exit;
-SQL
-
-echo ""
-echo "========================================="
-echo "7. SAVE STATE"
-echo "========================================="
-sqlplus / as sysdba <<'SQL'
-ALTER PLUGGABLE DATABASE CATSPDB SAVE STATE;
-exit;
-SQL
-
-echo ""
-echo "========================================="
-echo "8. VÉRIFIER LE SAVED STATE"
-echo "========================================="
-sqlplus / as sysdba <<'SQL'
-SELECT CON_NAME, STATE FROM DBA_PDB_SAVED_STATES;
-exit;
-SQL
+- name: Ensure PDB is open and state saved
+  ansible.builtin.shell: |
+    . /home/oracle/.bash_profile
+    
+    # Check current PDB status
+    STATUS=$(sqlplus -s / as sysdba <<'SQL'
+    set pages 0 feedback off heading off
+    SELECT OPEN_MODE FROM V$PDBS WHERE NAME='{{ pdbs_name | upper }}';
+    exit;
+    SQL
+    )
+    
+    # If already READ WRITE, nothing to do
+    if echo "$STATUS" | grep -q "READ WRITE"; then
+      echo "PDB_ALREADY_OPEN"
+      exit 0
+    fi
+    
+    # Otherwise, open it and save state
+    sqlplus -s / as sysdba <<'SQL'
+    ALTER PLUGGABLE DATABASE {{ pdbs_name }} OPEN;
+    ALTER PLUGGABLE DATABASE {{ pdbs_name }} SAVE STATE;
+    exit;
+    SQL
+    
+    echo "PDB_OPENED_AND_SAVED"
+  become: yes
+  become_user: oracle
+  register: pdb_ensure
+  changed_when: "'PDB_OPENED_AND_SAVED' in pdb_ensure.stdout"
+  failed_when:
+    - pdb_ensure.rc != 0
+    - "'ORA-65019' not in pdb_ensure.stdout"
+    - "'PDB_ALREADY_OPEN' not in pdb_ensure.stdout"
