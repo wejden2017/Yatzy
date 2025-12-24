@@ -1,5 +1,75 @@
-- name: Ensure Oracle Database service is running
-  ansible.builtin.systemd:
-    name: oracle-db.service
-    state: started
-  become: yes
+# Se connecter en tant qu'oracle
+sudo su - oracle
+. ~/.bash_profile
+
+echo "========================================="
+echo "1. VOIR LE NOM DU PDB ET SON STATUT (OUVERT)"
+echo "========================================="
+sqlplus / as sysdba <<'SQL'
+SELECT NAME, OPEN_MODE FROM V$PDBS;
+exit;
+SQL
+
+echo ""
+echo "========================================="
+echo "2. ESSAYER D'OUVRIR LE PDB QUAND DÉJÀ OUVERT"
+echo "========================================="
+# Remplacez CATSPDB par le vrai nom si différent
+sqlplus / as sysdba <<'SQL'
+ALTER PLUGGABLE DATABASE CATSPDB OPEN;
+exit;
+SQL
+
+echo ""
+echo "========================================="
+echo "3. FERMER LE PDB"
+echo "========================================="
+sqlplus / as sysdba <<'SQL'
+ALTER PLUGGABLE DATABASE CATSPDB CLOSE IMMEDIATE;
+exit;
+SQL
+
+echo ""
+echo "========================================="
+echo "4. VOIR LE STATUT DU PDB (FERMÉ)"
+echo "========================================="
+sqlplus / as sysdba <<'SQL'
+SELECT NAME, OPEN_MODE FROM V$PDBS WHERE NAME='CATSPDB';
+exit;
+SQL
+
+echo ""
+echo "========================================="
+echo "5. OUVRIR LE PDB"
+echo "========================================="
+sqlplus / as sysdba <<'SQL'
+ALTER PLUGGABLE DATABASE CATSPDB OPEN;
+exit;
+SQL
+
+echo ""
+echo "========================================="
+echo "6. VÉRIFIER QUE LE PDB EST BIEN OUVERT"
+echo "========================================="
+sqlplus / as sysdba <<'SQL'
+SELECT NAME, OPEN_MODE FROM V$PDBS WHERE NAME='CATSPDB';
+exit;
+SQL
+
+echo ""
+echo "========================================="
+echo "7. SAVE STATE"
+echo "========================================="
+sqlplus / as sysdba <<'SQL'
+ALTER PLUGGABLE DATABASE CATSPDB SAVE STATE;
+exit;
+SQL
+
+echo ""
+echo "========================================="
+echo "8. VÉRIFIER LE SAVED STATE"
+echo "========================================="
+sqlplus / as sysdba <<'SQL'
+SELECT CON_NAME, STATE FROM DBA_PDB_SAVED_STATES;
+exit;
+SQL
