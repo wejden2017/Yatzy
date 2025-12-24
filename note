@@ -1,15 +1,5 @@
-- name: Cleanup - Remove all SQL files from /tmp
-  shell: |
-    rm -f /tmp/*.sql
-  args:
-    warn: false
+- name: Ensure Oracle Database service is running
+  ansible.builtin.systemd:
+    name: oracle-db.service
+    state: started
   become: yes
-  changed_when: false
-  tags: [cleanup]
-
-- name: Cleanup - Truncate all log files in /tmp
-  shell: |
-    truncate -s 0 /tmp/*.log
-  become: yes
-  changed_when: false
-  tags: [cleanup]
