@@ -1,34 +1,44 @@
-- name: Ensure PDB is open and state saved
+- name: Ensure CDB is open
   ansible.builtin.shell: |
     . /home/oracle/.bash_profile
     
-    # Check current PDB status
+    # Check if CDB is already READ WRITE
     STATUS=$(sqlplus -s / as sysdba <<'SQL'
     set pages 0 feedback off heading off
-    SELECT OPEN_MODE FROM V$PDBS WHERE NAME='{{ pdbs_name | upper }}';
+    SELECT OPEN_MODE FROM V$DATABASE;
     exit;
     SQL
     )
     
     # If already READ WRITE, nothing to do
     if echo "$STATUS" | grep -q "READ WRITE"; then
-      echo "PDB_ALREADY_OPEN"
+      echo "CDB_ALREADY_OPEN"
       exit 0
     fi
     
-    # Otherwise, open it and save state
-    sqlplus -s / as sysdba <<'SQL'
-    ALTER PLUGGABLE DATABASE {{ pdbs_name }} OPEN;
-    ALTER PLUGGABLE DATABASE {{ pdbs_name }} SAVE STATE;
+    # Try to open the database
+    OUTPUT=$(sqlplus -s / as sysdba <<'SQL' 2>&1
+    ALTER DATABASE OPEN;
     exit;
     SQL
+    )
     
-    echo "PDB_OPENED_AND_SAVED"
+    # If failed because database not started, start it
+    if echo "$OUTPUT" | grep -q "ORA-"; then
+      sqlplus -s / as sysdba <<'SQL2'
+      STARTUP;
+      exit;
+    SQL2
+      echo "CDB_STARTED"
+    else
+      echo "CDB_OPENED"
+    fi
   become: yes
   become_user: oracle
-  register: pdb_ensure
-  changed_when: "'PDB_OPENED_AND_SAVED' in pdb_ensure.stdout"
+  register: cdb_ensure
+  changed_when: "'CDB_OPENED' in cdb_ensure.stdout or 'CDB_STARTED' in cdb_ensure.stdout"
   failed_when:
-    - pdb_ensure.rc != 0
-    - "'ORA-65019' not in pdb_ensure.stdout"
-    - "'PDB_ALREADY_OPEN' not in pdb_ensure.stdout"
+    - cdb_ensure.rc != 0
+    - "'ORA-01081' not in cdb_ensure.stdout"
+    - "'ORA-01531' not in cdb_ensure.stdout"
+    - "'CDB_ALREADY_OPEN' not in cdb_ensure.stdout"
